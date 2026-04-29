@@ -1,5 +1,5 @@
 ---
-title: Quick start
+title: Quick Start
 parent: Web Tools
 grand_parent: Generation 6
 nav_order: 1

@@ -1,10 +1,3 @@
----
-title: Testing Guide
-parent: Web Tools
-grand_parent: Generation 6
-nav_order: 10
----
-
 # Experiment Designer v0.6 Testing Guide
 
 Manual testing checklist for the YAML v2 migration, plugin support, and new editor views.
@@ -249,7 +242,7 @@ matlab -r "addpath('tests'); validate_web_protocol_roundtrip('v2'); exit"
 | `experiment_designer.html` | v0.2 -> v0.6: v2 data model (commands[]), plugin UI, 3 editor tabs, command cards, SVG timeline |
 | `tests/test-protocol-roundtrip.js` | 49 -> 130 checks, imports shared module, 4 new v2 suites |
 | `tests/generate-roundtrip-protocol.js` | Imports shared module, generates v2 protocol + manifest |
-| `docs/protocol-roundtrip-testing.md` | Updated for v2 coverage |
+| `docs/development/protocol-roundtrip-testing.md` | Updated for v2 coverage |
 
 ### maDisplayTools changes
 | File | Changes |

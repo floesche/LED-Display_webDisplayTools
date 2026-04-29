@@ -5,7 +5,7 @@
 **CLAUDE.md** is for **how to work with the code** — architecture, patterns, gotchas, testing procedures, and coding conventions. It should NOT contain roadmap items, feature wishlists, or project planning.
 
 Roadmap and planning content belongs in:
-- **`docs/ROADMAP.md`** — roadmap, milestones, changelog, and open items
+- **`docs/development/ROADMAP.md`** — roadmap, milestones, changelog, and open items
 
 **Review needed (future session):** Audit existing CLAUDE.md sections for roadmap content that has leaked in (e.g., "Future Improvements" lists, "Testing Required (Next Session)" checklists). Move planning items to the roadmap file and keep CLAUDE.md focused on technical reference.
 
@@ -534,8 +534,8 @@ The bottom timeline area is a unified scroll container:
 - `tests/test-protocol-roundtrip.js` — 137 CI checks (10 suites, v1+v2 + bug regression)
 - `tests/generate-roundtrip-protocol.js` — YAML + manifest generator for MATLAB
 - `tests/fixtures/v2_*.yaml` — V2 YAML test fixtures from maDisplayTools
-- `docs/experiment-designer-v06-testing.md` — Manual testing checklist
-- `docs/protocol-roundtrip-testing.md` — Roundtrip testing architecture
+- `docs/development/experiment-designer-v06-testing.md` — Manual testing checklist
+- `docs/development/protocol-roundtrip-testing.md` — Roundtrip testing architecture
 - GitHub Issues: [#33](https://github.com/reiserlab/webDisplayTools/issues/33), [#53–60 closed](https://github.com/reiserlab/webDisplayTools/issues?q=is%3Aissue+is%3Aclosed) (tooltips, bugs, undo/redo, connect cmd, param backfill)
 
 ### Testing & Validation (v0.9)
