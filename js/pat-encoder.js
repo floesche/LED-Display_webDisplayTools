@@ -212,12 +212,52 @@ const PatEncoder = (function() {
     }
 
     /**
+     * Count '1' bits in a single byte (popcount).
+     * @param {number} b - byte (0-255)
+     * @returns {number} number of set bits
+     */
+    function popcountByte(b) {
+        let n = b & 0xff;
+        let count = 0;
+        while (n) {
+            count += n & 1;
+            n >>>= 1;
+        }
+        return count;
+    }
+
+    /**
+     * Compute the G6 panel-protocol v1 header byte for an already-populated
+     * block (cmd byte + payload). Sets bit 7 = parity over bits 0-6 of byte 0
+     * (= protocol version) + all of byte 1 + all of bytes 2..N. Modifies `block[0]`.
+     *
+     * NOTE (2026-05-15): Encoder fix is UNTESTED end-to-end against the v1 panel
+     * firmware on hardware. Round-trip test vectors in
+     * Generation 6/maDisplayTools/g6/g6_encoding_reference.json must be re-validated
+     * before relying on output.
+     *
+     * @param {Uint8Array} block - full block; block[0] will be set
+     * @param {number} versionBits - protocol version (bits 0-6 of byte 0); v1 = 0x01
+     */
+    function setG6PanelHeaderWithParity(block, versionBits) {
+        let onesCount = popcountByte(versionBits & 0x7f);
+        for (let i = 1; i < block.length; i++) {
+            onesCount += popcountByte(block[i]);
+        }
+        const parityBit = onesCount & 1;
+        block[0] = (parityBit << 7) | (versionBits & 0x7f);
+    }
+
+    /**
      * Encode a G6 panel to GS2 (binary) format
      *
      * Panel block: 53 bytes [header, cmd, 50 data bytes, stretch]
      * Data encoding: row-major, 1 bit per pixel, MSB first
      *
      * Row flip: Match parser's expectation - flip rows during encoding
+     *
+     * Per G6 Panel Protocol v1: byte 0 = parity (bit 7) | version 0x01 (bits 0-6);
+     * byte 1 = 0x10 (DISP_2LVL_ONESHOT).
      *
      * @param {Uint8Array} panelPixels - 400 pixels (20x20), row-major, row 0 = bottom
      * @param {number} stretch - Stretch value (default 1)
@@ -226,11 +266,8 @@ const PatEncoder = (function() {
     function encodeG6PanelGS2(panelPixels, stretch = 1) {
         const block = new Uint8Array(G6_GS2_PANEL_BYTES);
 
-        // Header byte (panel address, typically 0)
-        block[0] = 0x00;
-
-        // Command byte
-        block[1] = 0x00;
+        // Command byte: 0x10 = DISP_2LVL_ONESHOT (per g6_01-panel-protocol.md v1)
+        block[1] = 0x10;
 
         // Data bytes: 50 bytes for 400 pixels (1 bit each, MSB first)
         const dataBytes = block.subarray(2, 52);
@@ -254,6 +291,9 @@ const PatEncoder = (function() {
         // Stretch byte
         block[52] = stretch;
 
+        // Header byte (parity-aware) — must be set AFTER cmd + payload + stretch
+        setG6PanelHeaderWithParity(block, 0x01);
+
         return block;
     }
 
@@ -272,11 +312,8 @@ const PatEncoder = (function() {
     function encodeG6PanelGS16(panelPixels, stretch = 1) {
         const block = new Uint8Array(G6_GS16_PANEL_BYTES);
 
-        // Header byte
-        block[0] = 0x00;
-
-        // Command byte
-        block[1] = 0x00;
+        // Command byte: 0x30 = DISP_16LVL_ONESHOT (per g6_01-panel-protocol.md v1)
+        block[1] = 0x30;
 
         // Data bytes: 200 bytes for 400 pixels (4 bits each)
         const dataBytes = block.subarray(2, 202);
@@ -302,6 +339,9 @@ const PatEncoder = (function() {
 
         // Stretch byte
         block[202] = stretch;
+
+        // Header byte (parity-aware) — must be set AFTER cmd + payload + stretch
+        setG6PanelHeaderWithParity(block, 0x01);
 
         return block;
     }
