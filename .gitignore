@@ -1,3 +1,6 @@
 .DS_Store
 node_modules/
 temp_configs/
+.codex-review/
+# Local browser-test artifacts (canonical patterns live in maDisplayTools/patterns/web_generated/)
+test_patterns/
