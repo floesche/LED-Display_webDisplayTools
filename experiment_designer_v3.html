@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>v3 Experiment Designer (Viewer)</title>
+    <title>v3 Experiment Designer</title>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
 
     <!-- Import map: lets js/protocol-yaml-v3.js's `import YAML from 'yaml'`
@@ -335,9 +335,148 @@
         .cmd-card.plugin { border-left: 3px solid var(--beta); }
         .cmd-card .cmd-head { font-weight: 600; margin-bottom: 0.2rem; }
         .cmd-card .cmd-head .ctype { color: var(--text-dim); font-weight: 400; font-size: 0.65rem; text-transform: uppercase; margin-right: 0.3rem; }
-        .cmd-card .kv-line { font-size: 0.7rem; color: var(--text-dim); }
-        .cmd-card .kv-line .k { display: inline-block; min-width: 80px; }
+        .cmd-card .kv-line { font-size: 0.7rem; color: var(--text-dim); display: flex; align-items: center; gap: 0.3rem; }
+        .cmd-card .kv-line .k { display: inline-block; min-width: 80px; flex-shrink: 0; }
         .cmd-card .kv-line .v { color: var(--text); }
+        .cmd-card .kv-line input.field-edit {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            padding: 0.1rem 0.35rem;
+            border-radius: 2px;
+            min-width: 60px;
+            max-width: 220px;
+        }
+        .cmd-card .kv-line input.field-edit:focus { outline: none; border-color: var(--accent); }
+        .cmd-card .kv-line input.field-edit.num { width: 70px; text-align: right; color: var(--accent); }
+        .cmd-card .kv-line input.field-edit.str { color: var(--accent); }
+        .cmd-card .kv-line .alias-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.2rem;
+            padding: 0.05rem 0.4rem;
+            background: rgba(41, 182, 246, 0.12);
+            border: 1px solid var(--beta);
+            color: var(--beta);
+            border-radius: 8px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            cursor: help;
+        }
+        .cmd-card .kv-line .alias-chip .resolved-val {
+            color: var(--text-dim);
+            font-size: 0.6rem;
+        }
+        .dirty-badge {
+            display: inline-block;
+            background: rgba(255, 152, 0, 0.15);
+            color: var(--warn);
+            border: 1px solid var(--warn);
+            padding: 0.05rem 0.4rem;
+            font-size: 0.65rem;
+            border-radius: 8px;
+            margin-left: 0.4rem;
+        }
+
+        /* Command-card action buttons (↑ ↓ ✕) */
+        .cmd-card { position: relative; }
+        .cmd-card .cmd-actions {
+            position: absolute;
+            top: 0.25rem;
+            right: 0.25rem;
+            display: flex;
+            gap: 2px;
+        }
+        .cmd-card .cmd-act-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-dim);
+            font-family: inherit;
+            font-size: 0.7rem;
+            width: 22px;
+            height: 22px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: 3px;
+            padding: 0;
+        }
+        .cmd-card .cmd-act-btn:hover {
+            background: var(--surface-2);
+            color: var(--accent);
+            border-color: var(--border);
+        }
+        .cmd-card .cmd-act-btn:disabled {
+            color: var(--border);
+            cursor: not-allowed;
+            background: transparent;
+            border-color: transparent;
+        }
+        .cmd-card .cmd-act-btn.danger:hover {
+            background: rgba(244, 67, 54, 0.12);
+            color: var(--error);
+            border-color: var(--error);
+        }
+        .cmd-card .cmd-head { padding-right: 80px; }
+
+        /* + Add command picker */
+        .add-cmd-row {
+            margin-top: 0.5rem;
+            display: flex;
+            gap: 0.4rem;
+            align-items: center;
+            font-size: 0.75rem;
+        }
+        .add-cmd-row .k { color: var(--text-dim); }
+        .add-cmd-row select.field-edit {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 2px;
+            flex: 1;
+            max-width: 280px;
+        }
+        .add-cmd-row select.field-edit:focus { outline: none; border-color: var(--accent); }
+
+        /* Block-property editor controls */
+        .block-prop-row {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            margin-bottom: 0.3rem;
+            font-size: 0.75rem;
+        }
+        .block-prop-row .k { color: var(--text-dim); min-width: 90px; flex-shrink: 0; }
+        .block-prop-row input.field-edit,
+        .block-prop-row select.field-edit {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            padding: 0.15rem 0.4rem;
+            border-radius: 2px;
+        }
+        .block-prop-row input.field-edit:focus,
+        .block-prop-row select.field-edit:focus {
+            outline: none; border-color: var(--accent);
+        }
+        .block-prop-row input.field-edit.num { width: 70px; text-align: right; color: var(--accent); }
+        .block-prop-row input.field-edit.str { min-width: 180px; color: var(--accent); }
+        .block-prop-row select.field-edit { min-width: 180px; color: var(--accent); }
+        .block-prop-row input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+            cursor: pointer;
+        }
+        .block-prop-row .jump-btn { padding: 0.1rem 0.4rem; font-size: 0.7rem; }
         .jump-btn {
             background: rgba(0, 230, 118, 0.1);
             border: 1px solid var(--accent);
@@ -444,19 +583,24 @@
     <!-- Header -->
     <div class="app-header">
         <h1>v3 Experiment Designer</h1>
-        <span class="beta-badge">Beta / Viewer</span>
+        <span class="beta-badge">Beta / Editor</span>
         <div class="header-spacer"></div>
+        <button id="undoBtn" class="header-btn" disabled title="Undo last edit (Ctrl+Z)">↶ Undo</button>
+        <button id="redoBtn" class="header-btn" disabled title="Redo (Ctrl+Y)">↷ Redo</button>
+        <span id="dirtyIndicator" class="dirty-badge" style="display: none;" title="Unsaved edits — Export to save">● edited</span>
         <button id="settingsToggle" class="header-btn" title="Show/hide experiment metadata, rig, plugins, variables">Settings ▾</button>
         <input type="file" id="fileInput" accept=".yaml,.yml" style="display: none;">
         <button id="importBtn" class="header-btn primary" title="Load a v3 protocol YAML file">Import YAML</button>
-        <button id="exportBtn" class="header-btn" disabled title="Re-export the loaded YAML (round-trip)">Export YAML</button>
+        <button id="exportBtn" class="header-btn" disabled title="Export the (possibly edited) YAML">Export YAML</button>
         <a href="index.html" class="header-btn" style="text-decoration: none; display: inline-flex; align-items: center;">← All tools</a>
     </div>
 
-    <!-- View-only banner -->
+    <!-- Editing banner -->
     <div class="view-only-banner">
-        <strong>View only.</strong> v0.1 viewer round-trips v3 YAML preserving anchors and comments — editing arrives in v0.2.
-        Open in the <a href="experiment_designer.html">v2 Experiment Designer</a> to edit a v2 protocol.
+        <strong>Editing (early).</strong> Scalar fields in command cards are editable; anchor-bound fields (
+        <span style="color: var(--beta);">→ &amp;name</span>) are read-only until the Variables editor lands.
+        Drag/drop, undo, and sequence editing arrive in later updates.
+        Need v2? <a href="experiment_designer.html">Open the v2 Experiment Designer</a>.
     </div>
 
     <!-- Settings drawer -->
@@ -520,7 +664,7 @@
     <!-- Footer -->
     <div class="app-footer">
         <a href="https://github.com/reiserlab/webDisplayTools" target="_blank">Reiser Lab</a> |
-        v3 Experiment Designer v0.1 | <span id="footerTimestamp">2026-05-24 ET</span>
+        v3 Experiment Designer v0.2 | <span id="footerTimestamp">2026-05-27 08:56 ET</span>
     </div>
 
     <!-- Error modal -->
@@ -535,8 +679,25 @@
     </div>
 
     <script type="module">
-        import { parseV3Protocol, generateV3Protocol, validateReferences, V3ParseError }
-            from './js/protocol-yaml-v3.js';
+        import {
+            parseV3Protocol,
+            generateV3Protocol,
+            validateReferences,
+            V3ParseError,
+            docSet,
+            docDelete,
+            docInsertCommand,
+            docMoveCommand,
+            nodeIsAliasAt,
+            aliasNameAt
+        } from './js/protocol-yaml-v3.js';
+
+        import {
+            CONTROLLER_COMMANDS,
+            getV3PluginCommands,
+            listV3PluginNames,
+            getV3CommandParams
+        } from './js/plugin-registry.js';
 
         // ═══════════════════════════════════════════════════════════════
         // State
@@ -546,6 +707,107 @@
         let lastFilename = null;       // for export naming
         let selection = null;          // { kind: 'condition', name } | { kind: 'block', index } | { kind: 'ref', index }
         let librarySearchText = '';
+        let dirty = false;             // true once the user has edited anything
+
+        // Undo/redo: each snapshot is the YAML text + selection. Restoring
+        // re-parses, so the doc/JS-model stay in sync. _restoring blocks
+        // focus-on-rerender from polluting the stacks.
+        let undoStack = [];
+        let redoStack = [];
+        let _restoring = false;
+        const UNDO_LIMIT = 50;
+
+        function setDirty(val) {
+            dirty = !!val;
+            $('dirtyIndicator').style.display = dirty ? 'inline-block' : 'none';
+        }
+
+        // Warn before close/reload if there are unsaved edits.
+        window.addEventListener('beforeunload', (e) => {
+            if (dirty) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+
+        function updateUndoUI() {
+            document.getElementById('undoBtn').disabled = undoStack.length === 0;
+            document.getElementById('redoBtn').disabled = redoStack.length === 0;
+        }
+
+        function snapshotState() {
+            if (!experiment || !experiment._doc) return null;
+            return {
+                text: experiment._doc.toString(),
+                selection: selection ? JSON.parse(JSON.stringify(selection)) : null
+            };
+        }
+
+        // Push current state onto undoStack. Called BEFORE a mutation so
+        // undo restores the pre-mutation state. Clears redoStack — once a
+        // new branch is taken, the old "redo future" is gone.
+        function pushUndo() {
+            if (_restoring) return;
+            const snap = snapshotState();
+            if (!snap) return;
+            undoStack.push(snap);
+            if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+            redoStack = [];
+            updateUndoUI();
+        }
+
+        function restoreSnapshot(snap) {
+            _restoring = true;
+            try {
+                experiment = parseV3Protocol(snap.text);
+                selection = snap.selection;
+                renderAll();
+            } catch (err) {
+                showError('Undo/redo restore failed', err.message);
+            } finally {
+                _restoring = false;
+            }
+        }
+
+        function undo() {
+            if (undoStack.length === 0) return;
+            const current = snapshotState();
+            const prev = undoStack.pop();
+            if (current) redoStack.push(current);
+            restoreSnapshot(prev);
+            updateUndoUI();
+        }
+
+        function redo() {
+            if (redoStack.length === 0) return;
+            const current = snapshotState();
+            const next = redoStack.pop();
+            if (current) undoStack.push(current);
+            restoreSnapshot(next);
+            updateUndoUI();
+        }
+
+        function clearUndo() {
+            undoStack = [];
+            redoStack = [];
+            updateUndoUI();
+        }
+
+        document.getElementById('undoBtn').addEventListener('click', undo);
+        document.getElementById('redoBtn').addEventListener('click', redo);
+
+        // Keyboard: Ctrl/Cmd+Z = undo, Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z = redo.
+        // Skip when focus is inside an editable text field — let the
+        // browser handle intra-field undo first.
+        document.addEventListener('keydown', (e) => {
+            const tag = document.activeElement?.tagName;
+            const inField = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+            if (inField) return;
+            const mod = e.ctrlKey || e.metaKey;
+            if (!mod) return;
+            if (e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+            else if (e.key === 'y' || (e.key === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+        });
 
         // ═══════════════════════════════════════════════════════════════
         // DOM helpers
@@ -581,6 +843,10 @@
         $('fileInput').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
+            if (dirty && !confirm('Discard unsaved edits and import "' + file.name + '"?')) {
+                $('fileInput').value = '';
+                return;
+            }
             const text = await file.text();
             try {
                 const parsed = parseV3Protocol(text);
@@ -596,6 +862,8 @@
                 experiment = parsed;
                 lastFilename = file.name;
                 selection = null;
+                setDirty(false);
+                clearUndo();
                 renderAll();
                 $('exportBtn').disabled = false;
             } catch (err) {
@@ -880,47 +1148,45 @@
             }
 
             if (selection.kind === 'condition') {
-                const cond = experiment.conditions.find(c => c.name === selection.name);
-                if (!cond) {
+                const condIdx = experiment.conditions.findIndex(c => c.name === selection.name);
+                if (condIdx < 0) {
                     body.appendChild(el('div', { class: 'empty-state' }, 'Condition not found.'));
                     return;
                 }
+                const cond = experiment.conditions[condIdx];
                 body.appendChild(el('div', { class: 'inspector-title' },
                     el('span', { class: 'kind' }, 'Condition'),
                     cond.name
                 ));
                 const section = el('div', { class: 'insp-section' });
                 section.appendChild(el('h4', {}, 'Commands (' + cond.commands.length + ')'));
-                for (const cmd of cond.commands) {
-                    section.appendChild(renderCommandCard(cmd));
-                }
+                const total = cond.commands.length;
+                cond.commands.forEach((cmd, cmdIdx) => {
+                    section.appendChild(renderCommandCard(
+                        cmd,
+                        ['conditions', condIdx, 'commands', cmdIdx],
+                        { condIdx, cmdIdx, total }
+                    ));
+                });
+                section.appendChild(renderAddCommandPicker(condIdx));
                 body.appendChild(section);
                 return;
             }
 
             if (selection.kind === 'block') {
-                const entry = experiment.sequence[selection.index];
+                const blockIdx = selection.index;
+                const entry = experiment.sequence[blockIdx];
                 if (!entry || entry.kind !== 'block') return;
                 body.appendChild(el('div', { class: 'inspector-title' },
                     el('span', { class: 'kind' }, 'Block'),
-                    entry.name || 'block_' + (selection.index + 1)
+                    entry.name || 'block_' + (blockIdx + 1)
                 ));
                 const props = el('div', { class: 'insp-section' });
                 props.appendChild(el('h4', {}, 'Properties'));
-                props.appendChild(el('div', { class: 'kv' },
-                    el('span', { class: 'k' }, 'repetitions: '),
-                    el('span', { class: 'v' }, String(entry.repetitions))));
-                props.appendChild(el('div', { class: 'kv' },
-                    el('span', { class: 'k' }, 'randomize: '),
-                    el('span', { class: 'v' }, entry.randomize ? 'true' : 'false')));
-                if (entry.intertrial) {
-                    props.appendChild(el('div', { class: 'kv' },
-                        el('span', { class: 'k' }, 'intertrial: '),
-                        el('button', { class: 'jump-btn', onClick: () => {
-                            selection = { kind: 'condition', name: entry.intertrial };
-                            renderLibrary(); renderInspector(); renderSequence();
-                        }}, '→ ' + entry.intertrial)));
-                }
+                props.appendChild(renderBlockNameRow(blockIdx, entry));
+                props.appendChild(renderBlockRepsRow(blockIdx, entry));
+                props.appendChild(renderBlockRandomizeRow(blockIdx, entry));
+                props.appendChild(renderBlockIntertrialRow(blockIdx, entry));
                 body.appendChild(props);
 
                 const trials = el('div', { class: 'insp-section' });
@@ -965,7 +1231,401 @@
             }
         }
 
-        function renderCommandCard(cmd) {
+        // Field type hints — drive input coercion (number vs string).
+        // Plugin params are freeform — type is inferred from the live value.
+        const FIELD_TYPES = {
+            // controller fields
+            'pattern': 'string',
+            'pattern_ID': 'number',
+            'duration': 'number',
+            'mode': 'number',
+            'frame_index': 'number',
+            'frame_rate': 'number',
+            'gain': 'number',
+            'command_name': 'string',
+            'plugin_name': 'string'
+        };
+
+        // Render a single editable scalar field. If the underlying YAML node is
+        // an Alias, show a read-only badge instead of an input. Otherwise, an
+        // input that calls docSet() on commit.
+        function renderEditableField(label, path, value, typeHint, opts) {
+            opts = opts || {};
+            const wrapper = el('div', { class: 'kv-line', style: opts.indent ? 'padding-left: 1rem;' : '' });
+            wrapper.appendChild(el('span', { class: 'k' }, label + ':'));
+
+            const aliasName = aliasNameAt(experiment, path);
+            if (aliasName) {
+                const chip = el('span', {
+                    class: 'alias-chip',
+                    title: 'Bound to anchor &' + aliasName + ' (resolved: ' + JSON.stringify(value) + '). Anchor binding editor arrives in a later update.'
+                },
+                    '→ &' + aliasName,
+                    el('span', { class: 'resolved-val' }, '= ' + (typeof value === 'string' ? JSON.stringify(value) : String(value)))
+                );
+                wrapper.appendChild(chip);
+                return wrapper;
+            }
+
+            const inputType = typeHint === 'number' ? 'number' : 'text';
+            const input = el('input', {
+                type: inputType,
+                class: 'field-edit ' + (typeHint === 'number' ? 'num' : 'str'),
+                value: typeof value === 'string' ? value : String(value),
+                title: 'Edit ' + label
+            });
+            if (typeHint === 'number') input.step = 'any';
+
+            // Snapshot on commit-with-actual-change. Captures the pre-edit
+            // state so a single Ctrl+Z reverts the whole field visit. Browser
+            // native Ctrl+Z still works for intra-field keystroke undo.
+            input.addEventListener('change', () => {
+                let raw = input.value;
+                let coerced = raw;
+                if (typeHint === 'number') {
+                    // Number("") === 0 — reject empty so clearing a field doesn't
+                    // silently commit zero. User must explicitly type a value.
+                    if (raw.trim() === '') {
+                        input.value = String(value);
+                        return;
+                    }
+                    const n = Number(raw);
+                    if (!Number.isFinite(n)) {
+                        input.value = String(value);
+                        return;
+                    }
+                    coerced = n;
+                }
+                if (coerced === value) return;
+                pushUndo();
+                try {
+                    docSet(experiment, path, coerced);
+                    setDirty(true);
+                    renderInspector();
+                    renderTimeline();
+                } catch (err) {
+                    showError('Edit failed', err.message);
+                    input.value = String(value);
+                }
+            });
+            wrapper.appendChild(input);
+            return wrapper;
+        }
+
+        // ── Block property row renderers ─────────────────────────────────
+        // After every commit, re-render sequence (block cards reflect new
+        // reps / randomize badge / iti label) and timeline (step count and
+        // step widths depend on reps + iti).
+
+        function commitBlockEdit() {
+            setDirty(true);
+            renderInspector();
+            renderSequence();
+            renderTimeline();
+            // Re-render library: block intertrial changes shift usage counts.
+            renderLibrary();
+        }
+
+        function renderBlockNameRow(blockIdx, entry) {
+            const row = el('div', { class: 'block-prop-row' },
+                el('span', { class: 'k' }, 'name:')
+            );
+            const input = el('input', {
+                type: 'text',
+                class: 'field-edit str',
+                value: entry.name || '',
+                placeholder: '(optional, auto-numbered)',
+                title: 'Block label shown in logs. Leave empty for auto-numbered fallback.'
+            });
+            input.addEventListener('change', () => {
+                const v = input.value.trim();
+                const isClear = v === '' && entry.name;
+                const isChange = v !== '' && v !== entry.name;
+                if (!isClear && !isChange) return;
+                pushUndo();
+                try {
+                    if (isClear) {
+                        docDelete(experiment, ['experiment', blockIdx, 'name']);
+                    } else {
+                        docSet(experiment, ['experiment', blockIdx, 'name'], v);
+                    }
+                    commitBlockEdit();
+                } catch (err) {
+                    showError('Edit failed', err.message);
+                    input.value = entry.name || '';
+                }
+            });
+            row.appendChild(input);
+            return row;
+        }
+
+        function renderBlockRepsRow(blockIdx, entry) {
+            const row = el('div', { class: 'block-prop-row' },
+                el('span', { class: 'k' }, 'repetitions:')
+            );
+            const aliasName = aliasNameAt(experiment, ['experiment', blockIdx, 'repetitions']);
+            if (aliasName) {
+                row.appendChild(el('span', {
+                    class: 'alias-chip',
+                    title: 'Bound to anchor &' + aliasName + '. Edit via Variables when the variables editor lands.'
+                },
+                    '→ &' + aliasName,
+                    el('span', { class: 'resolved-val' }, '= ' + entry.repetitions)
+                ));
+                return row;
+            }
+            const input = el('input', {
+                type: 'number',
+                class: 'field-edit num',
+                value: String(entry.repetitions),
+                min: '1',
+                step: '1',
+                title: 'Number of times the trials list runs (positive integer).'
+            });
+            input.addEventListener('change', () => {
+                const n = parseInt(input.value, 10);
+                if (!Number.isFinite(n) || n < 1) {
+                    input.value = String(entry.repetitions);
+                    return;
+                }
+                if (n === entry.repetitions) return;
+                pushUndo();
+                try {
+                    docSet(experiment, ['experiment', blockIdx, 'repetitions'], n);
+                    commitBlockEdit();
+                } catch (err) {
+                    showError('Edit failed', err.message);
+                    input.value = String(entry.repetitions);
+                }
+            });
+            row.appendChild(input);
+            return row;
+        }
+
+        function renderBlockRandomizeRow(blockIdx, entry) {
+            const row = el('div', { class: 'block-prop-row' },
+                el('span', { class: 'k' }, 'randomize:')
+            );
+            const aliasName = aliasNameAt(experiment, ['experiment', blockIdx, 'randomize']);
+            if (aliasName) {
+                row.appendChild(el('span', { class: 'alias-chip' },
+                    '→ &' + aliasName,
+                    el('span', { class: 'resolved-val' }, '= ' + (entry.randomize ? 'true' : 'false'))
+                ));
+                return row;
+            }
+            const input = el('input', {
+                type: 'checkbox',
+                checked: entry.randomize,
+                title: 'When checked, trial order is shuffled per repetition (MATLAB randperm).'
+            });
+            input.addEventListener('change', () => {
+                pushUndo();
+                try {
+                    docSet(experiment, ['experiment', blockIdx, 'randomize'], input.checked);
+                    commitBlockEdit();
+                } catch (err) {
+                    showError('Edit failed', err.message);
+                    input.checked = entry.randomize;
+                }
+            });
+            row.appendChild(input);
+            row.appendChild(el('span', { style: 'color: var(--text-dim); font-size: 0.7rem;' },
+                input.checked ? 'shuffled per repetition' : 'fixed order'));
+            return row;
+        }
+
+        function renderBlockIntertrialRow(blockIdx, entry) {
+            const row = el('div', { class: 'block-prop-row' },
+                el('span', { class: 'k' }, 'intertrial:')
+            );
+            const select = el('select', {
+                class: 'field-edit',
+                title: 'Condition inserted between consecutive trials in this block.'
+            });
+            select.appendChild(el('option', { value: '' }, '(none)'));
+            for (const c of experiment.conditions) {
+                const opt = el('option', { value: c.name }, c.name);
+                if (c.name === entry.intertrial) opt.selected = true;
+                select.appendChild(opt);
+            }
+            select.addEventListener('change', () => {
+                const v = select.value;
+                if ((v === '' && !entry.intertrial) || v === entry.intertrial) return;
+                pushUndo();
+                try {
+                    if (v === '') {
+                        docDelete(experiment, ['experiment', blockIdx, 'intertrial']);
+                    } else {
+                        docSet(experiment, ['experiment', blockIdx, 'intertrial'], v);
+                    }
+                    commitBlockEdit();
+                } catch (err) {
+                    showError('Edit failed', err.message);
+                    select.value = entry.intertrial || '';
+                }
+            });
+            row.appendChild(select);
+            if (entry.intertrial) {
+                row.appendChild(el('button', {
+                    class: 'jump-btn',
+                    title: 'Jump to "' + entry.intertrial + '" in the library',
+                    onClick: () => {
+                        selection = { kind: 'condition', name: entry.intertrial };
+                        renderLibrary(); renderInspector(); renderSequence();
+                    }
+                }, '→'));
+            }
+            return row;
+        }
+
+        // ── Command template factory + add/move/delete handlers ──────────
+        // Build a default command object for a newly-inserted card. Uses the
+        // plugin-registry to populate sensible defaults so the user starts
+        // from a working command rather than blank text inputs.
+
+        function buildCommandTemplate(kind, pluginName, commandName) {
+            if (kind === 'wait') {
+                return { type: 'wait', duration: 1 };
+            }
+            // Default value when a required param has no `default:` in the
+            // schema. Lets the new card render with an editable field instead
+            // of dropping the param entirely.
+            const fallbackForType = (t) => (t === 'number' ? 0 : t === 'boolean' ? false : '');
+            const valueFor = (schema) =>
+                schema.default !== undefined && schema.default !== ''
+                    ? schema.default
+                    : fallbackForType(schema.type);
+
+            if (kind === 'controller') {
+                const def = CONTROLLER_COMMANDS[commandName];
+                const cmd = { type: 'controller', command_name: commandName };
+                if (def && def.params) {
+                    for (const [k, schema] of Object.entries(def.params)) {
+                        if (schema.required || (schema.default !== undefined && schema.default !== '')) {
+                            cmd[k] = valueFor(schema);
+                        }
+                    }
+                }
+                return cmd;
+            }
+            if (kind === 'plugin') {
+                const cmd = {
+                    type: 'plugin',
+                    plugin_name: pluginName,
+                    command_name: commandName
+                };
+                const paramsSchema = getV3CommandParams(experiment, 'plugin', pluginName, commandName);
+                if (paramsSchema) {
+                    const params = {};
+                    let hasAny = false;
+                    for (const [k, schema] of Object.entries(paramsSchema)) {
+                        if (schema.required || (schema.default !== undefined && schema.default !== '')) {
+                            params[k] = valueFor(schema);
+                            hasAny = true;
+                        }
+                    }
+                    if (hasAny) cmd.params = params;
+                }
+                return cmd;
+            }
+            throw new Error('Unknown command kind: ' + kind);
+        }
+
+        function commitInspectorEdit() {
+            setDirty(true);
+            renderInspector();
+            renderTimeline();
+        }
+
+        function onMoveCommand(condIdx, fromIdx, toIdx) {
+            pushUndo();
+            try {
+                docMoveCommand(experiment, condIdx, fromIdx, toIdx);
+                commitInspectorEdit();
+            } catch (err) {
+                showError('Move failed', err.message);
+            }
+        }
+
+        function onDeleteCommand(condIdx, atIdx) {
+            pushUndo();
+            try {
+                docDelete(experiment, ['conditions', condIdx, 'commands', atIdx]);
+                commitInspectorEdit();
+            } catch (err) {
+                showError('Delete failed', err.message);
+            }
+        }
+
+        function onAddCommand(condIdx, addSelectValue) {
+            // addSelectValue encoding: "wait" | "controller:<name>" | "plugin:<plugin>:<command>"
+            pushUndo();
+            try {
+                let cmd;
+                if (addSelectValue === 'wait') {
+                    cmd = buildCommandTemplate('wait');
+                } else if (addSelectValue.startsWith('controller:')) {
+                    cmd = buildCommandTemplate('controller', null, addSelectValue.slice('controller:'.length));
+                } else if (addSelectValue.startsWith('plugin:')) {
+                    const parts = addSelectValue.split(':');
+                    cmd = buildCommandTemplate('plugin', parts[1], parts[2]);
+                } else {
+                    return;
+                }
+                const cond = experiment.conditions[condIdx];
+                docInsertCommand(experiment, condIdx, cond.commands.length, cmd);
+                commitInspectorEdit();
+            } catch (err) {
+                showError('Add failed', err.message);
+            }
+        }
+
+        function renderAddCommandPicker(condIdx) {
+            const row = el('div', { class: 'add-cmd-row' },
+                el('span', { class: 'k' }, '+ add:')
+            );
+            const select = el('select', {
+                class: 'field-edit',
+                title: 'Append a new command to this condition'
+            });
+            select.appendChild(el('option', { value: '' }, 'choose…'));
+
+            // Wait
+            const waitGroup = el('optgroup', { label: 'Timing' });
+            waitGroup.appendChild(el('option', { value: 'wait' }, 'wait'));
+            select.appendChild(waitGroup);
+
+            // Controller commands
+            const ctrlGroup = el('optgroup', { label: 'Controller' });
+            for (const [name, def] of Object.entries(CONTROLLER_COMMANDS)) {
+                ctrlGroup.appendChild(el('option', { value: 'controller:' + name }, name));
+            }
+            select.appendChild(ctrlGroup);
+
+            // Plugin commands — group per declared plugin + log
+            for (const pluginName of listV3PluginNames(experiment)) {
+                const cmds = getV3PluginCommands(experiment, pluginName);
+                const keys = Object.keys(cmds);
+                if (keys.length === 0) continue;
+                const grp = el('optgroup', { label: 'Plugin: ' + pluginName });
+                for (const cName of keys) {
+                    grp.appendChild(el('option', { value: 'plugin:' + pluginName + ':' + cName }, cName));
+                }
+                select.appendChild(grp);
+            }
+
+            select.addEventListener('change', () => {
+                const v = select.value;
+                if (!v) return;
+                onAddCommand(condIdx, v);
+            });
+            row.appendChild(select);
+            return row;
+        }
+
+        function renderCommandCard(cmd, cmdPath, cardMeta) {
+            // cardMeta: { condIdx, cmdIdx, total } — required for action buttons
             const card = el('div', { class: 'cmd-card ' + cmd.type });
             const head = el('div', { class: 'cmd-head' },
                 el('span', { class: 'ctype' }, cmd.type),
@@ -974,29 +1634,56 @@
                 cmd.command_name || ''
             );
             card.appendChild(head);
+
+            // Per-card action buttons (↑ ↓ ✕)
+            const actions = el('div', { class: 'cmd-actions' });
+            const upBtn = el('button', {
+                class: 'cmd-act-btn',
+                title: 'Move command up',
+                disabled: cardMeta.cmdIdx === 0,
+                onClick: (e) => { e.stopPropagation(); onMoveCommand(cardMeta.condIdx, cardMeta.cmdIdx, cardMeta.cmdIdx - 1); }
+            }, '↑');
+            const downBtn = el('button', {
+                class: 'cmd-act-btn',
+                title: 'Move command down',
+                disabled: cardMeta.cmdIdx === cardMeta.total - 1,
+                onClick: (e) => { e.stopPropagation(); onMoveCommand(cardMeta.condIdx, cardMeta.cmdIdx, cardMeta.cmdIdx + 1); }
+            }, '↓');
+            const delBtn = el('button', {
+                class: 'cmd-act-btn danger',
+                title: 'Delete command (Ctrl+Z to undo)',
+                onClick: (e) => {
+                    e.stopPropagation();
+                    onDeleteCommand(cardMeta.condIdx, cardMeta.cmdIdx);
+                }
+            }, '✕');
+            actions.appendChild(upBtn);
+            actions.appendChild(downBtn);
+            actions.appendChild(delBtn);
+            card.appendChild(actions);
+
             const detailKeys = {
-                controller: ['pattern', 'pattern_ID', 'duration', 'mode', 'frame_index', 'frame_rate', 'gain'],
+                controller: ['command_name', 'pattern', 'pattern_ID', 'duration', 'mode', 'frame_index', 'frame_rate', 'gain'],
                 wait: ['duration'],
                 plugin: []
             }[cmd.type] || [];
+
             for (const k of detailKeys) {
-                if (cmd[k] !== undefined) {
-                    card.appendChild(el('div', { class: 'kv-line' },
-                        el('span', { class: 'k' }, k + ':'),
-                        el('span', { class: 'v' }, ' ' + (typeof cmd[k] === 'string' ? cmd[k] : String(cmd[k])))));
-                }
+                if (cmd[k] === undefined) continue;
+                card.appendChild(renderEditableField(k, [...cmdPath, k], cmd[k], FIELD_TYPES[k] || 'string'));
             }
+
             if (cmd.type === 'plugin' && cmd.params && Object.keys(cmd.params).length > 0) {
                 card.appendChild(el('div', { class: 'kv-line' }, el('span', { class: 'k' }, 'params:')));
                 for (const [pk, pv] of Object.entries(cmd.params)) {
-                    card.appendChild(el('div', { class: 'kv-line', style: 'padding-left: 1rem;' },
-                        el('span', { class: 'k' }, pk + ':'),
-                        el('span', { class: 'v' }, ' ' + (typeof pv === 'string' ? JSON.stringify(pv) : String(pv)))));
+                    const ptype = typeof pv === 'number' ? 'number' : 'string';
+                    card.appendChild(renderEditableField(pk, [...cmdPath, 'params', pk], pv, ptype, { indent: true }));
                 }
             }
+
             if (cmd._unknownKeys && Object.keys(cmd._unknownKeys).length > 0) {
                 card.appendChild(el('div', { class: 'kv-line', style: 'color: var(--warn); margin-top: 0.2rem;' },
-                    '⚠ unknown keys: ' + Object.keys(cmd._unknownKeys).join(', ')));
+                    '⚠ unknown keys (preserved on export): ' + Object.keys(cmd._unknownKeys).join(', ')));
             }
             return card;
         }

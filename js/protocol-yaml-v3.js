@@ -316,11 +316,32 @@ function extractSequenceEntry(entry) {
                 'INVALID_SCHEMA'
             );
         }
+        // repetitions: optional, but if present must be a positive integer.
+        // Catches `0`, negatives, decimals (1.5) that would otherwise silently
+        // drop a block or loop a non-integer number of times.
+        let repetitions = 1;
+        if (entry.repetitions !== undefined) {
+            if (
+                typeof entry.repetitions !== 'number' ||
+                !Number.isInteger(entry.repetitions) ||
+                entry.repetitions < 1
+            ) {
+                throw new V3ParseError(
+                    'Block "' +
+                        (entry.name || '?') +
+                        '" has invalid `repetitions`: ' +
+                        JSON.stringify(entry.repetitions) +
+                        ' (must be a positive integer)',
+                    'INVALID_SCHEMA'
+                );
+            }
+            repetitions = entry.repetitions;
+        }
         return {
             kind: 'block',
             name: typeof entry.name === 'string' ? entry.name : null,
             trials: entry.trials.map(String),
-            repetitions: typeof entry.repetitions === 'number' ? entry.repetitions : 1,
+            repetitions: repetitions,
             randomize: entry.randomize === true,
             intertrial: typeof entry.intertrial === 'string' ? entry.intertrial : null,
             _unknownKeys: extractUnknownKeys(entry, KNOWN_BLOCK_KEYS)
@@ -426,6 +447,190 @@ function generateV3Protocol(experiment) {
 }
 
 // ════════════════════════════════════════════════════
+// Editing — write a value back to both the YAML.Document and the JS model
+// ════════════════════════════════════════════════════
+
+/**
+ * docSet(experiment, path, value)
+ *
+ * Mutates the YAML.Document attached as `experiment._doc` at `path`, and
+ * mirrors the change in the JS data model so the UI stays in sync.
+ *
+ * `path` is an array of YAML-side keys/indices. Top-level keys in the
+ * YAML differ from our JS model in two places:
+ *   - 'experiment' (YAML) → 'sequence' (JS)
+ *   - 'rig'        (YAML) → 'rig_path' (JS)
+ * Use the YAML-side names in `path` — the JS-model mirror is translated below.
+ *
+ * Setting a primitive value through a scalar node that previously held a
+ * `*alias` reference replaces the alias with the literal. Comments attached
+ * to the node and its surroundings are preserved by yaml@2.
+ */
+function docSet(experiment, path, value) {
+    if (!experiment || !experiment._doc) {
+        throw new V3ParseError('docSet: experiment has no _doc handle', 'NO_DOC');
+    }
+    if (!Array.isArray(path) || path.length === 0) {
+        throw new V3ParseError('docSet: path must be a non-empty array', 'BAD_PATH');
+    }
+    experiment._doc.setIn(path, value);
+    mirrorIntoModel(experiment, path, value);
+}
+
+/**
+ * Returns true if the YAML node at `path` is an Alias reference (i.e., the
+ * scalar in the source YAML is `*name`, not a literal). Used by the editor
+ * to render anchor-bound fields as read-only badges instead of input boxes.
+ */
+function nodeIsAliasAt(experiment, path) {
+    if (!experiment || !experiment._doc) return false;
+    const node = experiment._doc.getIn(path, true);
+    if (!node) return false;
+    return YAML.isAlias ? YAML.isAlias(node) : node.type === 'ALIAS' || node.constructor?.name === 'Alias';
+}
+
+/**
+ * If the YAML node at `path` is an Alias, return its anchor name; else null.
+ * Lets the UI render `→ &dur_long` chips next to anchor-bound fields.
+ */
+function aliasNameAt(experiment, path) {
+    if (!experiment || !experiment._doc) return null;
+    const node = experiment._doc.getIn(path, true);
+    if (!node) return null;
+    if (YAML.isAlias && YAML.isAlias(node)) {
+        return node.source || null;
+    }
+    if (node.type === 'ALIAS' || node.constructor?.name === 'Alias') {
+        return node.source || null;
+    }
+    return null;
+}
+
+/**
+ * Translate a YAML-side path into the JS-side equivalent and write `value`
+ * along the chain. Returns silently if the path doesn't exist in the JS
+ * model (e.g., a passthrough-only key at an unsupported nesting level).
+ */
+function mirrorIntoModel(experiment, path, value) {
+    const jsPath = [...path];
+    if (jsPath[0] === 'experiment') jsPath[0] = 'sequence';
+    else if (jsPath[0] === 'rig') jsPath[0] = 'rig_path';
+
+    let cursor = experiment;
+    for (let i = 0; i < jsPath.length - 1; i++) {
+        if (cursor == null) return;
+        cursor = cursor[jsPath[i]];
+    }
+    if (cursor != null && jsPath.length > 0) {
+        cursor[jsPath[jsPath.length - 1]] = value;
+    }
+}
+
+/**
+ * docInsertCommand(experiment, condIdx, atIdx, command)
+ *
+ * Insert `command` (a plain JS object: {type, command_name, ...}) into the
+ * commands list at conditions[condIdx].commands[atIdx]. atIdx is clamped to
+ * [0, commands.length]; pass commands.length to append.
+ *
+ * Mirrors the change into the JS data model.
+ */
+function docInsertCommand(experiment, condIdx, atIdx, command) {
+    if (!experiment || !experiment._doc) {
+        throw new V3ParseError('docInsertCommand: experiment has no _doc handle', 'NO_DOC');
+    }
+    const cond = experiment.conditions[condIdx];
+    if (!cond) {
+        throw new V3ParseError('docInsertCommand: bad condition index ' + condIdx, 'BAD_PATH');
+    }
+    const clampedIdx = Math.max(0, Math.min(atIdx, cond.commands.length));
+
+    const cmdsNode = experiment._doc.getIn(['conditions', condIdx, 'commands'], true);
+    if (!cmdsNode || !Array.isArray(cmdsNode.items)) {
+        throw new V3ParseError(
+            'docInsertCommand: commands sequence node not found at conditions[' + condIdx + ']',
+            'BAD_PATH'
+        );
+    }
+    const newNode = experiment._doc.createNode(command);
+    cmdsNode.items.splice(clampedIdx, 0, newNode);
+
+    cond.commands.splice(clampedIdx, 0, command);
+}
+
+/**
+ * docMoveCommand(experiment, condIdx, fromIdx, toIdx)
+ *
+ * Move a command within conditions[condIdx].commands. Bounds-checked; a
+ * no-op if fromIdx === toIdx. Mirrors both YAML.Document and JS model.
+ */
+function docMoveCommand(experiment, condIdx, fromIdx, toIdx) {
+    if (!experiment || !experiment._doc) {
+        throw new V3ParseError('docMoveCommand: experiment has no _doc handle', 'NO_DOC');
+    }
+    const cond = experiment.conditions[condIdx];
+    if (!cond) {
+        throw new V3ParseError('docMoveCommand: bad condition index ' + condIdx, 'BAD_PATH');
+    }
+    const n = cond.commands.length;
+    if (fromIdx < 0 || fromIdx >= n || toIdx < 0 || toIdx >= n || fromIdx === toIdx) return;
+
+    const cmdsNode = experiment._doc.getIn(['conditions', condIdx, 'commands'], true);
+    if (!cmdsNode || !Array.isArray(cmdsNode.items)) return;
+
+    const movedNode = cmdsNode.items.splice(fromIdx, 1)[0];
+    cmdsNode.items.splice(toIdx, 0, movedNode);
+
+    const movedJs = cond.commands.splice(fromIdx, 1)[0];
+    cond.commands.splice(toIdx, 0, movedJs);
+}
+
+/**
+ * docDelete(experiment, path)
+ *
+ * Removes the key at `path` from both the YAML.Document and the JS data
+ * model. Used for clearing optional fields (e.g., block `intertrial` →
+ * "none", block `name` cleared). For our JS model, optional string fields
+ * that were `null` when absent get set back to `null` after delete; map
+ * keys that don't normalize to a model field are deleted outright.
+ */
+function docDelete(experiment, path) {
+    if (!experiment || !experiment._doc) {
+        throw new V3ParseError('docDelete: experiment has no _doc handle', 'NO_DOC');
+    }
+    if (!Array.isArray(path) || path.length === 0) {
+        throw new V3ParseError('docDelete: path must be a non-empty array', 'BAD_PATH');
+    }
+    experiment._doc.deleteIn(path);
+
+    const jsPath = [...path];
+    if (jsPath[0] === 'experiment') jsPath[0] = 'sequence';
+    else if (jsPath[0] === 'rig') jsPath[0] = 'rig_path';
+
+    let cursor = experiment;
+    for (let i = 0; i < jsPath.length - 1; i++) {
+        if (cursor == null) return;
+        cursor = cursor[jsPath[i]];
+    }
+    if (cursor != null && jsPath.length > 0) {
+        const lastKey = jsPath[jsPath.length - 1];
+        // Block-level optional fields parse to `null` when missing; mirror that.
+        const optionalNullableBlockFields = ['name', 'intertrial'];
+        if (
+            jsPath[0] === 'sequence' &&
+            jsPath.length === 3 &&
+            optionalNullableBlockFields.includes(lastKey)
+        ) {
+            cursor[lastKey] = null;
+        } else if (Array.isArray(cursor)) {
+            cursor.splice(lastKey, 1);
+        } else {
+            delete cursor[lastKey];
+        }
+    }
+}
+
+// ════════════════════════════════════════════════════
 // Exports
 // ════════════════════════════════════════════════════
 
@@ -433,7 +638,13 @@ const ProtocolV3 = {
     parseV3Protocol,
     generateV3Protocol,
     validateReferences,
-    V3ParseError
+    V3ParseError,
+    docSet,
+    docDelete,
+    docInsertCommand,
+    docMoveCommand,
+    nodeIsAliasAt,
+    aliasNameAt
 };
 
 // Browser global
@@ -447,5 +658,16 @@ if (typeof module !== 'undefined' && module.exports) {
 }
 
 // ES module export
-export { parseV3Protocol, generateV3Protocol, validateReferences, V3ParseError };
+export {
+    parseV3Protocol,
+    generateV3Protocol,
+    validateReferences,
+    V3ParseError,
+    docSet,
+    docDelete,
+    docInsertCommand,
+    docMoveCommand,
+    nodeIsAliasAt,
+    aliasNameAt
+};
 export default ProtocolV3;
