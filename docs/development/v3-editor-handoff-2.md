@@ -1,8 +1,8 @@
 # v3 Experiment Designer — Handoff for Next Session (Round 2)
 
-**Last updated:** 2026-05-27
-**Branch:** `main` at `c5cf223`
-**Editor version:** v3 Experiment Designer **v0.8**
+**Last updated:** 2026-05-28 (Phase 6 session)
+**Branch:** `phase5/variables-ux` (Phase 5 `de31235` + Phase 6 this session) → PR to `main`
+**Editor version:** v3 Experiment Designer **v0.11** (Phase 6 shipped this session)
 **Pinned upstream:** maDisplayTools `origin/version3` at `649d7ef`
 
 This is the second handoff doc for the v3 designer. It supersedes the original
@@ -194,15 +194,15 @@ fixtures, tests, and docs.
 
 ### What the editor still can't do (deferred work)
 
-- Edit the **variables** section (anchor inline-edit, rename cascade, anchor
-  binding popover).
 - **Cross-library import** (D4) — design is on the shelf with a known fix
   list; deferred per Codex-adv concerns.
-- **Pre-export blocking validation modal** with line numbers (currently
-  only the soft-warn banner).
-- **Library row delete** (when usage = 0).
-- **Reset button** (clear sequence + conditions + variables to defaults).
+- **Pre-export validation line numbers** — the Phase 6 modal aggregates
+  blocking errors but does not yet map them to source line numbers.
 - **MATLAB-validation flow documentation** (Phase 8 in the original plan).
+
+*(Shipped since the original deferred list: variables editing — Phase 5;
+pre-export blocking validation modal, library-row delete, Reset button —
+Phase 6.)*
 - **Quickstart HTML doc** (Phase 9 in the original plan).
 - Comment preservation tests at strategic positions (Phase 7 in the plan).
 
@@ -227,41 +227,92 @@ already-merged code.
 **Why first:** the event-listener bug surfaces within a normal editing
 session. If the lab is actively using v0.8, they'll hit it. Cheap to fix.
 
-### Tier 2: Phase 5 — Variables UX (next big feature — ~4–5 days)
+### Tier 2: Phase 5 — Variables UX ✅ SHIPPED (this session, v0.10)
 
-The handoff plan's Phase 5. Three pieces:
+Phase 5 landed in two PRs this session: cleanup (`#76`, v0.9) then
+Phase 5 (this branch, v0.10). All three pieces are in:
 
-1. **Inline-editable Variables table** in the Settings drawer (anchor name
-   + value, both editable). Already exists as read-only.
-2. **Anchor binding popover** on every editable scalar in command cards.
-   Today alias-bound fields are read-only chips. Phase 5 adds a pencil
-   icon → popover with three actions: Edit literal (unbinds anchor), Bind
-   to existing anchor (dropdown of available anchors), Create new anchor
-   (name + use current value).
-3. **Rename cascade.** Confirm dialog showing all references that will
-   update, then the cascade fires as one `pushUndo()` → many `docSet`
-   calls → single `renderAll`. One undo step for the whole rename.
+1. **Inline-editable Variables table** in the Settings drawer (anchor
+   name + value editable, ✕ delete with cascade-unbind, `+ Add` row).
+   Complex anchors (Map/Seq) render as read-only "complex anchor"
+   badges.
+2. **Anchor binding popover** on every editable scalar (controller and
+   plugin command fields) via a 🔗 button appended to each input.
+   - Literal scalars: Bind-to-existing dropdown (with type-mismatched
+     options visibly disabled) + Create-new-anchor section.
+   - Aliased scalars: summary card with "Edit in Variables…" jump
+     button, Rebind-to dropdown, and Unbind action.
+3. **Rename cascade.** Modal lists every reference path that will
+   update; single `pushUndo()` wraps the atomic `docRenameVariable`
+   call (which walks every `*alias` source in one synchronous pass via
+   `YAML.visit`). One undo step for the whole rename.
 
-**Why before D4:** Codex-adv flagged in the D4 design review that D4
-creates prefix-clutter (`sibling_lab__dur_short`) that Phase 5 is the
-exact tool to clean up. Doing Phase 5 first means D4 ships against a
-better base. Per `docs/development/v3-d4-design-reviews.md`.
+**New doc helpers** (10 added → 27 total):
+`docCreateVariable`, `docDeleteVariable`, `docRenameVariable`,
+`docSetVariableValue`, `docBindToAnchor`, `docUnbindAnchor`,
+`findAliasesTo`, `variableIsComplex`, `isValidAnchorName`,
+`anchorExists`.
+
+**New UI primitive:** `confirmModal({title, body, list, confirmLabel}) →
+Promise<bool>` — backdrop-dismiss + Escape/Enter keys. Reusable for
+Phase 6's full validation modal.
+
+**Test coverage:** 54 new tests in Suite 29 (Variable lifecycle +
+anchor binding). Total: 429/429.
+
+**D4 unblocked:** the prefix-clutter mitigation Codex-adv flagged in
+the D4 design review now has its UX (Phase 5's Variables table makes
+the renames trivial).
 
 Complex anchors (maps, lists, merge keys `<<: *foo`) round-trip via
-`_doc` but surface as read-only "advanced anchor" badges. User edits
-those in YAML.
+`_doc`, surface as read-only "complex anchor" badges in the Variables
+table, and rename cascades work for them (the test suite covers a
+merge-key case).
 
-### Tier 3: Phase 6 — full validation modal + Reset (~1 day)
+### Tier 3: Phase 6 — validation modal + Reset + library delete ✅ SHIPPED (this session, v0.11)
 
-- Promote the soft-warn export banner to a full pre-export modal that
-  aggregates all errors (dup condition names, missing intertrial
-  referents, missing trial referents, alias references to missing
-  variables, duplicate anchor names, name-identity normalization).
-  Display with line numbers where possible.
-- Library: delete blocked when usage > 0; "remove from sequence first?"
-  affordance.
-- Reset button: clear sequence + conditions + variables to defaults
-  (one empty condition, sequence = `[ref to it]`).
+All three pieces landed on `phase5/variables-ux` after the Phase 5 commit:
+
+1. **Pre-export validation modal.** The Export button now runs a blocking
+   validator before writing. On errors it shows a `confirmModal` listing
+   each error with an "Export anyway" escape hatch (Cancel aborts the
+   download). Soft warnings stay in the non-blocking banner — the two
+   tiers are distinct.
+2. **Library-row delete.** Each library row has a `✕` button. Deletion is
+   blocked while usage > 0 (shows "remove from sequence first"); when
+   unused, a confirm modal precedes `docDelete(['conditions', idx])`.
+   Selection clears if the deleted condition was selected.
+3. **Reset button.** Header toolbar `⟲ Reset` confirms, then loads the
+   blank skeleton. Reversible: `pushUndo()` runs first and `loadYamlText`
+   gained a `{ keepUndo: true }` option, so a single Undo restores the
+   prior doc.
+
+**New validator:** `collectBlockingErrors(experiment)` in
+`js/protocol-yaml-v3.js` — a blocking sibling to `collectExportWarnings`.
+It *composes* `validateReferences` (folds in dup-condition-name and
+missing-ref errors) and adds two CST checks via `YAML.visit`: **duplicate
+anchor names** (yaml@2 silently accepts `&dup` twice, so it's counted) and
+**dangling aliases** (an `*alias` whose anchor is gone — a safety net for
+the in-memory mutation model, since a fully-dangling alias throws at
+import). Returns `{ ok, errors }`, the same shape as `validateReferences`.
+Exported from all three surfaces (ProtocolV3 object, named export, ESM
+import in the HTML).
+
+**Test coverage:** Suite 30 (17 checks) in `tests/test-protocol-roundtrip-v3.js`.
+Total: **446/446**.
+
+**Browser-verified (this session):** the 6 Phase 5 checks (rename cascade,
+bind, unbind, create-and-bind, cascade-unbind delete, complex-anchor badge)
+plus the 3 Phase 6 checks (validation modal blocks/cancels on duplicate
+anchor, Reset collapses to skeleton and Undo restores, library delete
+blocked-when-used / works-when-unused).
+
+> **Preview caching note:** `python -m http.server` lets the browser
+> heuristically cache `js/*.js`, which breaks ES-module verification after
+> edits (a stale import silently kills the whole module). A no-cache static
+> server (`.claude/nocache-server.py`, untracked) on a fresh port avoids it.
+
+**Still deferred:** mapping validation errors to source **line numbers**.
 
 ### Tier 4: D4 — cross-library import (parked — ~5+ days when picked up)
 
@@ -316,15 +367,19 @@ These should be resolved before the next session picks a direction:
 
 ### Current helpers (alphabetical)
 
-`docAddPluginParam`, `docAppendSequenceEntry`, `docCloneCondition`,
-`docDelete`, `docDeletePluginParam`, `docInsertCommand`,
+`docAddPluginParam`, `docAppendSequenceEntry`, `docBindToAnchor`,
+`docCloneCondition`, `docCreateVariable`, `docDelete`,
+`docDeletePluginParam`, `docDeleteVariable`, `docInsertCommand`,
 `docInsertCondition`, `docInsertSequenceEntry`, `docInsertTrialInBlock`,
 `docMoveCommand`, `docMoveSequenceEntry`, `docMoveTrialInBlock`,
 `docRemoveSequenceEntry`, `docRemoveTrialFromBlock`,
-`docReplaceSequenceEntry`, `docSet`, `docSetPluginCommandHead`.
+`docRenameVariable`, `docReplaceSequenceEntry`, `docSet`,
+`docSetPluginCommandHead`, `docSetVariableValue`, `docUnbindAnchor`.
 
 Plus inspection helpers: `nodeIsAliasAt`, `aliasNameAt`,
-`collectExportWarnings`, `validateReferences`.
+`anchorExists`, `findAliasesTo`, `isValidAnchorName`,
+`variableIsComplex`, `collectExportWarnings`, `validateReferences`,
+`collectBlockingErrors` (Phase 6 — blocking pre-export validation).
 
 ### Helper anatomy (template for adding new ones)
 
