@@ -28,6 +28,39 @@
 'use strict';
 
 import * as YAML from 'yaml';
+import {
+    parseV3Protocol,
+    ensureTopLevelSection,
+    docInsertConditionNode,
+    docInsertVariableNode,
+    docInsertPluginNode,
+    docAppendSequenceEntry,
+    isValidAnchorName,
+    anchorExists
+} from './protocol-yaml-v3.js';
+
+// Command types the v3 schema knows (mirrors KNOWN_COMMAND_KEYS_BY_TYPE in
+// protocol-yaml-v3.js). Anything else in a condition is an "unknown command
+// type" — preserved as a raw card, surfaced as an informational note on import.
+const KNOWN_COMMAND_TYPES = ['controller', 'wait', 'plugin'];
+
+// The built-in always-declared plugin: a `plugin_name: log` command needs no
+// source declaration and is never namespaced (collectExportWarnings treats it
+// as declared). See docs/development/v3-d4-design.md §5.
+const BUILTIN_PLUGIN_NAMES = ['log'];
+
+/**
+ * V3ImportError — import-pipeline failures (preflight rejection, blocked commit).
+ * Carries a `code` and, for COMMIT_BLOCKED, a `blocking` array of conflict items.
+ */
+class V3ImportError extends Error {
+    constructor(message, code, extra) {
+        super(message);
+        this.name = 'V3ImportError';
+        this.code = code || 'IMPORT_ERROR';
+        if (extra && typeof extra === 'object') Object.assign(this, extra);
+    }
+}
 
 /**
  * collectAliasReferences(rootNode) → Alias node[]
@@ -150,15 +183,718 @@ function yamlNodeStructuralEquals(aNode, aDoc, bNode, bDoc) {
 }
 
 // ════════════════════════════════════════════════════
+// Milestone 2 — staging buffer + commit pipeline (no UI)
+//
+// The user enters import mode, browses "theirs", adds candidate conditions to a
+// staging buffer, optionally adjusts planned names, then commits in one batch
+// (one undo step) or cancels. The buffer never mutates yours._doc until commit.
+// Plan (add) is pure; commit applies the §5c mutations. A per-batch dependency
+// registry shared across all items dedups anchors/plugins. See design §5/§7.
+// ════════════════════════════════════════════════════
+
+// ── small pure utilities ────────────────────────────────────────────────────
+
+/**
+ * derivePrefix(filename) → 'stem__' (anchor-safe) | ''
+ * `sibling_lab.yaml` → `sibling_lab__`. Strips any directory + extension and
+ * replaces non-[A-Za-z0-9_-] characters with `_`.
+ */
+function derivePrefix(filename) {
+    const base = String(filename || '')
+        .replace(/^.*[\\/]/, '')
+        .replace(/\.[^.]+$/, '');
+    const safe = base.replace(/[^A-Za-z0-9_-]/g, '_');
+    return safe ? safe + '__' : '';
+}
+
+/** Find the unique value node defining `anchorName` in `doc` (null if none). */
+function _findAnchorNode(doc, anchorName) {
+    let found = null;
+    if (!doc || typeof YAML.visit !== 'function') return null;
+    YAML.visit(doc, {
+        Node(_key, node) {
+            if (node && node.anchor === anchorName) {
+                found = node;
+                return YAML.visit.BREAK;
+            }
+        }
+    });
+    return found;
+}
+
+/** Names of anchors defined more than once anywhere in `doc` (duplicate-anchor preflight). */
+function detectDuplicateAnchors(doc) {
+    const seen = Object.create(null);
+    const dupes = [];
+    if (!doc || typeof YAML.visit !== 'function') return dupes;
+    YAML.visit(doc, {
+        Node(_key, node) {
+            if (node && node.anchor) {
+                if (seen[node.anchor]) {
+                    if (!dupes.includes(node.anchor)) dupes.push(node.anchor);
+                } else {
+                    seen[node.anchor] = true;
+                }
+            }
+        }
+    });
+    return dupes;
+}
+
+/** A plugin mirror's identity projection = every field except `name`. */
+function _pluginProjection(pluginMirror) {
+    const out = {};
+    for (const k of Object.keys(pluginMirror)) {
+        if (k === 'name') continue;
+        out[k] = pluginMirror[k];
+    }
+    return out;
+}
+
+/** True when a plugin declares no hardware-specific fields (config/port/baudrate/script_path). */
+function _pluginIsConfigLess(p) {
+    const hasConfig = p.config && typeof p.config === 'object' && Object.keys(p.config).length > 0;
+    return (
+        !hasConfig &&
+        p.port === undefined &&
+        p.baudrate === undefined &&
+        p.script_path === undefined
+    );
+}
+
+/** suggestUniqueName('arena check', set) → 'arena check' | 'arena check_2' | … */
+function suggestUniqueName(base, takenSet) {
+    if (!takenSet.has(base)) return base;
+    let n = 2;
+    while (takenSet.has(base + '_' + n)) n++;
+    return base + '_' + n;
+}
+
+/** Prepend a provenance comment line to a node's commentBefore (idempotent-ish). */
+function _stampProvenance(node, filename) {
+    if (!node) return;
+    const stamp = ' imported from ' + (filename || 'another protocol');
+    if (node.commentBefore && node.commentBefore.indexOf(stamp) !== -1) return;
+    node.commentBefore = node.commentBefore ? stamp + '\n' + node.commentBefore : stamp;
+}
+
+/**
+ * Topologically order anchor source-names so any anchor whose value references
+ * another imported anchor comes AFTER it (yaml@2 needs anchor-before-alias).
+ * Self-edges (a: &A {self: *A}) are ignored. A genuine multi-node cycle throws
+ * (it cannot be stringified in any order). registry: Map<srcName, {srcValueNode}>.
+ */
+function _topoSortAnchors(registry) {
+    const names = Array.from(registry.keys());
+    const inReg = new Set(names);
+    // deps[name] = set of registry anchors that `name`'s value references
+    const deps = new Map();
+    for (const name of names) {
+        const entry = registry.get(name);
+        const refs = collectAliasReferences(entry.srcValueNode).map((a) => a.source);
+        const d = new Set();
+        for (const r of refs) {
+            if (r !== name && inReg.has(r)) d.add(r); // ignore self-edge + external refs
+        }
+        deps.set(name, d);
+    }
+    const ordered = [];
+    const state = new Map(); // name → 'visiting' | 'done'
+    function visit(name, stack) {
+        const s = state.get(name);
+        if (s === 'done') return;
+        if (s === 'visiting') {
+            throw new V3ImportError(
+                'topological sort: anchor dependency cycle among imported anchors (' +
+                    stack.concat(name).join(' → ') +
+                    ')',
+                'ANCHOR_CYCLE'
+            );
+        }
+        state.set(name, 'visiting');
+        for (const dep of deps.get(name)) visit(dep, stack.concat(name));
+        state.set(name, 'done');
+        ordered.push(name);
+    }
+    for (const name of names) visit(name, []);
+    return ordered; // dependency-first
+}
+
+/** Rewrite literal `plugin_name:` scalar values inside a cloned condition node. */
+function _rewritePluginNamesInClone(clonedCondNode, pluginNameRewrite) {
+    if (typeof YAML.visit !== 'function') return;
+    YAML.visit(clonedCondNode, {
+        Pair(_key, pair) {
+            const k = pair.key && pair.key.value !== undefined ? pair.key.value : null;
+            if (k !== 'plugin_name') return;
+            const v = pair.value;
+            if (v && !YAML.isAlias(v) && v.value !== undefined) {
+                if (Object.prototype.hasOwnProperty.call(pluginNameRewrite, v.value)) {
+                    v.value = pluginNameRewrite[v.value];
+                }
+            }
+        }
+    });
+}
+
+// ── staging buffer ───────────────────────────────────────────────────────────
+
+/**
+ * createStagingBuffer(srcExperiment, srcFilename, opts) → staging
+ *
+ * Build an empty staging buffer over a parsed "theirs" experiment. Runs the
+ * duplicate-anchor preflight (#6) — broken-alias sources are already rejected by
+ * parseV3Protocol's toJS(). opts.prefix overrides the filename-derived default.
+ */
+function createStagingBuffer(srcExperiment, srcFilename, opts) {
+    if (!srcExperiment || !srcExperiment._doc) {
+        throw new V3ImportError('createStagingBuffer: source has no _doc handle', 'NO_DOC');
+    }
+    const dupes = detectDuplicateAnchors(srcExperiment._doc);
+    if (dupes.length > 0) {
+        throw new V3ImportError(
+            'createStagingBuffer: source YAML defines duplicate anchor name(s): ' +
+                dupes.join(', ') +
+                '. Resolve them in the source before importing.',
+            'DUPLICATE_ANCHOR_SOURCE',
+            { duplicates: dupes }
+        );
+    }
+    const options = opts || {};
+    const prefix = options.prefix !== undefined ? options.prefix : derivePrefix(srcFilename);
+    return {
+        src: { doc: srcExperiment._doc, experiment: srcExperiment, filename: srcFilename || '' },
+        prefix: prefix,
+        batch: {
+            anchorRegistry: new Map(), // srcName → { srcValueNode, plannedName, override }
+            pluginRegistry: new Map(), // srcName → { srcEntryNode, plannedName, override, action, mergeWith }
+            visitedAnchors: new Set()
+        },
+        items: [],
+        addBareRefs: options.addBareRefs !== undefined ? !!options.addBareRefs : true,
+        _yours: null // set on first addToStaging; used by validation refresh
+    };
+}
+
+// Walk a source value/condition node, registering every transitively-referenced
+// anchor into the shared registry (visited-set closure, #5).
+function _closeAnchors(staging, seedNode) {
+    const reg = staging.batch.anchorRegistry;
+    const visited = staging.batch.visitedAnchors;
+    const work = collectAliasReferences(seedNode).map((a) => a.source);
+    while (work.length) {
+        const name = work.shift();
+        if (visited.has(name)) continue;
+        visited.add(name);
+        const valNode = _findAnchorNode(staging.src.doc, name);
+        if (!valNode) continue; // broken alias — preflight blocks; defensive skip
+        if (!reg.has(name)) {
+            reg.set(name, {
+                srcValueNode: valNode,
+                plannedName: staging.prefix + name,
+                override: false
+            });
+        }
+        for (const a of collectAliasReferences(valNode)) {
+            if (!visited.has(a.source)) work.push(a.source);
+        }
+    }
+}
+
+// Decide merge-vs-namespace for a source plugin against yours (broadened identity).
+function _computePluginAction(staging, srcPluginMirror, yoursExperiment) {
+    const srcProj = sortedJson(_pluginProjection(srcPluginMirror));
+    const srcRig = staging.src.experiment.rig_path;
+    const yoursRig = yoursExperiment.rig_path;
+    for (const yp of yoursExperiment.plugins || []) {
+        if (sortedJson(_pluginProjection(yp)) === srcProj) {
+            // structurally identical (minus name); guard config-less cross-rig merges
+            if (
+                _pluginIsConfigLess(srcPluginMirror) &&
+                _pluginIsConfigLess(yp) &&
+                srcRig !== yoursRig
+            ) {
+                continue;
+            }
+            return { action: 'merge', mergeWith: yp.name, plannedName: yp.name };
+        }
+    }
+    return { action: 'add', mergeWith: null, plannedName: staging.prefix + srcPluginMirror.name };
+}
+
+/**
+ * addToStaging(staging, sourceCondIdx, yoursExperiment) → staging
+ *
+ * Compute the import plan for one source condition and push it as an item,
+ * folding its anchor + plugin dependencies into the shared per-batch registry.
+ * Idempotent on a sourceCondIdx already staged.
+ */
+function addToStaging(staging, sourceCondIdx, yoursExperiment) {
+    staging._yours = yoursExperiment;
+    if (staging.items.some((it) => it.sourceCondIdx === sourceCondIdx)) return staging;
+
+    const srcCondNode = staging.src.doc.getIn(['conditions', sourceCondIdx], true);
+    if (!srcCondNode || !Array.isArray(srcCondNode.items)) {
+        throw new V3ImportError('addToStaging: bad sourceCondIdx ' + sourceCondIdx, 'BAD_INDEX');
+    }
+    const srcCondMirror = staging.src.experiment.conditions[sourceCondIdx];
+    const originalName = srcCondMirror ? srcCondMirror.name : String(srcCondNode.get('name'));
+
+    // 1. anchors referenced by the condition (transitive closure)
+    _closeAnchors(staging, srcCondNode);
+
+    // 2. plugins referenced by the condition's commands
+    const anchorRefs = collectAliasReferences(srcCondNode).map((a) => a.source);
+    const pluginRefs = [];
+    const aliasBoundPluginNames = [];
+    const unknownCommandTypes = [];
+    const undeclaredPlugins = [];
+    const cmdsSeq = srcCondNode.get('commands', true);
+    if (cmdsSeq && Array.isArray(cmdsSeq.items)) {
+        for (const cmdNode of cmdsSeq.items) {
+            if (!cmdNode || typeof cmdNode.get !== 'function') continue;
+            const typeNode = cmdNode.get('type', true);
+            const type = typeNode && typeNode.value !== undefined ? typeNode.value : typeNode;
+            if (type === 'plugin') {
+                const pnNode = cmdNode.get('plugin_name', true);
+                if (pnNode && YAML.isAlias(pnNode)) {
+                    if (!aliasBoundPluginNames.includes(pnNode.source)) {
+                        aliasBoundPluginNames.push(pnNode.source);
+                    }
+                    continue;
+                }
+                const pn = pnNode && pnNode.value !== undefined ? pnNode.value : pnNode;
+                if (typeof pn !== 'string') continue;
+                if (BUILTIN_PLUGIN_NAMES.includes(pn)) continue; // built-in: leave as-is
+                if (!staging.batch.pluginRegistry.has(pn)) {
+                    const srcPluginMirror = (staging.src.experiment.plugins || []).find(
+                        (p) => p.name === pn
+                    );
+                    const srcEntryNode = _findPluginEntryNode(staging.src.doc, pn);
+                    if (!srcPluginMirror || !srcEntryNode) {
+                        if (!undeclaredPlugins.includes(pn)) undeclaredPlugins.push(pn);
+                    } else {
+                        const act = _computePluginAction(staging, srcPluginMirror, yoursExperiment);
+                        staging.batch.pluginRegistry.set(pn, {
+                            srcEntryNode: srcEntryNode,
+                            plannedName: act.plannedName,
+                            override: false,
+                            action: act.action,
+                            mergeWith: act.mergeWith
+                        });
+                        // plugin config may reference anchors the condition doesn't
+                        if (act.action === 'add') _closeAnchors(staging, srcEntryNode);
+                    }
+                }
+                if (!pluginRefs.includes(pn)) pluginRefs.push(pn);
+            } else if (type && !KNOWN_COMMAND_TYPES.includes(type)) {
+                if (!unknownCommandTypes.includes(type)) unknownCommandTypes.push(type);
+            }
+        }
+    }
+
+    staging.items.push({
+        sourceCondIdx: sourceCondIdx,
+        originalName: originalName,
+        targetName: originalName,
+        targetNameOverride: false,
+        conditionNameCollision: false,
+        anchorRefs: anchorRefs,
+        pluginRefs: pluginRefs,
+        unknownCommandTypes: unknownCommandTypes,
+        aliasBoundPluginNames: aliasBoundPluginNames,
+        undeclaredPlugins: undeclaredPlugins
+    });
+
+    refreshStagingValidation(staging, yoursExperiment);
+    return staging;
+}
+
+/** Find the plugins[] entry node whose name === pluginName (null if none). */
+function _findPluginEntryNode(doc, pluginName) {
+    const plugins = doc.getIn(['plugins'], true);
+    if (!plugins || !Array.isArray(plugins.items)) return null;
+    for (const entry of plugins.items) {
+        if (!entry || typeof entry.get !== 'function') continue;
+        const nameNode = entry.get('name', true);
+        const n = nameNode && nameNode.value !== undefined ? nameNode.value : nameNode;
+        if (n === pluginName) return entry;
+    }
+    return null;
+}
+
+/** removeFromStaging(staging, itemIdx) → staging. Rebuilds the registry from scratch. */
+function removeFromStaging(staging, itemIdx) {
+    if (itemIdx < 0 || itemIdx >= staging.items.length) return staging;
+    staging.items.splice(itemIdx, 1);
+    _rebuildRegistry(staging);
+    if (staging._yours) refreshStagingValidation(staging, staging._yours);
+    return staging;
+}
+
+// Recompute the shared registry from the remaining items (preserving overrides).
+function _rebuildRegistry(staging) {
+    const oldAnchors = staging.batch.anchorRegistry;
+    const oldPlugins = staging.batch.pluginRegistry;
+    staging.batch.anchorRegistry = new Map();
+    staging.batch.pluginRegistry = new Map();
+    staging.batch.visitedAnchors = new Set();
+    const yours = staging._yours;
+    const items = staging.items.slice();
+    // re-derive from each item's source condition
+    for (const it of items) {
+        const srcCondNode = staging.src.doc.getIn(['conditions', it.sourceCondIdx], true);
+        if (srcCondNode) _closeAnchors(staging, srcCondNode);
+        for (const pn of it.pluginRefs) {
+            if (staging.batch.pluginRegistry.has(pn)) continue;
+            const srcPluginMirror = (staging.src.experiment.plugins || []).find(
+                (p) => p.name === pn
+            );
+            const srcEntryNode = _findPluginEntryNode(staging.src.doc, pn);
+            if (srcPluginMirror && srcEntryNode && yours) {
+                const act = _computePluginAction(staging, srcPluginMirror, yours);
+                staging.batch.pluginRegistry.set(pn, {
+                    srcEntryNode: srcEntryNode,
+                    plannedName: act.plannedName,
+                    override: false,
+                    action: act.action,
+                    mergeWith: act.mergeWith
+                });
+                if (act.action === 'add') _closeAnchors(staging, srcEntryNode);
+            }
+        }
+    }
+    // restore explicit name overrides
+    for (const [name, entry] of staging.batch.anchorRegistry) {
+        const old = oldAnchors.get(name);
+        if (old && old.override) {
+            entry.plannedName = old.plannedName;
+            entry.override = true;
+        }
+    }
+    for (const [name, entry] of staging.batch.pluginRegistry) {
+        const old = oldPlugins.get(name);
+        if (old && old.override && entry.action === 'add') {
+            entry.plannedName = old.plannedName;
+            entry.override = true;
+        }
+    }
+}
+
+/**
+ * setStagingPrefix(staging, newPrefix) → staging
+ * Recompute every non-overridden planned anchor/plugin name from the new prefix.
+ * Explicitly-typed names (override) persist (#4-defaults).
+ */
+function setStagingPrefix(staging, newPrefix) {
+    staging.prefix = String(newPrefix || '');
+    for (const [name, entry] of staging.batch.anchorRegistry) {
+        if (!entry.override) entry.plannedName = staging.prefix + name;
+    }
+    for (const [name, entry] of staging.batch.pluginRegistry) {
+        if (entry.action === 'add' && !entry.override) entry.plannedName = staging.prefix + name;
+    }
+    if (staging._yours) refreshStagingValidation(staging, staging._yours);
+    return staging;
+}
+
+/** setItemTargetName(staging, itemIdx, newName) → staging. Marks an explicit override. */
+function setItemTargetName(staging, itemIdx, newName) {
+    const item = staging.items[itemIdx];
+    if (!item) return staging;
+    item.targetName = String(newName);
+    item.targetNameOverride = true;
+    if (staging._yours) refreshStagingValidation(staging, staging._yours);
+    return staging;
+}
+
+/** setAnchorPlannedName(staging, srcAnchorName, newName) → staging (explicit override). */
+function setAnchorPlannedName(staging, srcAnchorName, newName) {
+    const entry = staging.batch.anchorRegistry.get(srcAnchorName);
+    if (!entry) return staging;
+    entry.plannedName = String(newName);
+    entry.override = true;
+    if (staging._yours) refreshStagingValidation(staging, staging._yours);
+    return staging;
+}
+
+/** setPluginPlannedName(staging, srcPluginName, newName) → staging (explicit override). */
+function setPluginPlannedName(staging, srcPluginName, newName) {
+    const entry = staging.batch.pluginRegistry.get(srcPluginName);
+    if (!entry || entry.action !== 'add') return staging;
+    entry.plannedName = String(newName);
+    entry.override = true;
+    if (staging._yours) refreshStagingValidation(staging, staging._yours);
+    return staging;
+}
+
+/**
+ * validateStaging(staging, yoursExperiment) → { ok, blocking: [...], warnings: [...] }
+ *
+ * Pure pre-commit validation (#2/#6/#7/#10): condition-name collisions, planned
+ * anchor-name validity + collisions, plugin namespace collisions, alias-bound
+ * plugin_name, real anchor cycles. Informational notes (unknown command,
+ * undeclared plugin) go to warnings.
+ */
+function validateStaging(staging, yoursExperiment) {
+    const blocking = [];
+    const warnings = [];
+
+    // condition target names: unique across yours + all staged items
+    const existingCondNames = new Set((yoursExperiment.conditions || []).map((c) => c.name));
+    const stagedNames = new Set();
+    for (const item of staging.items) {
+        if (existingCondNames.has(item.targetName) || stagedNames.has(item.targetName)) {
+            blocking.push({
+                kind: 'condition-name-collision',
+                name: item.targetName,
+                detail: 'condition "' + item.targetName + '" already exists'
+            });
+        }
+        stagedNames.add(item.targetName);
+        if (item.aliasBoundPluginNames && item.aliasBoundPluginNames.length) {
+            for (const an of item.aliasBoundPluginNames) {
+                blocking.push({
+                    kind: 'alias-bound-plugin-name',
+                    name: an,
+                    detail:
+                        'plugin_name is alias-bound (*' + an + '); use a literal name in the source'
+                });
+            }
+        }
+        if (item.unknownCommandTypes && item.unknownCommandTypes.length) {
+            warnings.push({
+                kind: 'unknown-command-type',
+                name: item.targetName,
+                detail: 'unknown command type(s): ' + item.unknownCommandTypes.join(', ')
+            });
+        }
+        if (item.undeclaredPlugins && item.undeclaredPlugins.length) {
+            warnings.push({
+                kind: 'undeclared-plugin',
+                name: item.targetName,
+                detail: 'plugin(s) not declared in source: ' + item.undeclaredPlugins.join(', ')
+            });
+        }
+    }
+
+    // planned anchor names: valid + no collision with yours or each other
+    const plannedAnchorNames = new Set();
+    for (const [, entry] of staging.batch.anchorRegistry) {
+        const pn = entry.plannedName;
+        if (!isValidAnchorName(pn)) {
+            blocking.push({
+                kind: 'invalid-anchor-name',
+                name: pn,
+                detail: 'invalid anchor name "' + pn + '"'
+            });
+            continue;
+        }
+        if (anchorExists(yoursExperiment, pn) || plannedAnchorNames.has(pn)) {
+            blocking.push({
+                kind: 'anchor-name-collision',
+                name: pn,
+                detail: 'anchor "' + pn + '" already exists (edit the name or prefix)'
+            });
+        }
+        plannedAnchorNames.add(pn);
+    }
+
+    // planned plugin names (action add): no collision with yours or each other
+    const existingPluginNames = new Set((yoursExperiment.plugins || []).map((p) => p.name));
+    const plannedPluginNames = new Set();
+    for (const [, entry] of staging.batch.pluginRegistry) {
+        if (entry.action !== 'add') continue;
+        const pn = entry.plannedName;
+        if (existingPluginNames.has(pn) || plannedPluginNames.has(pn)) {
+            blocking.push({
+                kind: 'plugin-name-collision',
+                name: pn,
+                detail: 'plugin "' + pn + '" already exists (bump the prefix)'
+            });
+        }
+        plannedPluginNames.add(pn);
+    }
+
+    // real anchor cycle among imported anchors (self-edges are fine)
+    try {
+        _topoSortAnchors(staging.batch.anchorRegistry);
+    } catch (e) {
+        blocking.push({ kind: 'anchor-cycle', name: '', detail: e.message });
+    }
+
+    return { ok: blocking.length === 0, blocking: blocking, warnings: warnings };
+}
+
+// Refresh per-item collision flags + cache the validation result on staging.
+function refreshStagingValidation(staging, yoursExperiment) {
+    const existing = new Set((yoursExperiment.conditions || []).map((c) => c.name));
+    const seen = new Set();
+    for (const item of staging.items) {
+        const taken = new Set([...existing, ...seen]);
+        if (taken.has(item.targetName)) {
+            item.conditionNameCollision = suggestUniqueName(item.targetName, taken);
+        } else {
+            item.conditionNameCollision = false;
+        }
+        seen.add(item.targetName);
+    }
+    staging._validation = validateStaging(staging, yoursExperiment);
+    return staging._validation;
+}
+
+/**
+ * commitStaging(staging, yoursExperiment) → summary
+ *
+ * Apply the whole batch to yours._doc + the JS mirror in one shot. Validates
+ * first (throws V3ImportError COMMIT_BLOCKED with .blocking on any conflict),
+ * then snapshots yours._doc.toString() and restores it on any mid-commit throw
+ * (atomic — all-or-nothing). Does NOT call pushUndo (the UI wrapper does that
+ * once, before calling this). Returns a summary of what changed.
+ */
+function commitStaging(staging, yoursExperiment) {
+    const validation = validateStaging(staging, yoursExperiment);
+    if (!validation.ok) {
+        throw new V3ImportError(
+            'commitStaging: ' +
+                validation.blocking.length +
+                ' blocking conflict(s) must be resolved first',
+            'COMMIT_BLOCKED',
+            { blocking: validation.blocking }
+        );
+    }
+
+    const snapshot = yoursExperiment._doc.toString();
+    const filename = staging.src.filename;
+    const summary = {
+        conditionsAdded: [],
+        anchorsAdded: [],
+        pluginsAdded: [],
+        pluginsMerged: [],
+        bareRefsAdded: 0,
+        warnings: validation.warnings
+    };
+
+    try {
+        // one shared alias rewrite map: srcAnchorName → plannedName
+        const aliasRewriteMap = {};
+        for (const [srcName, entry] of staging.batch.anchorRegistry) {
+            aliasRewriteMap[srcName] = entry.plannedName;
+        }
+        // plugin_name rewrite map: srcName → plannedName (add AND merge)
+        const pluginNameRewrite = {};
+        for (const [srcName, entry] of staging.batch.pluginRegistry) {
+            pluginNameRewrite[srcName] = entry.plannedName;
+        }
+
+        // 1. anchors → variables, in dependency-first (topological) order.
+        // Stamp the inserted pair's KEY (not the value) so the provenance comment
+        // renders cleanly above the `key: &anchor value` line instead of splitting it.
+        for (const srcName of _topoSortAnchors(staging.batch.anchorRegistry)) {
+            const entry = staging.batch.anchorRegistry.get(srcName);
+            const clonedVal = cloneNodeAcrossDocs(
+                entry.srcValueNode,
+                yoursExperiment._doc,
+                aliasRewriteMap
+            );
+            docInsertVariableNode(yoursExperiment, entry.plannedName, clonedVal);
+            const varsNode = yoursExperiment._doc.getIn(['variables'], true);
+            const insertedPair = varsNode.items[varsNode.items.length - 1];
+            if (insertedPair && insertedPair.key) _stampProvenance(insertedPair.key, filename);
+            summary.anchorsAdded.push(entry.plannedName);
+        }
+
+        // 2. plugins → merge (no-op) or add
+        for (const [, entry] of staging.batch.pluginRegistry) {
+            if (entry.action === 'merge') {
+                summary.pluginsMerged.push(entry.mergeWith);
+                continue;
+            }
+            const clonedPlugin = cloneNodeAcrossDocs(
+                entry.srcEntryNode,
+                yoursExperiment._doc,
+                aliasRewriteMap
+            );
+            if (typeof clonedPlugin.set === 'function') clonedPlugin.set('name', entry.plannedName);
+            _stampProvenance(clonedPlugin, filename);
+            docInsertPluginNode(yoursExperiment, clonedPlugin);
+            summary.pluginsAdded.push(entry.plannedName);
+        }
+
+        // 3. conditions
+        for (const item of staging.items) {
+            const srcCondNode = staging.src.doc.getIn(['conditions', item.sourceCondIdx], true);
+            const clonedCond = cloneNodeAcrossDocs(
+                srcCondNode,
+                yoursExperiment._doc,
+                aliasRewriteMap
+            );
+            if (typeof clonedCond.set === 'function') clonedCond.set('name', item.targetName);
+            _rewritePluginNamesInClone(clonedCond, pluginNameRewrite);
+            _stampProvenance(clonedCond, filename);
+            docInsertConditionNode(yoursExperiment, clonedCond);
+            summary.conditionsAdded.push(item.targetName);
+        }
+
+        // 4. optional bare sequence refs
+        if (staging.addBareRefs) {
+            for (const item of staging.items) {
+                docAppendSequenceEntry(yoursExperiment, {
+                    kind: 'ref',
+                    condition_name: item.targetName
+                });
+                summary.bareRefsAdded++;
+            }
+        }
+    } catch (err) {
+        // atomic rollback: re-parse the pre-commit snapshot back into yoursExperiment
+        _restoreExperimentInPlace(yoursExperiment, snapshot);
+        throw new V3ImportError(
+            'commitStaging: aborted and rolled back after error: ' + err.message,
+            'COMMIT_FAILED',
+            { cause: err }
+        );
+    }
+
+    return summary;
+}
+
+// Re-parse `yamlText` and copy its fields onto `experiment` in place, so callers
+// holding the same reference see the restored state (used by commit rollback).
+// protocol-yaml-v3.js does not import this module, so the top-level import is
+// cycle-free.
+function _restoreExperimentInPlace(experiment, yamlText) {
+    const fresh = parseV3Protocol(yamlText);
+    for (const k of Object.keys(experiment)) delete experiment[k];
+    Object.assign(experiment, fresh);
+}
+
+// ════════════════════════════════════════════════════
 // Exports (dual: ES module + CommonJS + browser global)
 // ════════════════════════════════════════════════════
 
 const V3Import = {
+    // Milestone 1 — cross-doc primitives
     collectAliasReferences,
     resolveAlias,
     cloneNodeAcrossDocs,
     yamlNodeStructuralEquals,
-    sortedJson
+    sortedJson,
+    // Milestone 2 — staging buffer + commit pipeline
+    V3ImportError,
+    derivePrefix,
+    detectDuplicateAnchors,
+    suggestUniqueName,
+    createStagingBuffer,
+    addToStaging,
+    removeFromStaging,
+    setStagingPrefix,
+    setItemTargetName,
+    setAnchorPlannedName,
+    setPluginPlannedName,
+    validateStaging,
+    refreshStagingValidation,
+    commitStaging
 };
 
 // Browser global
@@ -173,10 +909,26 @@ if (typeof module !== 'undefined' && module.exports) {
 
 // ES module export
 export {
+    // Milestone 1
     collectAliasReferences,
     resolveAlias,
     cloneNodeAcrossDocs,
     yamlNodeStructuralEquals,
-    sortedJson
+    sortedJson,
+    // Milestone 2
+    V3ImportError,
+    derivePrefix,
+    detectDuplicateAnchors,
+    suggestUniqueName,
+    createStagingBuffer,
+    addToStaging,
+    removeFromStaging,
+    setStagingPrefix,
+    setItemTargetName,
+    setAnchorPlannedName,
+    setPluginPlannedName,
+    validateStaging,
+    refreshStagingValidation,
+    commitStaging
 };
 export default V3Import;

@@ -719,6 +719,14 @@ the record:
 - **Multi-doc YAML streams.** One doc per file assumed.
 - **Pattern file path resolution.** Soft warning only; no validation.
 - **Plugin command schema drift.** If "theirs" uses a plugin command the registry doesn't know about, it imports as-is. The export-warnings system catches some of this but not all.
+- **Truly circular anchor values (M2 finding).** A genuinely circular anchor
+  (`&A {self: *A}`) used as a command's `params` cannot be represented in the JS
+  mirror — `extractCommand` deep-clones params via `JSON.parse(JSON.stringify(...))`,
+  which throws on cycles. This is a pre-existing codebase limitation (not D4's),
+  and `parseV3Protocol` itself can't mirror such a source. D4 fails *safe*: the
+  topo sort handles anchor self-edges (no false cycle) and rejects genuine
+  multi-node cycles; if a circular-params condition somehow reaches commit, the
+  atomic rollback restores the pre-commit document. Not supported; not corrupting.
 - **Product contract: snippet import, not behavior import (rev-3 review, Codex-adv).**
   D4 copies *conditions* + their direct YAML dependencies (anchors, plugin
   declarations) and appends bare sequence refs. It does **not** reproduce the

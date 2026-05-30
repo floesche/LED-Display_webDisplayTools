@@ -74,13 +74,26 @@ const {
     LOG_PLUGIN
 } = require('../js/plugin-registry.js');
 
-// D4 (Milestone 1) — cross-document primitives
+// D4 — cross-document primitives (M1) + staging/commit pipeline (M2)
 const {
     collectAliasReferences,
     resolveAlias,
     cloneNodeAcrossDocs,
     yamlNodeStructuralEquals,
-    sortedJson
+    sortedJson,
+    V3ImportError,
+    derivePrefix,
+    detectDuplicateAnchors,
+    suggestUniqueName,
+    createStagingBuffer,
+    addToStaging,
+    removeFromStaging,
+    setStagingPrefix,
+    setItemTargetName,
+    setAnchorPlannedName,
+    setPluginPlannedName,
+    validateStaging,
+    commitStaging
 } = require('../js/v3-import.js');
 
 // yaml@2 itself (for building raw source docs in import tests)
@@ -2832,6 +2845,424 @@ console.log('\n--- Suite N6: node-based splice helpers ---');
         'N6e: model stable across regen after insert',
         JSON.stringify(dropDoc(re).variables) === JSON.stringify(dropDoc(stable).variables)
     );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// D4 — Cross-library import, Milestone 2 (suites N7–N10)
+// Staging buffer + commit pipeline (js/v3-import.js). See design §5/§7/§10.
+// ════════════════════════════════════════════════════════════════════════════
+
+// Builders for inline source/target protocols used by the import tests.
+function mkProtocol(parts) {
+    return (
+        [
+            'version: 3',
+            'experiment_info: {name: ' + (parts.name || 'p') + '}',
+            'rig: ' + JSON.stringify(parts.rig || '/tmp/r.yaml'),
+            parts.variables || null,
+            parts.plugins || null,
+            'experiment: [' + (parts.experiment || 'c0') + ']',
+            'conditions:',
+            parts.conditions
+        ]
+            .filter((x) => x !== null)
+            .join('\n') + '\n'
+    );
+}
+
+// ─── Suite N7: staging dry-run (build / add / adjust prefix / commit) ─────────
+console.log('\n--- Suite N7: staging buffer dry-run ---');
+{
+    const src = parseV3Protocol(readFixture('v3_sibling_source.yaml'));
+    const yours = parseV3Protocol(readFixture('v3_no_variables.yaml'));
+
+    const staging = createStagingBuffer(src, 'sibling_source.yaml');
+    check('N7: prefix derived from filename', staging.prefix, 'sibling_source__');
+
+    addToStaging(staging, 0, yours); // "sibling check" → dur_short, dur_long, camera
+    check('N7: one item staged', staging.items.length, 1);
+    check('N7: target name defaults to original', staging.items[0].targetName, 'sibling check');
+    const planned = [...staging.batch.anchorRegistry.values()].map((e) => e.plannedName).sort();
+    checkTrue(
+        'N7: anchors planned with prefix',
+        planned.includes('sibling_source__dur_short') && planned.includes('sibling_source__dur_long')
+    );
+
+    // adjust prefix → non-overridden planned names recompute
+    setStagingPrefix(staging, 'sib__');
+    const planned2 = [...staging.batch.anchorRegistry.values()].map((e) => e.plannedName);
+    checkTrue('N7: prefix change recomputes anchor names', planned2.includes('sib__dur_short'));
+
+    // explicit anchor override persists across a later prefix change (#4-defaults)
+    setAnchorPlannedName(staging, 'dur_short', 'my_short');
+    setStagingPrefix(staging, 'other__');
+    check(
+        'N7: explicit anchor override persists across prefix change',
+        staging.batch.anchorRegistry.get('dur_short').plannedName,
+        'my_short'
+    );
+    checkTrue(
+        'N7: non-overridden anchor still follows new prefix',
+        staging.batch.anchorRegistry.get('dur_long').plannedName === 'other__dur_long'
+    );
+
+    // commit and assert the doc
+    const summary = commitStaging(staging, yours);
+    check('N7: summary conditionsAdded', summary.conditionsAdded.join(','), 'sibling check');
+    check('N7: bare ref appended by default', summary.bareRefsAdded, 1);
+    const out = yours._doc.toString();
+    checkTrue('N7: committed condition present', /name:\s*"?sibling check"?/.test(out));
+    checkTrue('N7: overridden anchor &my_short emitted', /&my_short\b/.test(out));
+    checkTrue('N7: bare ref present in experiment:', /-\s*"?sibling check"?/.test(out));
+    checkTrue(
+        'N7: provenance stamp present',
+        out.includes('# imported from sibling_source.yaml')
+    );
+    checkTrue(
+        'N7: committed doc re-parses',
+        (() => {
+            try {
+                parseV3Protocol(out);
+                return true;
+            } catch (e) {
+                return false;
+            }
+        })()
+    );
+
+    // addBareRefs=false → no new refs
+    const yours2 = parseV3Protocol(readFixture('v3_no_variables.yaml'));
+    const seqLenBefore = yours2.sequence.length;
+    const st2 = createStagingBuffer(src, 'sibling_source.yaml', { addBareRefs: false });
+    addToStaging(st2, 0, yours2);
+    const sum2 = commitStaging(st2, yours2);
+    check('N7: addBareRefs=false adds no refs', sum2.bareRefsAdded, 0);
+    check('N7: sequence length unchanged', yours2.sequence.length, seqLenBefore);
+}
+
+// ─── Suite N8: conflicts + built-ins ─────────────────────────────────────────
+console.log('\n--- Suite N8: conflicts + built-ins ---');
+{
+    const src = parseV3Protocol(readFixture('v3_sibling_source.yaml'));
+
+    // (a) condition name collision → blocking + suggestion → resolve → commit ok
+    const yoursA = parseV3Protocol(
+        mkProtocol({
+            name: 'yoursA',
+            conditions: '  - name: "sibling check"\n    commands: [{type: wait, duration: 1}]'
+        })
+    );
+    const stA = createStagingBuffer(src, 'sib.yaml');
+    addToStaging(stA, 0, yoursA);
+    checkTrue('N8a: condition-name collision detected (blocking)', !stA._validation.ok);
+    checkTrue(
+        'N8a: collision suggestion offered',
+        stA.items[0].conditionNameCollision === 'sibling check_2'
+    );
+    checkThrows('N8a: commit blocked by collision', () => commitStaging(stA, yoursA), 'COMMIT_BLOCKED');
+    setItemTargetName(stA, 0, 'sibling check 2');
+    checkTrue('N8a: resolved → validation ok', stA._validation.ok);
+    const sumA = commitStaging(stA, yoursA);
+    check('N8a: commit after resolve', sumA.conditionsAdded.join(','), 'sibling check 2');
+
+    // (b) plugin MERGE when class+config match (same rig)
+    const srcMerge = parseV3Protocol(
+        mkProtocol({
+            name: 'theirs',
+            rig: '/shared/rig.yaml',
+            plugins:
+                'plugins:\n  - {name: cam, type: class, matlab: {class: BiasPlugin}, config: {ip: "1.2.3.4"}}',
+            conditions:
+                '  - name: trial\n    commands:\n      - {type: plugin, plugin_name: cam, command_name: getTimestamp}'
+        })
+    );
+    const yoursMerge = parseV3Protocol(
+        mkProtocol({
+            name: 'yours',
+            rig: '/shared/rig.yaml',
+            plugins:
+                'plugins:\n  - {name: camera, type: class, matlab: {class: BiasPlugin}, config: {ip: "1.2.3.4"}}',
+            experiment: 'existing',
+            conditions: '  - name: existing\n    commands: [{type: wait, duration: 1}]'
+        })
+    );
+    const stM = createStagingBuffer(srcMerge, 'theirs.yaml');
+    addToStaging(stM, 0, yoursMerge);
+    const camEntry = stM.batch.pluginRegistry.get('cam');
+    check('N8b: matching plugin merges (action)', camEntry.action, 'merge');
+    check('N8b: merge targets existing plugin', camEntry.mergeWith, 'camera');
+    const pcountBefore = yoursMerge.plugins.length;
+    const sumM = commitStaging(stM, yoursMerge);
+    check('N8b: no plugin added on merge', yoursMerge.plugins.length, pcountBefore);
+    check('N8b: merge recorded in summary', sumM.pluginsMerged.join(','), 'camera');
+    checkTrue(
+        'N8b: imported condition plugin_name rewritten to existing name',
+        /plugin_name:\s*"?camera"?/.test(yoursMerge._doc.toString())
+    );
+
+    // (c) plugin merge FALSE-POSITIVE guard: same class, empty config, different rig → namespace
+    const srcCl = parseV3Protocol(
+        mkProtocol({
+            name: 'theirs',
+            rig: '/their/rig.yaml',
+            plugins: 'plugins:\n  - {name: cam, type: class, matlab: {class: BiasPlugin}}',
+            conditions:
+                '  - name: trial\n    commands:\n      - {type: plugin, plugin_name: cam, command_name: getTimestamp}'
+        })
+    );
+    const yoursCl = parseV3Protocol(
+        mkProtocol({
+            name: 'yours',
+            rig: '/your/rig.yaml',
+            plugins: 'plugins:\n  - {name: camera, type: class, matlab: {class: BiasPlugin}}',
+            experiment: 'existing',
+            conditions: '  - name: existing\n    commands: [{type: wait, duration: 1}]'
+        })
+    );
+    const stCl = createStagingBuffer(srcCl, 'their.yaml');
+    addToStaging(stCl, 0, yoursCl);
+    check('N8c: config-less + different rig → namespace (not merge)', stCl.batch.pluginRegistry.get('cam').action, 'add');
+
+    // (d) plugin namespace collision (cross-buffer): planned name already in yours
+    const yoursColl = parseV3Protocol(
+        mkProtocol({
+            name: 'yours',
+            plugins:
+                'plugins:\n' +
+                '  - {name: camera, type: class, matlab: {class: BiasPlugin}, config: {ip: "9"}}\n' +
+                '  - {name: their__cam, type: class, matlab: {class: Foo}}',
+            experiment: 'existing',
+            conditions: '  - name: existing\n    commands: [{type: wait, duration: 1}]'
+        })
+    );
+    const stColl = createStagingBuffer(srcCl, 'their.yaml', { prefix: 'their__' });
+    addToStaging(stColl, 0, yoursColl); // cam projection != camera (config differs) → add → their__cam, which EXISTS
+    checkTrue('N8d: plugin namespace collision blocks', !stColl._validation.ok);
+    checkTrue(
+        'N8d: collision kind is plugin-name-collision',
+        stColl._validation.blocking.some((b) => b.kind === 'plugin-name-collision')
+    );
+    setPluginPlannedName(stColl, 'cam', 'their__cam_2');
+    checkTrue('N8d: bumping the planned name resolves it', stColl._validation.ok);
+
+    // (e) alias-bound plugin_name → blocking
+    const srcAB = parseV3Protocol(
+        mkProtocol({
+            name: 'theirs',
+            variables: 'variables:\n  camref: &camref camera',
+            plugins: 'plugins:\n  - {name: camera, type: class, matlab: {class: BiasPlugin}}',
+            conditions:
+                '  - name: trial\n    commands:\n      - {type: plugin, plugin_name: *camref, command_name: getTimestamp}'
+        })
+    );
+    const yoursAB = parseV3Protocol(
+        mkProtocol({ name: 'yours', conditions: '  - name: x\n    commands: [{type: wait, duration: 1}]' })
+    );
+    const stAB = createStagingBuffer(srcAB, 'ab.yaml');
+    addToStaging(stAB, 0, yoursAB);
+    checkTrue(
+        'N8e: alias-bound plugin_name recorded',
+        stAB.items[0].aliasBoundPluginNames.includes('camref')
+    );
+    checkTrue('N8e: alias-bound plugin_name blocks commit', !stAB._validation.ok);
+    checkThrows('N8e: commit blocked', () => commitStaging(stAB, yoursAB), 'COMMIT_BLOCKED');
+
+    // (f) built-in plugin_name: log → not namespaced, not registered, left as-is
+    const srcLog = parseV3Protocol(
+        mkProtocol({
+            name: 'theirs',
+            conditions:
+                '  - name: logtrial\n    commands:\n      - {type: plugin, plugin_name: log, command_name: info}'
+        })
+    );
+    const yoursLog = parseV3Protocol(
+        mkProtocol({ name: 'yours', conditions: '  - name: x\n    commands: [{type: wait, duration: 1}]' })
+    );
+    const stLog = createStagingBuffer(srcLog, 'log.yaml');
+    addToStaging(stLog, 0, yoursLog);
+    checkTrue('N8f: log not registered as a plugin', !stLog.batch.pluginRegistry.has('log'));
+    const sumLog = commitStaging(stLog, yoursLog);
+    check('N8f: no plugin added for log', sumLog.pluginsAdded.length, 0);
+    checkTrue('N8f: plugin_name: log preserved verbatim', /plugin_name:\s*"?log"?/.test(yoursLog._doc.toString()));
+
+    // (g) planned anchor-name collision with empty prefix → blocking
+    const yoursAnch = parseV3Protocol(readFixture('v3_canonical_a.yaml')); // has &dur_short
+    const stAnch = createStagingBuffer(src, 'sib.yaml', { prefix: '' });
+    addToStaging(stAnch, 0, yoursAnch); // imports dur_short with empty prefix → collides with yours' dur_short
+    checkTrue('N8g: empty-prefix anchor collision blocks', !stAnch._validation.ok);
+    checkTrue(
+        'N8g: collision kind is anchor-name-collision',
+        stAnch._validation.blocking.some((b) => b.kind === 'anchor-name-collision')
+    );
+
+    // (h) unknown command type → warning (not blocking), still imports
+    const srcUnk = parseV3Protocol(
+        mkProtocol({
+            name: 'theirs',
+            conditions:
+                '  - name: branchy\n    commands:\n      - {type: branch, target: foo}\n      - {type: wait, duration: 1}'
+        })
+    );
+    const yoursUnk = parseV3Protocol(
+        mkProtocol({ name: 'yours', conditions: '  - name: x\n    commands: [{type: wait, duration: 1}]' })
+    );
+    const stUnk = createStagingBuffer(srcUnk, 'unk.yaml');
+    addToStaging(stUnk, 0, yoursUnk);
+    checkTrue('N8h: unknown command type recorded', stUnk.items[0].unknownCommandTypes.includes('branch'));
+    checkTrue('N8h: unknown command type does NOT block', stUnk._validation.ok);
+    const sumUnk = commitStaging(stUnk, yoursUnk);
+    check('N8h: condition with unknown command still imports', sumUnk.conditionsAdded.join(','), 'branchy');
+    checkTrue('N8h: unknown command type surfaced as warning', sumUnk.warnings.some((w) => w.kind === 'unknown-command-type'));
+    checkTrue('N8h: raw command type preserved in output', /type:\s*branch/.test(yoursUnk._doc.toString()));
+
+    // (i) transitive alias closure — led_settings pulls in color_power
+    const yoursTr = parseV3Protocol(readFixture('v3_no_variables.yaml'));
+    const stTr = createStagingBuffer(src, 'sib.yaml');
+    addToStaging(stTr, 1, yoursTr); // "sibling led" → params: *led_settings (→ *color_power)
+    checkTrue(
+        'N8i: transitive closure registers led_settings + color_power',
+        stTr.batch.anchorRegistry.has('led_settings') && stTr.batch.anchorRegistry.has('color_power')
+    );
+}
+
+// ─── Suite N9: edge cases ────────────────────────────────────────────────────
+console.log('\n--- Suite N9: edge cases ---');
+{
+    const src = parseV3Protocol(readFixture('v3_sibling_source.yaml'));
+
+    // no variables: in target → section created, commit re-parses
+    const noVars = parseV3Protocol(readFixture('v3_no_variables.yaml'));
+    const st1 = createStagingBuffer(src, 'sib.yaml');
+    addToStaging(st1, 0, noVars);
+    commitStaging(st1, noVars);
+    const o1 = noVars._doc.toString();
+    checkTrue('N9: created variables: precedes conditions:', o1.indexOf('variables:') < o1.indexOf('conditions:'));
+    checkTrue('N9: no-variables target re-parses after import', (() => { try { parseV3Protocol(o1); return true; } catch (e) { return false; } })());
+
+    // no plugins: in target → plugin section created
+    const noPlugins = parseV3Protocol(
+        mkProtocol({ name: 'yours', conditions: '  - name: x\n    commands: [{type: wait, duration: 1}]' })
+    );
+    checkTrue('N9: precondition target has no plugins:', noPlugins.plugins.length === 0);
+    const st2 = createStagingBuffer(src, 'sib.yaml');
+    addToStaging(st2, 0, noPlugins); // sibling check uses camera
+    commitStaging(st2, noPlugins);
+    checkTrue('N9: plugins: section created + camera added', noPlugins.plugins.some((p) => p.name === 'sib__camera' || p.name === 'sibling_source__camera'));
+    checkTrue('N9: no-plugins target re-parses', (() => { try { parseV3Protocol(noPlugins._doc.toString()); return true; } catch (e) { return false; } })());
+
+    // zero-alias condition → imports clean, no anchors
+    const srcZero = parseV3Protocol(
+        mkProtocol({ name: 'theirs', conditions: '  - name: plain\n    commands: [{type: controller, command_name: allOn}, {type: wait, duration: 2}]' })
+    );
+    const yoursZero = parseV3Protocol(
+        mkProtocol({ name: 'yours', conditions: '  - name: x\n    commands: [{type: wait, duration: 1}]' })
+    );
+    const stZ = createStagingBuffer(srcZero, 'z.yaml');
+    addToStaging(stZ, 0, yoursZero);
+    check('N9: zero-alias condition → no anchors registered', stZ.batch.anchorRegistry.size, 0);
+    const sumZ = commitStaging(stZ, yoursZero);
+    check('N9: zero-alias condition imports', sumZ.conditionsAdded.join(','), 'plain');
+
+    // depth-3 anchor chain a → b → c, topo order in output
+    const srcChain = parseV3Protocol(
+        mkProtocol({
+            name: 'theirs',
+            variables: 'variables:\n  c: &c 1\n  b: &b\n    inner: *c\n  a: &a\n    mid: *b',
+            conditions: '  - name: chain\n    commands:\n      - {type: plugin, plugin_name: log, command_name: dump, params: *a}'
+        })
+    );
+    const yoursChain = parseV3Protocol(
+        mkProtocol({ name: 'yours', conditions: '  - name: x\n    commands: [{type: wait, duration: 1}]' })
+    );
+    const stC = createStagingBuffer(srcChain, 'chain.yaml');
+    addToStaging(stC, 0, yoursChain);
+    check('N9: depth-3 chain registers all 3 anchors', stC.batch.anchorRegistry.size, 3);
+    commitStaging(stC, yoursChain);
+    const oc = yoursChain._doc.toString();
+    const ia = oc.indexOf('&chain__a');
+    const ib = oc.indexOf('&chain__b');
+    const ic = oc.indexOf('&chain__c');
+    checkTrue('N9: topo order — &c before &b before &a', ic < ib && ib < ia && ic >= 0);
+    checkTrue('N9: depth-3 chain re-parses', (() => { try { parseV3Protocol(oc); return true; } catch (e) { return false; } })());
+
+    // self-edge vs genuine cycle in the anchor topo sort (design §5c). A
+    // self-referential anchor (&A {self: *A}) is a self-edge → ignored, no false
+    // cycle. A true a↔b cycle → ANCHOR_CYCLE blocking. We exercise the topo logic
+    // through validateStaging with a hand-built registry (a truly *circular* value
+    // used as command params can't be JS-mirrored at all — a pre-existing
+    // JSON.stringify-of-cycles limit in extractCommand, out of D4's scope).
+    const yoursTopo = parseV3Protocol(
+        mkProtocol({ name: 'yours', conditions: '  - name: x\n    commands: [{type: wait, duration: 1}]' })
+    );
+    // self-edge: anchor "n" whose value references *n
+    const selfDoc = rawDoc('n: &n {label: leaf}\n');
+    const selfNode = selfDoc.getIn(['n'], true);
+    selfNode.items.push(new YAML.Pair(selfDoc.createNode('self'), new YAML.Alias('n')));
+    const selfStaging = {
+        items: [],
+        batch: {
+            anchorRegistry: new Map([['n', { srcValueNode: selfNode, plannedName: 'sib__n', override: false }]]),
+            pluginRegistry: new Map()
+        }
+    };
+    const selfVal = validateStaging(selfStaging, yoursTopo);
+    checkTrue('N9: self-edge anchor is NOT reported as a cycle', selfVal.ok);
+
+    // genuine cycle: a → b and b → a
+    const cycDoc = rawDoc('a: &a {x: 1}\nb: &b {y: 1}\n');
+    const aN = cycDoc.getIn(['a'], true);
+    const bN = cycDoc.getIn(['b'], true);
+    aN.items[0].value = new YAML.Alias('b'); // a.x → *b
+    bN.items[0].value = new YAML.Alias('a'); // b.y → *a
+    const cycStaging = {
+        items: [],
+        batch: {
+            anchorRegistry: new Map([
+                ['a', { srcValueNode: aN, plannedName: 'sib__a', override: false }],
+                ['b', { srcValueNode: bN, plannedName: 'sib__b', override: false }]
+            ]),
+            pluginRegistry: new Map()
+        }
+    };
+    const cycVal = validateStaging(cycStaging, yoursTopo);
+    checkTrue('N9: genuine a↔b cycle is blocked', !cycVal.ok);
+    checkTrue('N9: cycle reported as anchor-cycle', cycVal.blocking.some((b) => b.kind === 'anchor-cycle'));
+
+    // failed-commit rollback: sabotage the LATER topo anchor; assert partial mutations reverted
+    const yoursRb = parseV3Protocol(readFixture('v3_no_variables.yaml'));
+    const stRb = createStagingBuffer(src, 'sib.yaml');
+    addToStaging(stRb, 1, yoursRb); // color_power (first) + led_settings (second)
+    const before = yoursRb._doc.toString();
+    stRb.batch.anchorRegistry.get('led_settings').srcValueNode = {}; // not cloneable → throws after color_power inserted
+    checkThrows('N9: sabotaged commit throws COMMIT_FAILED', () => commitStaging(stRb, yoursRb), 'COMMIT_FAILED');
+    check('N9: rollback restored yours._doc exactly', yoursRb._doc.toString(), before);
+    checkTrue('N9: rollback restored mirror (no partial anchors)', !yoursRb.variables.some((v) => /^sib(ling_source)?__/.test(v.name)));
+}
+
+// ─── Suite N10: preflight rejection ──────────────────────────────────────────
+console.log('\n--- Suite N10: preflight rejection ---');
+{
+    // duplicate anchor names in source → createStagingBuffer rejects
+    const dupText = mkProtocol({
+        name: 'theirs',
+        variables: 'variables:\n  a: &dup 1\n  b: &dup 2',
+        conditions: '  - name: c\n    commands: [{type: wait, duration: *dup}]'
+    });
+    const dupSrc = parseV3Protocol(dupText);
+    check('N10: detectDuplicateAnchors finds the dup', detectDuplicateAnchors(dupSrc._doc).join(','), 'dup');
+    checkThrows('N10: createStagingBuffer rejects duplicate-anchor source', () => createStagingBuffer(dupSrc, 'dup.yaml'), 'DUPLICATE_ANCHOR_SOURCE');
+
+    // broken-alias source → parseV3Protocol throws (can never enter import mode)
+    const brokenText = mkProtocol({
+        name: 'theirs',
+        conditions: '  - name: c\n    commands: [{type: wait, duration: *missing}]'
+    });
+    checkThrows('N10: broken-alias source rejected at parse (cannot enter import)', () => parseV3Protocol(brokenText));
+
+    // derivePrefix sanitization
+    check('N10: derivePrefix strips path + ext', derivePrefix('/a/b/Sibling Lab.yaml'), 'Sibling_Lab__');
+    check('N10: derivePrefix empty for empty name', derivePrefix(''), '');
+    check('N10: suggestUniqueName bumps suffix', suggestUniqueName('x', new Set(['x', 'x_2'])), 'x_3');
 }
 
 // ─── Results ────────────────────────────────────────────────────────────────
