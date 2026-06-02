@@ -1,0 +1,29 @@
+# Test Rig 1
+# MAC: 02:E8:61:68:14:D7
+
+format_version: "1.0"
+name: "Test Rig 1"
+description: "Test rig at 10.102.40.61"
+
+arena: "../arenas/G41_2x12_cw.yaml" # You might replace this with the absolute path.
+
+controller:
+  host: "10.102.40.61"
+  port: 62222
+
+plugins:
+  backlight:
+    enabled: true
+    type: "LED Controller"
+    port: 'COM6'
+    # Does backlight require other config? 
+  camera:
+    enabled: true
+    type: "Bias"
+    ip: "127.0.0.1"
+    port: 5010
+    config_path: 'C:\Users\labadmin\Documents\FlyBowl1Rig\bias_config_default1.json'
+    bias_executable: 'C:\Users\labadmin\Documents\FlyBowl1Rig\BIAS_exe_spinnaker_win64_v0_73_1\v0.73.1\test_gui.exe'
+  temperature:
+    enabled: false
+
