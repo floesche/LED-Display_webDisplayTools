@@ -1,0 +1,603 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Arena Console — G6 live control</title>
+        <!--
+          Arena Console v1 — the experimenter-facing PControl successor for the
+          G6 arena. A standalone live-control page built entirely on the
+          Milestone-A Web Serial substrate (LAB-88/89):
+            js/arena-wire-g6.js  (window.ArenaWireG6 — encoders/decoders)
+            js/arena-link.js     (window.ArenaLink   — transport)
+          loaded via <script src> (window-global dual-export path).
+
+          Open in Chrome/Edge (file:// is fine). Close any other serial monitor
+          first — only one process can hold the port. If the log shows garbled
+          framing, the controller is on the teensy41-printf (DEBUG_SERIAL) build;
+          flash the quiet teensy41 build. serial_raw_monitor.html diagnoses it.
+        -->
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+            href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            :root {
+                --bg: #0f1419;
+                --surface: #1a1f26;
+                --border: #2d3640;
+                --text: #e6edf3;
+                --dim: #8b949e;
+                --accent: #00e676;
+                --hover: #00c853;
+                --err: #ff6b6b;
+                --rx: #58a6ff;
+            }
+            * {
+                box-sizing: border-box;
+            }
+            body {
+                margin: 0;
+                background: var(--bg);
+                color: var(--text);
+                font-family: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+                font-size: 13px;
+                line-height: 1.5;
+            }
+            header {
+                padding: 14px 18px;
+                border-bottom: 1px solid var(--border);
+            }
+            h1 {
+                font-family: 'JetBrains Mono', ui-monospace, monospace;
+                font-size: 16px;
+                margin: 0 0 2px;
+                color: var(--accent);
+            }
+            .sub {
+                color: var(--dim);
+                font-size: 12px;
+                max-width: 720px;
+            }
+            #banner {
+                background: #3a1d1d;
+                color: var(--err);
+                padding: 10px 18px;
+                border-bottom: 1px solid var(--border);
+            }
+            main {
+                display: flex;
+                gap: 16px;
+                padding: 16px 18px;
+                align-items: flex-start;
+                flex-wrap: wrap;
+            }
+            .panel {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 12px 14px;
+                min-width: 300px;
+                flex: 1;
+            }
+            .panel h2 {
+                font-family: 'JetBrains Mono', ui-monospace, monospace;
+                font-size: 12px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                color: var(--dim);
+                margin: 0 0 10px;
+            }
+            .row {
+                display: flex;
+                gap: 8px;
+                flex-wrap: wrap;
+                align-items: center;
+                margin-bottom: 8px;
+            }
+            .row:last-child {
+                margin-bottom: 0;
+            }
+            button {
+                background: var(--surface);
+                color: var(--text);
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                padding: 7px 11px;
+                font-family: inherit;
+                font-size: 12px;
+                cursor: pointer;
+            }
+            button:hover:not(:disabled) {
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+            button:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+            }
+            button.primary {
+                background: var(--accent);
+                color: #04140a;
+                border-color: var(--accent);
+                font-weight: 600;
+            }
+            button.primary:hover:not(:disabled) {
+                background: var(--hover);
+                color: #04140a;
+            }
+            button.danger:hover:not(:disabled) {
+                border-color: var(--err);
+                color: var(--err);
+            }
+            label {
+                color: var(--dim);
+            }
+            input,
+            select {
+                background: var(--bg);
+                color: var(--text);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                padding: 5px 7px;
+                font-family: inherit;
+                font-size: 12px;
+                width: 70px;
+            }
+            select {
+                width: auto;
+            }
+            .dot {
+                display: inline-block;
+                width: 9px;
+                height: 9px;
+                border-radius: 50%;
+                background: var(--err);
+                margin-right: 6px;
+                vertical-align: middle;
+            }
+            .dot.on {
+                background: var(--accent);
+                box-shadow: 0 0 6px var(--accent);
+            }
+            #status {
+                font-weight: 600;
+                color: var(--err);
+            }
+            #status.on {
+                color: var(--accent);
+            }
+            #log {
+                background: #0a0e12;
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                margin: 0 18px;
+                padding: 10px;
+                height: 300px;
+                overflow-y: auto;
+                white-space: pre-wrap;
+                word-break: break-word;
+                font-size: 12px;
+            }
+            .log-tools {
+                padding: 8px 18px 4px;
+                display: flex;
+                gap: 8px;
+                align-items: center;
+            }
+            .hint {
+                color: var(--dim);
+                font-size: 11px;
+                padding: 0 18px 14px;
+                max-width: 760px;
+            }
+            footer {
+                color: var(--dim);
+                font-size: 11px;
+                padding: 12px 18px 18px;
+                border-top: 1px solid var(--border);
+            }
+            .l-tx {
+                color: var(--accent);
+            }
+            .l-rx {
+                color: var(--rx);
+            }
+            .l-info {
+                color: var(--text);
+            }
+            .l-err {
+                color: var(--err);
+            }
+            .l-dim {
+                color: var(--dim);
+            }
+        </style>
+    </head>
+    <body>
+        <header>
+            <h1>Arena Console</h1>
+            <div class="sub">
+                Live control for the G6 arena over Web Serial — connect a controller over USB,
+                then drive the display directly. The experimenter-facing successor to PControl.
+            </div>
+        </header>
+
+        <div id="banner" hidden>
+            ⚠ Web Serial is unavailable in this browser. Use Chrome, Edge, or another
+            Chromium-based desktop browser.
+        </div>
+
+        <main>
+            <div class="panel">
+                <h2>Connection</h2>
+                <div class="row">
+                    <button
+                        id="btn-connect"
+                        class="primary"
+                        title="Pick the controller's serial port and open it (115200 baud)"
+                    >
+                        Connect
+                    </button>
+                    <button id="btn-disconnect" class="danger" title="Close the serial port" disabled>
+                        Disconnect
+                    </button>
+                </div>
+                <div class="row">
+                    <span><span class="dot" id="dot"></span><span id="status">disconnected</span></span>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Display</h2>
+                <div class="row">
+                    <button
+                        class="cmd"
+                        data-cmd="allon"
+                        disabled
+                        title="ALL_ON (0xFF) — light every LED on every panel"
+                    >
+                        All On
+                    </button>
+                    <button
+                        class="cmd"
+                        data-cmd="alloff"
+                        disabled
+                        title="ALL_OFF (0x00) — turn every LED off"
+                    >
+                        All Off
+                    </button>
+                    <button
+                        class="cmd danger"
+                        data-cmd="stop"
+                        disabled
+                        title="STOP_DISPLAY (0x30) — halt pattern playback"
+                    >
+                        Stop
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Pattern / Trial params (0x08)</h2>
+                <div class="row">
+                    <label title="Display mode">mode</label>
+                    <select
+                        id="tp-mode"
+                        title="2 open-loop (advances at frame rate) / 3 show-frame (host sets frame) / 4 closed-loop (analog-in × gain)"
+                    >
+                        <option value="2">2 open-loop</option>
+                        <option value="3">3 show-frame</option>
+                        <option value="4">4 closed-loop</option>
+                    </select>
+                    <label title="Pattern SD index">pattern</label>
+                    <input
+                        id="tp-pat"
+                        type="number"
+                        min="1"
+                        value="1"
+                        title="Pattern: 1-based SD-card index (Nth .pat in /patterns)"
+                    />
+                </div>
+                <div class="row">
+                    <label title="Frame-advance rate (mode 2)">rate</label>
+                    <input
+                        id="tp-rate"
+                        type="number"
+                        min="0"
+                        max="65535"
+                        value="30"
+                        title="Frame rate: 0–65535 Hz (used in mode 2 open-loop)"
+                    />
+                    <label title="Velocity gain (mode 4)">gain</label>
+                    <input
+                        id="tp-gain"
+                        type="number"
+                        min="-128"
+                        max="127"
+                        value="0"
+                        title="Gain: signed int8 −128..127 (used in mode 4 closed-loop)"
+                    />
+                    <label title="Initial frame">init</label>
+                    <input
+                        id="tp-init"
+                        type="number"
+                        min="0"
+                        max="65535"
+                        value="0"
+                        title="Init pos: initial frame index 0–65535 (0-based)"
+                    />
+                </div>
+                <div class="row">
+                    <button
+                        class="cmd primary"
+                        data-cmd="trial"
+                        disabled
+                        title="Send TRIAL_PARAMS (0x08) — start the pattern. Needs an SD card with /patterns or the controller replies status≠0."
+                    >
+                        Send Trial Params
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Frame control (mode 3)</h2>
+                <div class="row">
+                    <label title="Frame index to jump to">frame</label>
+                    <input
+                        id="sf-idx"
+                        type="number"
+                        min="0"
+                        max="65535"
+                        value="0"
+                        title="Frame index: 0–65535 (0-based). Host-driven jump in mode 3."
+                    />
+                    <button
+                        class="cmd"
+                        data-cmd="setframe"
+                        disabled
+                        title="SET_FRAME_POSITION (0x70) — jump to a specific frame (mode 3 host-driven)"
+                    >
+                        Set Frame
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h2>Controller</h2>
+                <div class="row">
+                    <button
+                        class="cmd"
+                        data-cmd="info"
+                        disabled
+                        title="GET_CONTROLLER_INFO (0x67) — firmware version + capability bitmap. The canonical round-trip check."
+                    >
+                        Get Info
+                    </button>
+                    <button
+                        class="cmd"
+                        data-cmd="ip"
+                        disabled
+                        title="GET_ETHERNET_IP (0x66) — DHCP-resolved address (meaningful only with an Ethernet link)"
+                    >
+                        Get IP
+                    </button>
+                    <button
+                        class="cmd"
+                        data-cmd="frames"
+                        disabled
+                        title="GET_FRAMES_SENT (0x19) — master-side count of frames pushed to panels"
+                    >
+                        Get Frames
+                    </button>
+                </div>
+                <div class="row">
+                    <label title="SPI master clock">MHz</label>
+                    <input
+                        id="spi-mhz"
+                        type="number"
+                        min="1"
+                        max="30"
+                        value="20"
+                        title="SPI clock: 1–30 MHz"
+                    />
+                    <button
+                        class="cmd"
+                        data-cmd="setspi"
+                        disabled
+                        title="SET_SPI_CLOCK (0x17) — set the panel SPI master clock (echoes the applied MHz)"
+                    >
+                        Set SPI
+                    </button>
+                    <button
+                        class="cmd"
+                        data-cmd="getspi"
+                        disabled
+                        title="GET_SPI_CLOCK (0x18) — read the current panel SPI master clock"
+                    >
+                        Get SPI
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <div class="log-tools">
+            <button id="btn-clear" title="Clear the response log">Clear log</button>
+            <span class="l-dim">Status / response log</span>
+        </div>
+        <div id="log"></div>
+        <div class="hint">
+            Tip: this page needs a Chromium-based desktop browser (Web Serial). Only one program
+            can hold the serial port at a time. If replies look like garbled text instead of clean
+            status lines, the controller is running the <code>DEBUG_SERIAL</code> firmware build —
+            flash the quiet <code>teensy41</code> build; <code>serial_raw_monitor.html</code> helps
+            diagnose framing problems.
+        </div>
+
+        <footer id="footer">Arena Console v1 | 2026-06-08 19:04 ET</footer>
+
+        <!-- Milestone-A substrate — window-global dual-export path (no build, no ES import). -->
+        <script src="js/arena-wire-g6.js"></script>
+        <script src="js/arena-link.js"></script>
+        <script>
+            'use strict';
+            const Wire = window.ArenaWireG6;
+            const $ = (id) => document.getElementById(id);
+            const logEl = $('log');
+
+            function log(text, cls) {
+                const line = document.createElement('div');
+                line.className = 'l-' + (cls || 'info');
+                const t = new Date().toLocaleTimeString();
+                line.textContent = `[${t}] ${text}`;
+                logEl.appendChild(line);
+                logEl.scrollTop = logEl.scrollHeight;
+            }
+
+            const asciiOf = (bytes) =>
+                Array.from(bytes)
+                    .map((b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : '.'))
+                    .join('');
+
+            // Feature-detect (CLAUDE.md: non-Chromium warning).
+            if (!window.ArenaLink || !window.ArenaLink.isSupported()) {
+                $('banner').hidden = false;
+                $('btn-connect').disabled = true;
+                log('Web Serial unavailable — use a Chromium-based desktop browser.', 'err');
+            }
+
+            // One ArenaLink instance for the page.
+            const link = new window.ArenaLink({
+                onLog: (msg) => log(msg, /<-/.test(msg) ? 'rx' : /->/.test(msg) ? 'tx' : 'dim'),
+                onError: (e) => log('read-loop error: ' + (e.message || e), 'err'),
+                onDisconnect: () => {
+                    log('-- disconnected (device or port lost)', 'err');
+                    setConnected(false);
+                }
+            });
+
+            const cmdButtons = () => Array.from(document.querySelectorAll('.cmd'));
+            function setConnected(on) {
+                $('btn-connect').disabled = on;
+                $('btn-disconnect').disabled = !on;
+                cmdButtons().forEach((b) => (b.disabled = !on));
+                const s = $('status');
+                s.textContent = on ? 'connected' : 'disconnected';
+                s.classList.toggle('on', on);
+                $('dot').classList.toggle('on', on);
+            }
+
+            // Send a request, decode the response, and print a one-line summary.
+            async function run(label, bytes, decode) {
+                try {
+                    const frame = await link.send(bytes);
+                    const resp = Wire.decodeResponse(frame);
+                    if (!resp) {
+                        log(`${label}: no/malformed response frame`, 'err');
+                        return;
+                    }
+                    let extra = '';
+                    if (decode) {
+                        const v = decode(resp);
+                        extra = v == null ? '  (decode failed)' : '  →  ' + v;
+                    }
+                    log(
+                        `${label}: status=${resp.status} echo=0x${resp.echoCmd
+                            .toString(16)
+                            .padStart(2, '0')} ok=${resp.ok}${extra}`,
+                        resp.ok ? 'info' : 'err'
+                    );
+                } catch (e) {
+                    log(`${label}: ERROR ${e.message || e}`, 'err');
+                }
+            }
+
+            const DECODE = {
+                info: (r) => {
+                    const i = Wire.decodeControllerInfo(r);
+                    return (
+                        i &&
+                        `version ${i.version}, capability 0x${i.capability
+                            .toString(16)
+                            .padStart(2, '0')} [${i.capabilities.join(', ') || 'none'}]`
+                    );
+                },
+                ip: (r) => Wire.decodeIp(r),
+                spi: (r) => {
+                    const m = Wire.decodeSpiClock(r);
+                    return m == null ? null : m + ' MHz';
+                },
+                frames: (r) => {
+                    const c = Wire.decodeFramesSent(r);
+                    return c == null ? null : c + ' frames';
+                },
+                ascii: (r) => JSON.stringify(asciiOf(r.payload))
+            };
+
+            $('btn-connect').onclick = async () => {
+                try {
+                    log('requesting serial port…', 'dim');
+                    await link.requestPort();
+                    await link.open();
+                    setConnected(true);
+                    log('-- connected; try "Get Info" for a round-trip check', 'info');
+                } catch (e) {
+                    log('connect: ' + (e.message || e), 'err');
+                }
+            };
+            $('btn-disconnect').onclick = async () => {
+                await link.close();
+                setConnected(false);
+            };
+            $('btn-clear').onclick = () => (logEl.textContent = '');
+
+            const HANDLERS = {
+                info: () => run('get-controller-info', Wire.encodeGetControllerInfo(), DECODE.info),
+                ip: () => run('get-ip', Wire.encodeGetIp(), DECODE.ip),
+                getspi: () => run('get-spi-clock', Wire.encodeGetSpiClock(), DECODE.spi),
+                frames: () => run('get-frames-sent', Wire.encodeGetFramesSent(), DECODE.frames),
+                allon: () => run('all-on', Wire.encodeAllOn(), DECODE.ascii),
+                alloff: () => run('all-off', Wire.encodeAllOff(), DECODE.ascii),
+                stop: () => run('stop', Wire.encodeStop(), DECODE.ascii),
+                setspi: () => {
+                    const mhz = parseInt($('spi-mhz').value, 10);
+                    try {
+                        run('set-spi-clock ' + mhz, Wire.encodeSetSpiClock(mhz), DECODE.spi);
+                    } catch (e) {
+                        log('set-spi-clock (encode rejected): ' + e.message, 'err');
+                    }
+                },
+                setframe: () => {
+                    const i = parseInt($('sf-idx').value, 10);
+                    try {
+                        run('set-frame ' + i, Wire.encodeSetFramePosition(i), DECODE.ascii);
+                    } catch (e) {
+                        log('set-frame (encode rejected): ' + e.message, 'err');
+                    }
+                },
+                trial: () => {
+                    const p = {
+                        mode: parseInt($('tp-mode').value, 10),
+                        patternId: parseInt($('tp-pat').value, 10),
+                        frameRate: parseInt($('tp-rate').value, 10),
+                        gain: parseInt($('tp-gain').value, 10),
+                        initPos: parseInt($('tp-init').value, 10)
+                    };
+                    try {
+                        run(
+                            `trial-params ${JSON.stringify(p)}`,
+                            Wire.encodeTrialParams(p),
+                            DECODE.ascii
+                        );
+                    } catch (e) {
+                        log('trial-params (encode rejected): ' + e.message, 'err');
+                    }
+                }
+            };
+            cmdButtons().forEach((b) => (b.onclick = HANDLERS[b.dataset.cmd]));
+
+            log('ready. Connect a G6 controller over USB, then click Connect.', 'dim');
+        </script>
+    </body>
+</html>
