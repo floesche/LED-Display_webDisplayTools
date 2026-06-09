@@ -584,28 +584,30 @@
             color: var(--error);
             border-color: #c4514f;
         }
-        /* LAB-94 — per-condition "run on arena" (dry-run) button. */
+        /* LAB-94 — per-condition "run on arena" (dry-run) button. Rendered only
+           on dry-run-eligible conditions (trialParams + no plugins), so it
+           doubles as an always-visible "web-runnable" badge (unlike the
+           hover-only dup/del). */
         .lib-row .lib-row-run {
             background: transparent;
             border: 1px solid transparent;
-            color: var(--text-dim);
+            color: var(--accent);
             font-family: inherit;
             font-size: 0.6rem;
             padding: 0.05rem 0.3rem;
             margin-left: 0.15rem;
             border-radius: 3px;
             cursor: pointer;
-            opacity: 0;
+            opacity: 0.85;
             transition: opacity 0.1s;
         }
-        .lib-row:hover .lib-row-run { opacity: 1; }
         .lib-row .lib-row-run:hover:not(:disabled) {
             background: var(--surface-2);
             color: var(--accent);
             border-color: var(--border);
+            opacity: 1;
         }
-        .lib-row .lib-row-run:disabled { cursor: not-allowed; }
-        .lib-row:hover .lib-row-run:disabled { opacity: 0.35; }
+        .lib-row .lib-row-run:disabled { cursor: not-allowed; color: var(--text-dim); opacity: 0.4; }
 
         /* LAB-94 dry-run status bar — a dedicated element with its own state,
            updated only by the run handlers (NOT rebuilt by renderAll()). */
@@ -1402,7 +1404,7 @@
     <!-- Footer -->
     <div class="app-footer">
         <a href="https://github.com/reiserlab/webDisplayTools" target="_blank">Reiser Lab</a> |
-        v3 Experiment Designer v0.22 | <span id="footerTimestamp">2026-06-08 23:40 ET</span>
+        v3 Experiment Designer v0.23 | <span id="footerTimestamp">2026-06-09 06:30 ET</span>
     </div>
 
     <!-- Error modal -->
@@ -2886,28 +2888,34 @@
                 onRowContextMenu: (cond, idx, e) => { e.preventDefault(); onDuplicateCondition(idx); },
                 extraButtons: (cond, idx) => {
                     const u = usage.get(cond.name) || 0;
-                    return [
-                        el('button', {
+                    const btns = [];
+                    // ▶ only on conditions the web runner can run faithfully:
+                    // a trialParams command and NO plugins (LAB-94 eligibility).
+                    // Plugin-bearing conditions get no ▶ (the web can't drive
+                    // camera/backlight, so a run would be misleading).
+                    if (RunnerLib.isDryRunEligible(cond)) {
+                        btns.push(el('button', {
                             class: 'lib-row-run',
                             disabled: !serialSupported,
                             title: serialSupported
-                                ? 'Run this condition pattern on the arena (dry-run: controller trialParams only — plugins and waits are skipped)'
+                                ? 'Run this condition on the arena (dry-run: sends the controller trialParams command)'
                                 : 'Web Serial unavailable — use a Chromium-based desktop browser to run on the arena',
                             onClick: (e) => { e.stopPropagation(); onRunConditionDryRun(idx); }
-                        }, '▶'),
-                        el('button', {
-                            class: 'lib-row-dup',
-                            title: 'Duplicate this condition (also right-click)',
-                            onClick: (e) => { e.stopPropagation(); onDuplicateCondition(idx); }
-                        }, 'dup'),
-                        el('button', {
-                            class: 'lib-row-del',
-                            title: u === 0
-                                ? 'Delete this condition from the library'
-                                : 'In use (' + u + '×) — remove from the sequence first',
-                            onClick: (e) => { e.stopPropagation(); onDeleteCondition(idx); }
-                        }, '✕')
-                    ];
+                        }, '▶'));
+                    }
+                    btns.push(el('button', {
+                        class: 'lib-row-dup',
+                        title: 'Duplicate this condition (also right-click)',
+                        onClick: (e) => { e.stopPropagation(); onDuplicateCondition(idx); }
+                    }, 'dup'));
+                    btns.push(el('button', {
+                        class: 'lib-row-del',
+                        title: u === 0
+                            ? 'Delete this condition from the library'
+                            : 'In use (' + u + '×) — remove from the sequence first',
+                        onClick: (e) => { e.stopPropagation(); onDeleteCondition(idx); }
+                    }, '✕'));
+                    return btns;
                 },
                 draggable: true
             });

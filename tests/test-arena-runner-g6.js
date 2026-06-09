@@ -156,6 +156,24 @@ async function main() {
     );
     check('no plugins -> empty', Runner.listSkippedPlugins(arenaCheckCond).length, 0);
 
+    console.log('\n=== isDryRunEligible (has trialParams AND no plugin commands) ===');
+    const eligibleCond = { name: 'pat_only', commands: [trialCmd, { type: 'wait', duration: 2 }] };
+    const ctrlPlusTrial = {
+        name: 'allon_then_trial',
+        commands: [{ type: 'controller', command_name: 'allOn' }, trialCmd]
+    };
+    checkBool('trialParams + waits -> eligible', Runner.isDryRunEligible(eligibleCond) === true);
+    checkBool(
+        'trialParams + other controller cmds (no plugins) -> eligible',
+        Runner.isDryRunEligible(ctrlPlusTrial) === true
+    );
+    checkBool('has plugin commands -> NOT eligible', Runner.isDryRunEligible(realCond) === false);
+    checkBool(
+        'no trialParams (allOn/allOff) -> NOT eligible',
+        Runner.isDryRunEligible(arenaCheckCond) === false
+    );
+    checkBool('null condition -> NOT eligible', Runner.isDryRunEligible(null) === false);
+
     console.log('\n=== frameIndexToInitPos (named off-by-one helper) ===');
     check('1 -> 1 (pass-through)', Runner.frameIndexToInitPos(1), 1);
     check('undefined -> 0', Runner.frameIndexToInitPos(undefined), 0);

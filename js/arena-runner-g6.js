@@ -53,6 +53,19 @@ var ArenaRunnerG6 = (function () {
     }
 
     /**
+     * Is a condition eligible for the web dry-run? The web runner only sends
+     * arena/controller commands, so a condition is runnable iff it has a
+     * trialParams command AND no plugin commands (camera/backlight/etc. can't be
+     * driven from the browser). Waits and other controller commands are allowed.
+     * Gates the ▶ button so it only appears where the run is faithful (no
+     * silently-skipped plugins).
+     * @returns {boolean}
+     */
+    function isDryRunEligible(condition) {
+        return !!findTrialParams(condition) && listSkippedPlugins(condition).length === 0;
+    }
+
+    /**
      * Map a v3 `frame_index` to the wire `init_pos`.
      *
      * OPEN QUESTION (hardware-confirm): the handoff asserts frame_index == the
@@ -260,6 +273,7 @@ var ArenaRunnerG6 = (function () {
     return {
         findTrialParams,
         listSkippedPlugins,
+        isDryRunEligible,
         frameIndexToInitPos,
         buildTrialParams,
         ArenaRunner
