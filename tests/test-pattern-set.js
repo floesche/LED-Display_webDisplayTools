@@ -6,8 +6,9 @@
  *   test_patterns/web_G6_2x10_*.pat  → valid for the G6_2x10 arena
  *   test_patterns/web_G6_3x16_*.pat  → rejected against G6_2x10 (arena mismatch)
  *
- * Verifies the MATLAB SD convention: pat%04d.pat naming, MANIFEST.bin bytes
- * (uint16 count + uint32 unix, LE), MANIFEST.txt layout, the duty 0x80 re-encode
+ * Verifies: NNN_<name>.pat naming (zero-padded index prefix; diverges from MATLAB's
+ * pat%04d.pat because the bench G6 controller mis-reads pure-8.3 names), MANIFEST.bin
+ * bytes (uint16 count + uint32 unix, LE), MANIFEST.txt layout, the duty 0x80 re-encode
  * (the patch_duty.js retirement), timestamp formats, and the manifest read API.
  */
 
@@ -78,14 +79,26 @@ function fresh2x10Set(n) {
     return set;
 }
 
-// ── 1. index assignment + pat%04d naming ───────────────────────────────────────
-console.log('\n=== assignIndices → pat%04d.pat (alpha order == index order) ===');
+// ── 1. index assignment + NNN_<name>.pat naming ─────────────────────────────────
+console.log('\n=== assignIndices → NNN_<name>.pat (alpha order == index order) ===');
 {
     const set = fresh2x10Set(3);
     PS.assignIndices(set);
-    check('item 1 sd_name', set.items[0].sd_name, 'pat0001.pat');
-    check('item 2 sd_name', set.items[1].sd_name, 'pat0002.pat');
-    check('item 3 sd_name', set.items[2].sd_name, 'pat0003.pat');
+    checkBool(
+        'item 1 sd_name = 001_<name>.pat',
+        /^001_.+\.pat$/.test(set.items[0].sd_name),
+        set.items[0].sd_name
+    );
+    checkBool(
+        'item 2 sd_name = 002_<name>.pat',
+        /^002_.+\.pat$/.test(set.items[1].sd_name),
+        set.items[1].sd_name
+    );
+    checkBool(
+        'item 3 sd_name = 003_<name>.pat',
+        /^003_.+\.pat$/.test(set.items[2].sd_name),
+        set.items[2].sd_name
+    );
     check('item 2 index', set.items[1].index, 2);
     const names = set.items.map((it) => it.sd_name);
     const sorted = names.slice().sort();
@@ -154,10 +167,14 @@ console.log('\n=== MANIFEST.txt layout + read-back ===');
     checkBool('uses CRLF line endings', txt.indexOf('\r\n') !== -1);
     checkBool('has Pattern Count line', txt.indexOf('Pattern Count: 2') !== -1);
     checkBool('has Mapping header', txt.indexOf('Mapping:') !== -1);
-    checkBool('maps pat0001.pat', /pat0001\.pat <- /.test(txt));
+    checkBool(
+        'maps first sd_name',
+        txt.indexOf(set.items[0].sd_name + ' <- ') !== -1,
+        set.items[0].sd_name
+    );
     const parsed = PS.parseManifestTxt(txt);
     check('parseManifestTxt count', parsed.count, 2);
-    check('parseManifestTxt[0].sd_name', parsed.patterns[0].sd_name, 'pat0001.pat');
+    check('parseManifestTxt[0].sd_name', parsed.patterns[0].sd_name, set.items[0].sd_name);
     check('parseManifestTxt[0].index', parsed.patterns[0].index, 1);
     check('parseManifestTxt[0].name', parsed.patterns[0].name, set.items[0].name);
 }
@@ -183,10 +200,10 @@ console.log('\n=== manifest.json + buildBundle ===');
     check('manifest arenaConfig', mj.arenaConfig, 'G6_2x10');
     const firstName = set.items[0].name;
     check('patterns[name].index', mj.patterns[firstName].index, 1);
-    check('patterns[name].sd_name', mj.patterns[firstName].sd_name, 'pat0001.pat');
+    check('patterns[name].sd_name', mj.patterns[firstName].sd_name, set.items[0].sd_name);
     check('resolveIndex', PS.resolveIndex(mj, firstName), 1);
     check('bundle exposes 2 pattern files', bundle.patterns.length, 2);
-    check('bundle file 1 name', bundle.patterns[0].name, 'pat0001.pat');
+    check('bundle file 1 name', bundle.patterns[0].name, set.items[0].sd_name);
     checkBool('bundle README mentions SD root', bundle.readme.indexOf('SD card') !== -1);
     checkThrows('buildBundle refuses an empty set', () =>
         PS.buildBundle(PS.createPatternSet({ arenaConfig: 'G6_2x10' }))

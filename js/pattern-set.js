@@ -239,7 +239,13 @@
     function assignIndices(set) {
         for (var i = 0; i < set.items.length; i++) {
             set.items[i].index = i + 1;
-            set.items[i].sd_name = 'pat' + pad(i + 1, 4) + '.pat';
+            // NNN_<name>.pat: the zero-padded index pins the firmware's alphabetical
+            // scan order (== 1-based pattern_ID), and the descriptive suffix keeps the
+            // name longer than 8.3 so it gets a FAT long-filename entry. Pure-8.3 names
+            // (e.g. pat0001.pat) are mis-read by the bench G6 controller build, so this
+            // scheme is what actually loads (matches the hand-staged 001_grating_gs2.pat
+            // set). 3 digits supports the firmware's 256-pattern cap with stable sorting.
+            set.items[i].sd_name = pad(i + 1, 3) + '_' + set.items[i].name + '.pat';
         }
         return set;
     }
@@ -312,13 +318,27 @@
     }
 
     function buildReadme(set, ts) {
+        var ex1 = set.items[0] ? set.items[0].sd_name : '001_pattern.pat';
+        var ex2 = set.items[1] ? set.items[1].sd_name : '002_pattern.pat';
         var lines = [];
         lines.push('Pattern set ' + ts.file + '  (arena ' + set.arenaConfig + ')');
         lines.push('Built ' + ts.iso + ' by ' + TOOL + '.');
         lines.push('');
-        lines.push('To deploy: copy MANIFEST.bin, MANIFEST.txt, manifest.json and the');
-        lines.push('patterns/ folder to the ROOT of the SD card. The controller mounts the');
-        lines.push('SD card only at power-on, so seat the card before powering up.');
+        lines.push('DEPLOY TO THE SD CARD');
+        lines.push('  Copy the CONTENTS of this bundle to the ROOT of a FAT32 SD card, so the');
+        lines.push('  card looks exactly like this (the firmware scans /patterns/*.pat and');
+        lines.push('  assigns the 1-based pattern_ID by alphabetical filename):');
+        lines.push('');
+        lines.push('    <SD root>/');
+        lines.push('      patterns/');
+        lines.push('        ' + ex1);
+        lines.push('        ' + ex2 + '  ...');
+        lines.push('      MANIFEST.bin   MANIFEST.txt   manifest.json   README.txt');
+        lines.push('');
+        lines.push('  - Do NOT drop a wrapper folder on the card -- "patterns" sits at the root.');
+        lines.push('  - Do NOT rename the .pat files -- the NNN_ prefix sets the pattern_ID');
+        lines.push('    order, and the long names avoid an 8.3-filename issue on the controller.');
+        lines.push('  - Seat the card BEFORE powering on the controller (SD is mounted at boot).');
         lines.push('');
         lines.push('Patterns (SD index = pattern_ID):');
         for (var i = 0; i < set.items.length; i++) {
@@ -386,7 +406,7 @@
             } else if (/^Mapping:\s*$/.test(line)) {
                 inMap = true;
             } else if (inMap) {
-                var m = line.match(/^\s*(pat(\d+)\.pat)\s*<-\s*(.+?)\s*$/i);
+                var m = line.match(/^\s*((\d+)_.*?\.pat)\s*<-\s*(.+?)\s*$/i);
                 if (m) {
                     out.patterns.push({
                         sd_name: m[1],

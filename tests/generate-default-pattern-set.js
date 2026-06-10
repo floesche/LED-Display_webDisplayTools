@@ -162,6 +162,10 @@ if (fs.existsSync(SRC_DIR)) {
 const bundle = PS.buildBundle(set, { sdDrive: '(copy to the SD card root)' });
 
 fs.mkdirSync(PAT_DIR, { recursive: true });
+// Clear stale pattern files so a renamed scheme leaves no orphans on the SD.
+for (const f of fs.readdirSync(PAT_DIR)) {
+    if (/\.pat$/i.test(f)) fs.unlinkSync(path.join(PAT_DIR, f));
+}
 fs.writeFileSync(path.join(OUT_DIR, 'MANIFEST.bin'), Buffer.from(bundle.manifestBin));
 fs.writeFileSync(path.join(OUT_DIR, 'MANIFEST.txt'), bundle.manifestTxt);
 fs.writeFileSync(
