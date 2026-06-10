@@ -1,0 +1,59 @@
+{
+  "tool": "webDisplayTools/pattern-set",
+  "version": 1,
+  "set_id": "20260610_150753",
+  "created_iso": "2026-06-10T15:07:53",
+  "created_unix": 1781118473,
+  "arenaConfig": "G6_2x10",
+  "source": "builtin",
+  "patterns": {
+    "all_on": {
+      "index": 1,
+      "sd_name": "001_all_on.pat",
+      "arenaConfig": "G6_2x10",
+      "preview": {
+        "gs": 2,
+        "frames": 1,
+        "rows": 40,
+        "cols": 200
+      },
+      "matlabPath": null
+    },
+    "grating_sq": {
+      "index": 2,
+      "sd_name": "002_grating_sq.pat",
+      "arenaConfig": "G6_2x10",
+      "preview": {
+        "gs": 2,
+        "frames": 20,
+        "rows": 40,
+        "cols": 200
+      },
+      "matlabPath": null
+    },
+    "grating_sine": {
+      "index": 3,
+      "sd_name": "003_grating_sine.pat",
+      "arenaConfig": "G6_2x10",
+      "preview": {
+        "gs": 16,
+        "frames": 20,
+        "rows": 40,
+        "cols": 200
+      },
+      "matlabPath": null
+    },
+    "frame2_h_ccw_200f": {
+      "index": 4,
+      "sd_name": "004_frame2_h_ccw_200f.pat",
+      "arenaConfig": "G6_2x10",
+      "preview": {
+        "gs": 16,
+        "frames": 200,
+        "rows": 40,
+        "cols": 200
+      },
+      "matlabPath": null
+    }
+  }
+}

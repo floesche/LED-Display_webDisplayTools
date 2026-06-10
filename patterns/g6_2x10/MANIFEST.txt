@@ -1,0 +1,9 @@
+Timestamp: 2026-06-10T15:07:53
+SD Drive: (copy to the SD card root)
+Pattern Count: 4
+
+Mapping:
+001_all_on.pat <- all_on
+002_grating_sq.pat <- grating_sq
+003_grating_sine.pat <- grating_sine
+004_frame2_h_ccw_200f.pat <- frame2_h_ccw_200f
