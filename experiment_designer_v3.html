@@ -1258,6 +1258,47 @@
         .modal h2 { font-family: 'JetBrains Mono', monospace; color: var(--error); margin-bottom: 0.5rem; }
         .modal pre { background: var(--bg); padding: 0.75rem; border-radius: 3px; font-size: 0.75rem; white-space: pre-wrap; word-break: break-word; }
         .modal-actions { margin-top: 1rem; text-align: right; }
+
+        /* ── LAB-92 Pattern Set builder (large two-pane modal) ── */
+        .ps-modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 120; }
+        .ps-modal-backdrop.open { display: flex; }
+        .ps-modal { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; width: 92vw; height: 90vh; max-width: 1400px; display: flex; flex-direction: column; font-size: 0.82rem; }
+        .ps-head { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 0.7rem 1rem; border-bottom: 1px solid var(--border); }
+        .ps-head h2 { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-size: 1rem; margin: 0; }
+        .ps-arena { font-size: 0.8rem; }
+        .ps-arena .locked { color: var(--accent); }
+        .ps-arena .blocked { color: #e3a008; }
+        .ps-close { margin-left: auto; background: none; border: 1px solid var(--border); color: var(--text-dim); border-radius: 4px; cursor: pointer; padding: 2px 9px; }
+        .ps-close:hover { border-color: var(--accent); color: var(--accent); }
+        .ps-srcrow { display: flex; align-items: center; gap: 0.6rem; padding: 0.5rem 1rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+        .ps-srcrow label { display: inline-flex; align-items: center; gap: 0.25rem; color: var(--text-dim); cursor: pointer; }
+        .ps-srcrow input[type=text] { flex: 1; min-width: 220px; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 4px 8px; border-radius: 4px; font-family: inherit; font-size: 0.78rem; }
+        .ps-body { flex: 1; display: flex; min-height: 0; }
+        .ps-pane { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+        .ps-pane + .ps-pane { border-left: 1px solid var(--border); }
+        .ps-pane-head { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0.8rem; border-bottom: 1px solid var(--border); }
+        .ps-pane-head h3 { margin: 0; font-size: 0.82rem; color: var(--text); font-family: 'JetBrains Mono', monospace; white-space: nowrap; }
+        .ps-search { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 3px 8px; border-radius: 4px; font-family: inherit; font-size: 0.78rem; }
+        .ps-list { flex: 1; overflow-y: auto; padding: 0.3rem; }
+        .ps-row { display: flex; align-items: center; gap: 0.5rem; padding: 5px 7px; border-radius: 4px; }
+        .ps-row:hover { background: var(--bg); }
+        .ps-row.invalid { opacity: 0.6; }
+        .ps-row .ps-name { flex: 1 1 auto; min-width: 4rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .ps-row .ps-meta { flex: 0 1 auto; min-width: 0; color: var(--text-dim); font-size: 0.72rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ps-badge { flex: 0 0 auto; font-size: 0.7rem; white-space: nowrap; }
+        .ps-badge.ok { color: var(--accent); }
+        .ps-badge.bad { color: #e3a008; }
+        .ps-idx { flex: 0 0 auto; color: var(--text-dim); font-size: 0.72rem; min-width: 1.4rem; text-align: right; }
+        .ps-sd { flex: 0 0 auto; color: var(--text-dim); font-size: 0.72rem; font-family: 'IBM Plex Mono', monospace; white-space: nowrap; }
+        .ps-iconbtn { flex: 0 0 auto; }
+        .ps-iconbtn { background: none; border: 1px solid var(--border); color: var(--text-dim); border-radius: 3px; cursor: pointer; padding: 0 7px; line-height: 1.5; font-size: 0.8rem; }
+        .ps-iconbtn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+        .ps-iconbtn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .ps-nameinput { flex: 1 1 auto; min-width: 4rem; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 2px 5px; border-radius: 3px; font-family: inherit; font-size: 0.78rem; }
+        .ps-foot { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 1rem; border-top: 1px solid var(--border); }
+        .ps-foot .ps-status { color: var(--text-dim); margin-left: auto; }
+        .ps-empty { color: var(--text-dim); font-style: italic; padding: 1rem; text-align: center; }
+        .ps-blocked { padding: 2.5rem 1rem; text-align: center; color: #e3a008; line-height: 1.6; }
     </style>
 </head>
 <body>
@@ -1293,6 +1334,7 @@
         <button id="importBtn" class="header-btn primary" title="Load a v3 protocol YAML file">Import YAML</button>
         <input type="file" id="importFromInput" accept=".yaml,.yml" style="display: none;">
         <button id="importFromBtn" class="header-btn" disabled title="Copy conditions from a second v3 YAML into this one (brings their anchors + plugins along)">Import from YAML…</button>
+        <button id="patternSetBtn" class="header-btn" title="Build an SD-card pattern set (bundle) for this rig's arena — pick patterns, order them, export a ZIP to copy onto the SD card">Pattern Set…</button>
         <button id="exportBtn" class="header-btn" disabled title="Export the (possibly edited) YAML">Export YAML</button>
         <a href="experiment_designer_v3_quickstart.html" target="_blank" class="header-btn" style="text-decoration: none; display: inline-flex; align-items: center;" title="Open the v3 Experiment Designer quick-start guide in a new tab">Quick Start</a>
         <a href="index.html" class="header-btn" style="text-decoration: none; display: inline-flex; align-items: center;">← All tools</a>
@@ -1431,7 +1473,7 @@
     <!-- Footer -->
     <div class="app-footer">
         <a href="https://github.com/reiserlab/webDisplayTools" target="_blank">Reiser Lab</a> |
-        v3 Experiment Designer v0.25 | <span id="footerTimestamp">2026-06-09 19:46 ET</span>
+        v3 Experiment Designer v0.26 | <span id="footerTimestamp">2026-06-10 07:48 ET</span>
     </div>
 
     <!-- Error modal -->
@@ -1453,6 +1495,15 @@
     <script src="js/arena-wire-g6.js"></script>
     <script src="js/arena-link.js"></script>
     <script src="js/arena-runner-g6.js"></script>
+
+    <!-- LAB-92 Pattern Set builder. pat-encoder.js + pattern-set.js are classic-safe
+         (window.PatEncoder / window.PatternSet, no bare ES export) so they load as
+         classic <script> and dodge the ES-import-failure bug; pat-parser.js and
+         arena-configs.js have bare exports, so the module below imports those. JSZip
+         (CDN, pinned) powers the bundle ZIP export. -->
+    <script src="js/pat-encoder.js"></script>
+    <script src="js/pattern-set.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <script type="module">
         import {
@@ -1523,6 +1574,12 @@
             V3ImportError
         } from './js/v3-import.js';
 
+        // LAB-92 — Pattern Set builder. pat-parser.js + arena-configs.js have bare ES
+        // exports (import-only); pat-encoder.js + pattern-set.js are window globals
+        // from the classic <script> tags above (window.PatEncoder / window.PatternSet).
+        import PatParser from './js/pat-parser.js';
+        import { getConfig } from './js/arena-configs.js';
+
         // ═══════════════════════════════════════════════════════════════
         // State
         // ═══════════════════════════════════════════════════════════════
@@ -1545,9 +1602,22 @@
         // `derived` = deriveRigPlugins(...). Treated as current only while
         // `path === experiment.rig_path` (a manual path edit to a different file
         // makes it stale → ignored). See rigIsCurrent().
+        // `{ path, derived, arenaConfig }` — arenaConfig (LAB-92) is the rig's arena
+        // resolved to a web config NAME (or null if its `arena:` isn't a known config).
         let loadedRig = null;
         function rigIsCurrent() {
             return !!(loadedRig && experiment && loadedRig.path === experiment.rig_path);
+        }
+        // Resolve a parsed rig's `arena:` field to a web config name (js/arena-configs.js).
+        // Name lookup only — a maDisplayTools-style path or unknown name → null.
+        function resolveRigArena(rigData) {
+            const name = rigData && rigData.arena;
+            return name && getConfig(name) ? name : null;
+        }
+        // The locked arena the Pattern Set builder targets: only when the loaded rig is
+        // current AND its arena resolved. null → the builder is blocked.
+        function rigArenaConfig() {
+            return rigIsCurrent() && loadedRig.arenaConfig ? loadedRig.arenaConfig : null;
         }
 
         // Undo/redo: each snapshot is the YAML text + selection. Restoring
@@ -2037,7 +2107,12 @@
                 try {
                     const text = await f.text();
                     const rigData = parseRigYAMLText(text);
-                    loadedRig = { path: newPath, derived: deriveRigPlugins(rigData) };
+                    loadedRig = {
+                        path: newPath,
+                        derived: deriveRigPlugins(rigData),
+                        arenaConfig: resolveRigArena(rigData),
+                        arenaRaw: (rigData && rigData.arena) || null
+                    };
                 } catch (err) {
                     loadedRig = null;
                     rigWarn = err && err.message ? err.message : String(err);
@@ -2060,6 +2135,30 @@
             rigInner.appendChild(browseBtn);
             rigRow.appendChild(rigInner);
             rigBox.appendChild(rigRow);
+
+            // Arena (from rig) — read-only (LAB-92). The arena the Pattern Set builder
+            // targets is set by the rig and locked; never edited here.
+            const arenaRow = el('div', { class: 'set-row' });
+            arenaRow.appendChild(el('label', {}, 'arena (from rig)'));
+            if (rigIsCurrent() && loadedRig.arenaConfig) {
+                const cfg = getConfig(loadedRig.arenaConfig);
+                const lbl = (cfg && cfg.label) || loadedRig.arenaConfig;
+                arenaRow.appendChild(el('div', {
+                    style: 'color: var(--accent); font-size: 0.82rem; padding: 3px 0;',
+                    title: 'Locked target for the Pattern Set builder. Comes from the rig YAML.'
+                }, lbl + '  ·  ' + loadedRig.arenaConfig));
+            } else if (rigIsCurrent() && loadedRig.arenaRaw) {
+                arenaRow.appendChild(el('div', {
+                    style: 'color: #e3a008; font-size: 0.82rem; padding: 3px 0;',
+                    title: 'The rig’s arena is not a known web config, so the Pattern Set builder is unavailable.'
+                }, '“' + loadedRig.arenaRaw + '” is not a known web arena config'));
+            } else {
+                arenaRow.appendChild(el('div', {
+                    style: 'color: var(--text-dim); font-size: 0.82rem; padding: 3px 0; font-style: italic;'
+                }, 'Browse a rig YAML to detect its arena.'));
+            }
+            rigBox.appendChild(arenaRow);
+
             rigBox.appendChild(rigFile);
             root.appendChild(rigBox);
 
@@ -5544,6 +5643,388 @@
                 list.appendChild(el('li', { class: 'kind-' + w.kind, title: w.kind }, w.message));
             }
         }
+
+        // ═══════════════════════════════════════════════════════════════
+        // Pattern Set / SD-bundle builder (LAB-92)
+        // ═══════════════════════════════════════════════════════════════
+        // A large two-pane modal: browse a library (Available) and assemble an
+        // ordered subset (Selected) → export a copy-to-SD ZIP. The target arena is
+        // LOCKED to the loaded rig (never a picker). Engine = window.PatternSet
+        // (js/pattern-set.js); deps injected = pat-parser/pat-encoder/arena-configs.
+
+        const psState = {
+            arenaConfig: null,
+            set: null,
+            source: 'builtin', // 'builtin' | 'remote' | 'local'
+            baseUrl: 'https://raw.githubusercontent.com/reiserlab/webDisplayTools/main',
+            available: [],
+            searchText: ''
+        };
+        let psEl = null; // cached modal DOM
+
+        const psDeps = () => ({
+            parsePatFile: PatParser.parsePatFile,
+            encode: window.PatEncoder.encode,
+            getConfig
+        });
+        // Library folder for an arena config (the in-repo layout: patterns/<folder>/).
+        const psArenaFolder = (arenaConfig) => String(arenaConfig || '').toLowerCase();
+        const psBaseUrl = () => (psState.source === 'remote' ? psState.baseUrl.replace(/\/$/, '') : '.');
+
+        function psEnsureModal() {
+            if (psEl) return psEl;
+            const arenaSpan = el('span', { class: 'ps-arena' });
+            const close = el('button', { class: 'ps-close', title: 'Close (Esc)', onClick: psClose }, '✕');
+            const head = el('div', { class: 'ps-head' },
+                el('h2', {}, 'Pattern Set / SD-Bundle Builder'), arenaSpan, close);
+
+            // source row
+            const mkRadio = (val, label) => {
+                const input = el('input', { type: 'radio', name: 'ps-source', value: val,
+                    checked: psState.source === val, onChange: () => psSetSource(val) });
+                return el('label', { title: 'Pattern source (one at a time — no mixing)' }, input, label);
+            };
+            const baseUrlInput = el('input', { type: 'text', value: psState.baseUrl,
+                title: 'Base URL of another webDisplayTools-style repo (GitHub raw URL recommended).',
+                placeholder: 'https://raw.githubusercontent.com/<owner>/<repo>/<ref>' });
+            baseUrlInput.addEventListener('change', () => { psState.baseUrl = baseUrlInput.value.trim(); });
+            const loadRemoteBtn = el('button', { class: 'ps-iconbtn', title: 'Fetch the library from this base URL',
+                onClick: () => psLoadLibrary() }, 'Load');
+            const fileInput = el('input', { type: 'file', accept: '.pat', multiple: true, style: 'display:none;' });
+            fileInput.addEventListener('change', () => psPickLocal(fileInput.files));
+            const localBtn = el('button', { class: 'ps-iconbtn', title: 'Choose .pat files from disk',
+                onClick: () => fileInput.click() }, 'Choose .pat files…');
+            const srcrow = el('div', { class: 'ps-srcrow' },
+                el('span', { style: 'color:var(--text-dim);' }, 'Source:'),
+                mkRadio('builtin', 'Built-in library'),
+                mkRadio('remote', 'Another repo'),
+                mkRadio('local', 'Local files'),
+                baseUrlInput, loadRemoteBtn, localBtn, fileInput);
+
+            // panes
+            const search = el('input', { class: 'ps-search', placeholder: 'Filter…',
+                title: 'Filter the available list by name' });
+            search.addEventListener('input', () => { psState.searchText = search.value.toLowerCase(); psRenderAvailable(); });
+            const availList = el('div', { class: 'ps-list' });
+            const availPane = el('div', { class: 'ps-pane' },
+                el('div', { class: 'ps-pane-head' }, el('h3', {}, 'Available'), search), availList);
+            const selList = el('div', { class: 'ps-list' });
+            const selPane = el('div', { class: 'ps-pane' },
+                el('div', { class: 'ps-pane-head' }, el('h3', {}, 'Selected — SD order')), selList);
+            const body = el('div', { class: 'ps-body' }, availPane, selPane);
+
+            // blocked view (no rig arena)
+            const blocked = el('div', { class: 'ps-blocked' });
+
+            // footer
+            const addAllBtn = el('button', { class: 'header-btn', title: 'Add every valid available pattern',
+                onClick: psAddAllValid }, 'Add all valid');
+            const clearBtn = el('button', { class: 'header-btn', title: 'Remove all selected patterns',
+                onClick: psClearSelected }, 'Clear');
+            const status = el('span', { class: 'ps-status' });
+            const exportBtn = el('button', { class: 'header-btn primary', title: 'Export the bundle as a ZIP to copy onto the SD card',
+                onClick: psExport }, 'Export ZIP ⬇');
+            const foot = el('div', { class: 'ps-foot' }, addAllBtn, clearBtn, status, exportBtn);
+
+            const modal = el('div', { class: 'ps-modal' }, head, srcrow, body, blocked, foot);
+            const backdrop = el('div', { class: 'ps-modal-backdrop', id: 'patternSetModal' }, modal);
+            backdrop.addEventListener('click', (e) => { if (e.target === backdrop) psClose(); });
+            document.body.appendChild(backdrop);
+
+            psEl = { backdrop, arenaSpan, srcrow, body, blocked, foot, baseUrlInput, loadRemoteBtn,
+                fileInput, localBtn, search, availList, selList, status, exportBtn, addAllBtn, clearBtn };
+            return psEl;
+        }
+
+        function psOpen() {
+            const e = psEnsureModal();
+            const arena = rigArenaConfig();
+            psState.arenaConfig = arena;
+            if (!arena) {
+                // Blocked — the arena comes from the rig.
+                e.srcrow.style.display = 'none';
+                e.body.style.display = 'none';
+                e.foot.style.display = 'none';
+                e.blocked.style.display = 'block';
+                e.blocked.textContent = '';
+                e.blocked.appendChild(el('div', {}, '⚠ No arena resolved from the rig.'));
+                e.blocked.appendChild(el('div', { style: 'margin-top:0.5rem;color:var(--text-dim);' },
+                    'The Pattern Set builder targets the arena defined by your rig. Open Settings → Rig → Browse… and load a rig whose arena is a known web config (e.g. configs/rigs/cshl_g6.yaml → G6_2x10).'));
+                e.arenaSpan.innerHTML = '';
+                e.arenaSpan.appendChild(el('span', { class: 'blocked' }, 'No rig arena'));
+                e.backdrop.classList.add('open');
+                return;
+            }
+            e.srcrow.style.display = '';
+            e.body.style.display = '';
+            e.foot.style.display = '';
+            e.blocked.style.display = 'none';
+            const cfg = getConfig(arena);
+            e.arenaSpan.innerHTML = '';
+            e.arenaSpan.appendChild(el('span', {}, 'Arena: '));
+            e.arenaSpan.appendChild(el('span', { class: 'locked',
+                title: 'Locked — set by the rig' }, ((cfg && cfg.label) || arena) + ' (locked, from rig)'));
+            psState.set = window.PatternSet.createPatternSet({ arenaConfig: arena });
+            psState.available = [];
+            psState.searchText = '';
+            e.search.value = '';
+            psSyncSourceUI();
+            e.backdrop.classList.add('open');
+            psLoadLibrary();
+            psRenderSelected();
+        }
+
+        function psClose() { if (psEl) psEl.backdrop.classList.remove('open'); }
+
+        function psSyncSourceUI() {
+            const e = psEl;
+            const remote = psState.source === 'remote';
+            const local = psState.source === 'local';
+            e.baseUrlInput.style.display = remote ? '' : 'none';
+            e.loadRemoteBtn.style.display = remote ? '' : 'none';
+            e.localBtn.style.display = local ? '' : 'none';
+        }
+
+        async function psSetSource(kind) {
+            if (kind === psState.source && psState.available.length) return;
+            if (psState.set && psState.set.items.length) {
+                const ok = await confirmModal({
+                    title: 'Switch source?',
+                    body: 'Switching the pattern source clears the patterns you have selected (sources cannot be mixed).',
+                    confirmLabel: 'Switch & clear'
+                });
+                if (!ok) {
+                    // revert the radio selection
+                    const r = psEl.srcrow.querySelector('input[value="' + psState.source + '"]');
+                    if (r) r.checked = true;
+                    return;
+                }
+            }
+            psState.source = kind;
+            window.PatternSet.clearItems(psState.set);
+            psState.available = [];
+            psSyncSourceUI();
+            psRenderSelected();
+            if (kind === 'builtin') psLoadLibrary();
+            else psRenderAvailable();
+        }
+
+        // Load the Available list from a manifest.json (built-in or remote).
+        async function psLoadLibrary() {
+            if (psState.source === 'local') { psRenderAvailable(); return; }
+            const folder = psArenaFolder(psState.arenaConfig);
+            const url = psBaseUrl() + '/patterns/' + folder + '/manifest.json';
+            psEl.availList.innerHTML = '';
+            psEl.availList.appendChild(el('div', { class: 'ps-empty' }, 'Loading ' + url + ' …'));
+            try {
+                const resp = await fetch(url, { cache: 'no-store' });
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const manifest = await resp.json();
+                const base = psBaseUrl() + '/patterns/' + folder + '/patterns/';
+                const arenaOk = !manifest.arenaConfig || manifest.arenaConfig === psState.arenaConfig;
+                psState.available = Object.keys(manifest.patterns || {}).map((name) => {
+                    const p = manifest.patterns[name];
+                    return {
+                        name,
+                        sourceName: name + '.pat',
+                        meta: p.preview || null,
+                        valid: arenaOk,
+                        reason: arenaOk ? null : 'library is for ' + manifest.arenaConfig,
+                        url: base + p.sd_name,
+                        bytes: null
+                    };
+                });
+            } catch (err) {
+                psState.available = [];
+                psEl.availList.innerHTML = '';
+                psEl.availList.appendChild(el('div', { class: 'ps-empty' },
+                    'Could not load library at ' + url + ' — ' + (err.message || err) +
+                    (psState.source === 'remote' ? ' (check the URL + CORS; GitHub raw URLs work)' : '')));
+                return;
+            }
+            psRenderAvailable();
+        }
+
+        async function psPickLocal(fileList) {
+            const files = Array.from(fileList || []);
+            for (const f of files) {
+                let entry = { name: window.PatternSet.sanitizeName(f.name), sourceName: f.name,
+                    meta: null, valid: false, reason: null, url: null, bytes: null };
+                try {
+                    const buf = await f.arrayBuffer();
+                    entry.bytes = buf;
+                    const parsed = PatParser.parsePatFile(buf);
+                    entry.meta = window.PatternSet.summarizePattern(parsed);
+                    const v = window.PatternSet.validateGeometry(parsed, psState.arenaConfig, getConfig);
+                    entry.valid = v.ok;
+                    entry.reason = v.reason;
+                } catch (err) {
+                    entry.reason = 'parse error: ' + (err.message || err);
+                }
+                psState.available.push(entry);
+            }
+            psEl.fileInput.value = '';
+            psRenderAvailable();
+        }
+
+        const psIsAdded = (entry) =>
+            psState.set && psState.set.items.some((it) => it.sourceName === entry.sourceName);
+
+        function psMetaStr(meta) {
+            if (!meta) return '';
+            return 'GS' + meta.gs + ' · ' + meta.frames + 'f · ' + meta.rows + '×' + meta.cols;
+        }
+
+        function psRenderAvailable() {
+            const list = psEl.availList;
+            list.innerHTML = '';
+            const items = psState.available.filter((e) =>
+                !psState.searchText || e.name.toLowerCase().includes(psState.searchText));
+            if (!items.length) {
+                list.appendChild(el('div', { class: 'ps-empty' },
+                    psState.source === 'local' ? 'Choose .pat files to add them here.' : 'No patterns.'));
+                return;
+            }
+            for (const entry of items) {
+                const added = psIsAdded(entry);
+                const addBtn = el('button', {
+                    class: 'ps-iconbtn',
+                    disabled: !entry.valid || added,
+                    title: !entry.valid ? (entry.reason || 'invalid') : (added ? 'Already added' : 'Add to the set'),
+                    onClick: () => psAdd(entry)
+                }, added ? '✓ added' : '+ Add');
+                const info = entry.valid ? psMetaStr(entry.meta) : (entry.reason || 'invalid');
+                const badge = el('span', {
+                    class: 'ps-badge ' + (entry.valid ? 'ok' : 'bad'),
+                    title: entry.valid ? 'Matches the arena' : (entry.reason || '')
+                }, entry.valid ? '✓' : '✗');
+                list.appendChild(el('div', { class: 'ps-row' + (entry.valid ? '' : ' invalid') },
+                    el('span', { class: 'ps-name', title: entry.name }, entry.name),
+                    el('span', { class: 'ps-meta', title: info }, info),
+                    badge, addBtn));
+            }
+        }
+
+        async function psAdd(entry) {
+            if (!entry.valid || psIsAdded(entry)) return;
+            try {
+                let bytes = entry.bytes;
+                if (!bytes && entry.url) {
+                    const resp = await fetch(entry.url, { cache: 'no-store' });
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    bytes = await resp.arrayBuffer();
+                }
+                const item = window.PatternSet.ingest(psState.set, bytes, entry.sourceName, psState.source, psDeps());
+                if (!item.valid) {
+                    window.PatternSet.removeItem(psState.set, psState.set.items.length - 1);
+                    showError('Pattern rejected', entry.name + ': ' + item.reason);
+                }
+            } catch (err) {
+                showError('Could not add pattern', entry.name + ': ' + (err.message || err));
+            }
+            psRenderAvailable();
+            psRenderSelected();
+        }
+
+        async function psAddAllValid() {
+            const toAdd = psState.available.filter((e) => e.valid && !psIsAdded(e));
+            for (const e of toAdd) await psAdd(e);
+        }
+
+        function psRenderSelected() {
+            const list = psEl.selList;
+            list.innerHTML = '';
+            const set = psState.set;
+            if (!set || !set.items.length) {
+                list.appendChild(el('div', { class: 'ps-empty' }, 'Add patterns from the left. Order here = SD index = pattern_ID.'));
+                psUpdateFoot();
+                return;
+            }
+            window.PatternSet.assignIndices(set);
+            set.items.forEach((it, i) => {
+                const up = el('button', { class: 'ps-iconbtn', disabled: i === 0, title: 'Move up',
+                    onClick: () => { window.PatternSet.reorderItem(set, i, i - 1); psRenderSelected(); } }, '▲');
+                const down = el('button', { class: 'ps-iconbtn', disabled: i === set.items.length - 1, title: 'Move down',
+                    onClick: () => { window.PatternSet.reorderItem(set, i, i + 1); psRenderSelected(); } }, '▼');
+                const rm = el('button', { class: 'ps-iconbtn', title: 'Remove from the set',
+                    onClick: () => { window.PatternSet.removeItem(set, i); psRenderSelected(); psRenderAvailable(); } }, '✕');
+                const nameInput = el('input', { class: 'ps-nameinput', value: it.name,
+                    title: 'Pattern name (recorded in the manifest mapping)' });
+                nameInput.addEventListener('change', () => {
+                    it.name = window.PatternSet.renameItem(set, i, nameInput.value);
+                    nameInput.value = it.name;
+                });
+                const badge = it.valid
+                    ? el('span', { class: 'ps-badge ok' }, '✓')
+                    : el('span', { class: 'ps-badge bad', title: it.reason || '' }, '✗');
+                list.appendChild(el('div', { class: 'ps-row' + (it.valid ? '' : ' invalid') },
+                    el('span', { class: 'ps-idx' }, String(it.index)),
+                    nameInput,
+                    el('span', { class: 'ps-sd', title: psMetaStr(it.preview) }, it.sd_name),
+                    badge, up, down, rm));
+            });
+            psUpdateFoot();
+        }
+
+        function psUpdateFoot() {
+            const set = psState.set;
+            const n = set ? set.items.length : 0;
+            const invalid = set ? set.items.filter((it) => !it.valid).length : 0;
+            psEl.status.textContent = n + ' selected' + (invalid ? ' · ' + invalid + ' invalid' : (n ? ' · all valid' : ''));
+            psEl.exportBtn.disabled = n === 0 || invalid > 0;
+        }
+
+        async function psClearSelected() {
+            if (!psState.set || !psState.set.items.length) return;
+            const ok = await confirmModal({ title: 'Clear selected?',
+                body: 'Remove all ' + psState.set.items.length + ' selected pattern(s)?', confirmLabel: 'Clear' });
+            if (!ok) return;
+            psState.set.items = [];
+            psRenderSelected();
+            psRenderAvailable();
+        }
+
+        async function psExport() {
+            try {
+                const bundle = window.PatternSet.buildBundle(psState.set);
+                const zip = new JSZip();
+                zip.file('MANIFEST.bin', bundle.manifestBin);
+                zip.file('MANIFEST.txt', bundle.manifestTxt);
+                zip.file('manifest.json', JSON.stringify(bundle.manifestJson, null, 2) + '\n');
+                zip.file('README.txt', bundle.readme);
+                const pf = zip.folder('patterns');
+                for (const p of bundle.patterns) pf.file(p.name, p.bytes);
+                const blob = await zip.generateAsync({ type: 'blob' });
+                const a = el('a', { href: URL.createObjectURL(blob), download: bundle.set_id + '.zip' });
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+            } catch (err) {
+                showError('Export failed', err.message || String(err));
+            }
+        }
+
+        $('patternSetBtn').addEventListener('click', psOpen);
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && psEl && psEl.backdrop.classList.contains('open')) psClose();
+        });
+
+        // Test seam (mirrors the window.testLoadPattern precedent): apply a rig YAML
+        // by URL through the real parse path, without the file picker — for automated
+        // verification of the rig→arena lock + builder.
+        window.__designerApplyRigForTest = async (path) => {
+            const text = await (await fetch(path, { cache: 'no-store' })).text();
+            const rigData = parseRigYAMLText(text);
+            loadedRig = {
+                path,
+                derived: deriveRigPlugins(rigData),
+                arenaConfig: resolveRigArena(rigData),
+                arenaRaw: (rigData && rigData.arena) || null
+            };
+            if (experiment) onRigEdit(path);
+            renderSettings();
+            return { arenaConfig: loadedRig.arenaConfig, rigCurrent: rigIsCurrent() };
+        };
 
         // Initial empty render
         renderAll();

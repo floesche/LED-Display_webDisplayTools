@@ -1,0 +1,47 @@
+{
+  "tool": "webDisplayTools/pattern-set",
+  "version": 1,
+  "set_id": "20260610_074912",
+  "created_iso": "2026-06-10T07:49:12",
+  "created_unix": 1781092152,
+  "arenaConfig": "G6_2x10",
+  "source": "builtin",
+  "patterns": {
+    "all_on": {
+      "index": 1,
+      "sd_name": "pat0001.pat",
+      "arenaConfig": "G6_2x10",
+      "preview": {
+        "gs": 2,
+        "frames": 1,
+        "rows": 40,
+        "cols": 200
+      },
+      "matlabPath": null
+    },
+    "grating_sq": {
+      "index": 2,
+      "sd_name": "pat0002.pat",
+      "arenaConfig": "G6_2x10",
+      "preview": {
+        "gs": 2,
+        "frames": 20,
+        "rows": 40,
+        "cols": 200
+      },
+      "matlabPath": null
+    },
+    "grating_sine": {
+      "index": 3,
+      "sd_name": "pat0003.pat",
+      "arenaConfig": "G6_2x10",
+      "preview": {
+        "gs": 16,
+        "frames": 20,
+        "rows": 40,
+        "cols": 200
+      },
+      "matlabPath": null
+    }
+  }
+}
