@@ -660,10 +660,29 @@
         .arena-test-btn:disabled { opacity: 0.45; cursor: not-allowed; background: var(--border); color: var(--text-dim); }
         .arena-test-note { font-size: 0.66rem; color: var(--text-dim); }
         .arena-test-note.dim { font-style: italic; }
-        /* Passive "web-runnable" badge in the Library — the run control is in the Inspector. */
-        .lib-row-runnable {
-            color: var(--accent); font-size: 0.7rem; margin-left: 0.2rem;
-            opacity: 0.85; cursor: default; user-select: none;
+        /* LAB-96: W/C pattern-source chip. W = web (the trialParams pattern is in the
+           active set, browser-displayable, carries an SD index); C = computer/MATLAB
+           (a pattern path not in the set). Used in the library rows (compact "W"/"C")
+           and the inspector pattern field ("W · web" / "C · computer"). */
+        .wc-chip {
+            font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; font-weight: 700;
+            margin-left: 0.2rem; padding: 0 0.4rem; border-radius: 9px; line-height: 1.5;
+            cursor: default; user-select: none; letter-spacing: 0.03em; white-space: nowrap;
+        }
+        .wc-w { color: var(--accent); border: 1px solid var(--accent); background: rgba(0, 230, 118, 0.12); }
+        .wc-c { color: #6cb1ff; border: 1px solid #3b6ea5; background: rgba(88, 166, 255, 0.12); }
+        /* LAB-96: animated pattern preview next to the picker dropdown. */
+        .pat-preview-host { margin-top: 0.35rem; }
+        .pat-preview { position: relative; display: inline-block; line-height: 0; }
+        .pat-preview img {
+            width: 96px; height: 96px; border-radius: 6px;
+            border: 1px solid var(--border); background: var(--surface);
+        }
+        .pat-preview-badge {
+            position: absolute; bottom: 3px; right: 3px;
+            background: rgba(0,0,0,0.7); color: var(--accent);
+            font-size: 0.6rem; padding: 0 0.25rem; border-radius: 3px;
+            font-family: 'JetBrains Mono', monospace;
         }
         .zone-body {
             flex: 1;
@@ -1473,7 +1492,7 @@
     <!-- Footer -->
     <div class="app-footer">
         <a href="https://github.com/reiserlab/webDisplayTools" target="_blank">Reiser Lab</a> |
-        v3 Experiment Designer v0.27 | <span id="footerTimestamp">2026-06-10 15:43 ET</span>
+        v3 Experiment Designer v0.28 | <span id="footerTimestamp">2026-06-10 20:35 ET</span>
     </div>
 
     <!-- Error modal -->
@@ -1496,13 +1515,15 @@
     <script src="js/arena-link.js"></script>
     <script src="js/arena-runner-g6.js"></script>
 
-    <!-- LAB-92 Pattern Set builder. pat-encoder.js + pattern-set.js are classic-safe
-         (window.PatEncoder / window.PatternSet, no bare ES export) so they load as
-         classic <script> and dodge the ES-import-failure bug; pat-parser.js and
-         arena-configs.js have bare exports, so the module below imports those. JSZip
-         (CDN, pinned) powers the bundle ZIP export. -->
+    <!-- LAB-92 Pattern Set builder + LAB-96 pattern picker. pat-encoder.js,
+         pattern-set.js, and pat-preview.js are classic-safe (window.PatEncoder /
+         window.PatternSet / window.PatPreview, no bare ES export) so they load as
+         classic <script> and dodge the ES-import-failure bug; pat-parser.js,
+         arena-configs.js, and icon-generator.js have bare exports, so the module
+         below imports those. JSZip (CDN, pinned) powers the bundle ZIP export. -->
     <script src="js/pat-encoder.js"></script>
     <script src="js/pattern-set.js"></script>
+    <script src="js/pat-preview.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <script type="module">
@@ -1579,6 +1600,10 @@
         // from the classic <script> tags above (window.PatEncoder / window.PatternSet).
         import PatParser from './js/pat-parser.js';
         import { getConfig } from './js/arena-configs.js';
+        // LAB-96 — animated pattern preview: one cylindrical icon per sampled frame.
+        // arena-configs (imported above) sets window.PANEL_SPECS, which icon-generator
+        // reads at call time.
+        import { generatePatternIcon } from './js/icon-generator.js';
 
         // ═══════════════════════════════════════════════════════════════
         // State
@@ -3112,14 +3137,18 @@
                     // a trialParams command and NO plugins (LAB-94 eligibility).
                     // Plugin-bearing conditions get no ▶ (the web can't drive
                     // camera/backlight, so a run would be misleading).
-                    if (RunnerLib.isDryRunEligible(cond)) {
-                        // Passive marker only — the run control lives in the Inspector
-                        // ("▶ Test on arena"). One run entry point avoids a second,
-                        // easy-to-miss button and the import-mode edge cases.
+                    // LAB-96: W/C pattern-source chip on any trialParams condition.
+                    // W = the pattern is in the active web set (browser-displayable, carries
+                    // an SD index); C = a computer/MATLAB pattern not in the set. Plugin
+                    // runnability is a separate signal (the Inspector's “Test on arena”).
+                    if (RunnerLib.findTrialParams(cond)) {
+                        const isW = conditionPatternInActiveSet(cond);
                         btns.push(el('span', {
-                            class: 'lib-row-runnable',
-                            title: 'Web-runnable — select it, then use “▶ Test on arena” in the Inspector'
-                        }, '▶'));
+                            class: 'wc-chip ' + (isW ? 'wc-w' : 'wc-c'),
+                            title: isW
+                                ? 'Web pattern — in the active set; the browser can display it (carries an SD index). Select it, then “▶ Test on arena” in the Inspector.'
+                                : 'Computer pattern — a MATLAB pattern path not in the active web set; it runs from the MATLAB computer.'
+                        }, isW ? 'W' : 'C'));
                     }
                     btns.push(el('button', {
                         class: 'lib-row-dup',
@@ -4083,6 +4112,12 @@
                 return wrapper;
             }
 
+            // LAB-96: the trialParams `pattern` field becomes a pick-by-name dropdown +
+            // animated preview (only set by the call site when an active set exists).
+            if (opts.patternPicker) {
+                return renderPatternPickerField(wrapper, path, value, bindBtn);
+            }
+
             if (schema && schema.type === 'select' && Array.isArray(schema.options)) {
                 const select = el('select', {
                     class: 'field-edit',
@@ -4163,6 +4198,87 @@
             });
             wrapper.appendChild(input);
             wrapper.appendChild(bindBtn);
+            return wrapper;
+        }
+
+        // LAB-96: the trialParams `pattern` picker with a prominent W/C source chip.
+        //   W (web)      = the pattern is in the active set → a name dropdown + animated
+        //                  preview; selecting writes `pattern` (name) AND `pattern_ID`
+        //                  (1-based SD index) in one undo step.
+        //   C (computer) = a MATLAB pattern path not in the set → a free-text input;
+        //                  MATLAB runs the path, a browser run falls back to pattern_ID.
+        // The dropdown's trailing "C · computer / MATLAB pattern…" option switches to C.
+        // Only reached when activeSet() exists (gated at the renderCommandCard call site).
+        function renderPatternPickerField(wrapper, path, value, bindBtn) {
+            const items = activeSetValidItems();
+            const COMP = '__computer__';
+            window.PatternSet.assignIndices(activeSet());
+            const inSet = items.some((it) => it.name === value);
+
+            // Prominent source chip — W = web pattern, C = computer/MATLAB pattern.
+            wrapper.appendChild(el('span', {
+                class: 'wc-chip ' + (inSet ? 'wc-w' : 'wc-c'),
+                title: inSet
+                    ? 'Web pattern — in the active set; the browser can display it (carries an SD index).'
+                    : 'Computer pattern — a MATLAB pattern path not in the active web set; it runs from the MATLAB computer.'
+            }, inSet ? 'W · web' : 'C · computer'));
+
+            const select = el('select', { class: 'field-edit',
+                title: 'Source — pick a web pattern from the active set, or “C · computer / MATLAB pattern…” to type a path' });
+            for (const it of items) {
+                const opt = el('option', { value: it.name }, it.index + ' · ' + it.name);
+                if (it.name === value) opt.selected = true;
+                select.appendChild(opt);
+            }
+            const compOpt = el('option', { value: COMP }, 'C · computer / MATLAB pattern…');
+            if (!inSet) compOpt.selected = true;
+            select.appendChild(compOpt);
+
+            // Computer/MATLAB path input — shown only in C mode (pattern not in the set).
+            const compInput = el('input', { type: 'text', class: 'field-edit str',
+                value: inSet ? '' : (value == null ? '' : String(value)),
+                placeholder: 'patterns/my_pattern.pat',
+                title: 'Computer / MATLAB pattern file (not in the web set). MATLAB runs this path; a browser run falls back to pattern_ID.',
+                style: inSet ? 'display:none;' : '' });
+            compInput.addEventListener('change', () => {
+                if (compInput.value === value) return;
+                pushUndo();
+                try { docSet(experiment, path, compInput.value); commitInspectorEdit(); }
+                catch (err) { showError('Edit failed', err.message); compInput.value = value == null ? '' : String(value); }
+            });
+
+            const previewHost = el('div', { class: 'pat-preview-host' });
+            if (inSet) { const p = buildActiveSetPreview(value); if (p) previewHost.appendChild(p); }
+
+            select.addEventListener('change', () => {
+                const picked = select.value;
+                if (picked === COMP) {
+                    if (inSet) {
+                        // Switch web → computer: clear the web name so the source becomes C,
+                        // then re-render into the path-input mode.
+                        pushUndo();
+                        try { docSet(experiment, path, ''); commitInspectorEdit(); }
+                        catch (err) { showError('Edit failed', err.message); renderInspector(); }
+                    } else {
+                        compInput.style.display = '';
+                        compInput.focus();
+                    }
+                    return;
+                }
+                if (picked === value) return;  // unchanged
+                const idx = activeSetIndexByName(picked);
+                pushUndo();
+                try {
+                    docSet(experiment, path, picked);
+                    if (idx != null) docSet(experiment, path.slice(0, -1).concat('pattern_ID'), idx);
+                    commitInspectorEdit();  // re-render card + preview + W/C chips
+                } catch (err) { showError('Edit failed', err.message); renderInspector(); }
+            });
+
+            wrapper.appendChild(select);
+            wrapper.appendChild(compInput);
+            wrapper.appendChild(bindBtn);
+            wrapper.appendChild(previewHost);
             return wrapper;
         }
 
@@ -4619,6 +4735,15 @@
                         }
                     }
                 }
+                // LAB-96: a new trialParams defaults to the active set's first pattern,
+                // carrying both the name (MATLAB "Pattern file") and its 1-based SD index.
+                if (commandName === 'trialParams') {
+                    const first = activeSetValidItems()[0];
+                    if (first) {
+                        cmd.pattern = first.name;
+                        cmd.pattern_ID = activeSetIndexByName(first.name);
+                    }
+                }
                 return cmd;
             }
             if (kind === 'plugin') {
@@ -4648,6 +4773,10 @@
             setDirty(true);
             renderInspector();
             renderTimeline();
+            // LAB-96: the library's ▶ web-runnable / MATLAB-only badge depends on a
+            // condition's commands (trialParams presence, plugins, pattern set-membership),
+            // so keep it in sync when commands/params change from the inspector.
+            renderLibrary();
         }
 
         function onMoveCommand(condIdx, fromIdx, toIdx) {
@@ -5044,19 +5173,24 @@
                 return;
             }
 
-            // Resolve the 1-based SD pattern index: pattern_ID if usable, else prompt.
-            let patternId = Number(cmd.pattern_ID);
-            if (!Number.isInteger(patternId) || patternId < 1) {
-                const entered = prompt(
-                    'Condition "' +
-                        cond.name +
-                        '" has no usable pattern_ID.\nEnter the 1-based SD-card pattern index to display:',
-                    ''
-                );
-                if (entered === null) return;
-                patternId = Number(entered);
+            // Resolve the 1-based SD pattern index. Preferred: the pattern name is in the
+            // active set (LAB-96) → a trustworthy, validated index. Fallback: a loaded
+            // YAML's explicit pattern_ID (legacy / MATLAB-only) — used but flagged. The
+            // raw-index prompt (the "confirm-once index dialog") is retired.
+            let patternId = activeSetIndexByName(cmd.pattern);
+            let resolvedFrom = 'set';
+            const setLabel = psState.set && psState.set.set_id ? psState.set.set_id : 'active set';
+            if (patternId == null) {
+                patternId = Number(cmd.pattern_ID);
+                resolvedFrom = 'protocol';
                 if (!Number.isInteger(patternId) || patternId < 1) {
-                    showError('Invalid pattern index', 'The SD pattern index must be a whole number ≥ 1.');
+                    showError(
+                        'No SD pattern index',
+                        'Condition "' + cond.name + '" has a computer/MATLAB pattern "' +
+                            (cmd.pattern || '(empty)') + '" that is not in the active web set, ' +
+                            'and no usable pattern_ID. Add it to the set in the Pattern Set builder ' +
+                            '(so it becomes a web pattern), or set a 1-based pattern_ID in the protocol.'
+                    );
                     return;
                 }
             }
@@ -5073,9 +5207,15 @@
             const durationSec = Number(cmd.duration) > 0 ? Number(cmd.duration) : 0;
             const skipped = RunnerLib.listSkippedPlugins(cond);
 
-            // Confirm-once: show the resolved SD index + params + what is skipped.
+            // Show the resolved SD index (validated against the active set, or flagged
+            // as coming from the protocol) + params + what is skipped.
             const list = [];
-            list.push('Pattern SD index: ' + patternId + (cmd.pattern ? '  (' + cmd.pattern + ')' : ''));
+            list.push(
+                resolvedFrom === 'set'
+                    ? "Pattern '" + cmd.pattern + "' → SD index " + patternId + ' (set ' + setLabel + ')'
+                    : 'Pattern SD index ' + patternId +
+                      (cmd.pattern ? "  ('" + cmd.pattern + "', from the protocol — not in the active set)" : ' (from the protocol)')
+            );
             list.push(
                 'mode ' + params.mode + ' · frame rate ' + params.frameRate + ' · gain ' + params.gain + ' · init pos ' + params.initPos
             );
@@ -5103,10 +5243,12 @@
                 title: 'Run "' + cond.name + '" on the arena?',
                 body:
                     'Sends ONLY the trialParams command — any waits or other commands in this ' +
-                    'condition are NOT replayed (full mini-sequence runs come later, LAB-97). Pattern SD index ' +
-                    patternId +
-                    ' will display — verify your SD card matches (this is the authored index, not yet ' +
-                    'validated against the SD bundle, LAB-91/95).',
+                    'condition are NOT replayed (full mini-sequence runs come later, LAB-97). ' +
+                    (resolvedFrom === 'set'
+                        ? "Pattern '" + cmd.pattern + "' resolves to SD index " + patternId +
+                          ' in the active set — make sure that set’s SD card is in the arena.'
+                        : 'SD index ' + patternId + ' comes from the protocol’s pattern_ID (the pattern ' +
+                          'is not in an active set) — verify your SD card matches.'),
                 list,
                 confirmLabel: 'Send to arena',
                 cancelLabel: 'Cancel'
@@ -5424,12 +5566,21 @@
             for (const k of detailKeys) {
                 if (cmd[k] === undefined) continue;
                 const fieldSchema = paramsSchema && paramsSchema[k];
+                // LAB-96: the trialParams `pattern` becomes a pick-by-name dropdown +
+                // preview when an active pattern set exists. Gated here so plugin/other
+                // `pattern` params and the no-set case keep the plain text input.
+                const fieldOpts =
+                    cmd.type === 'controller' && cmd.command_name === 'trialParams' &&
+                    k === 'pattern' && activeSet()
+                        ? { patternPicker: true }
+                        : undefined;
                 card.appendChild(
                     renderEditableField(
                         k,
                         [...cmdPath, k],
                         cmd[k],
-                        fieldSchema || FIELD_TYPES[k] || 'string'
+                        fieldSchema || FIELD_TYPES[k] || 'string',
+                        fieldOpts
                     )
                 );
             }
@@ -5765,6 +5916,78 @@
         const psArenaFolder = (arenaConfig) => String(arenaConfig || '').toLowerCase();
         const psBaseUrl = () => (psState.source === 'remote' ? psState.baseUrl.replace(/\/$/, '') : '.');
 
+        // ── LAB-96: active pattern set (the Pattern Set builder's in-memory set) ──────
+        // The picker reads the SAME set the builder holds, so a picked name resolves to
+        // the exact 1-based SD index that bundle exports. Returns null unless the set has
+        // ≥1 valid item AND matches the rig's arena (a stale arena = ignored).
+        function activeSet() {
+            const s = psState.set;
+            if (!s || !s.items || !s.items.length) return null;
+            if (s.arenaConfig !== rigArenaConfig()) return null;
+            return s.items.some((it) => it.valid) ? s : null;
+        }
+        function activeSetValidItems() {
+            const s = activeSet();
+            return s ? s.items.filter((it) => it.valid) : [];
+        }
+        function activeSetItemByName(name) {
+            const s = activeSet();
+            return s ? s.items.find((it) => it.valid && it.name === name) || null : null;
+        }
+        // 1-based SD index for a name (assignIndices numbers the ordered items; the
+        // exported bundle uses the same order). null when the name isn't a valid item.
+        function activeSetIndexByName(name) {
+            const s = activeSet();
+            if (!s) return null;
+            window.PatternSet.assignIndices(s);
+            const it = s.items.find((x) => x.name === name);
+            return it && it.valid ? it.index : null;
+        }
+        // Badge helper: does this condition's trialParams `pattern` resolve in the set?
+        function conditionPatternInActiveSet(cond) {
+            const cmd = RunnerLib.findTrialParams(cond);
+            return !!(cmd && activeSetIndexByName(cmd.pattern) != null);
+        }
+        // Build an animated preview (hover-cycles ≤10 sampled frames) for a set pattern
+        // by name — the pattern_editor tray mechanism via PatPreview + icon-generator.
+        // Returns a DOM node, or null if it can't render (no item / no arena / no frames).
+        function buildActiveSetPreview(name) {
+            const item = activeSetItemByName(name);
+            if (!item || !item.parsed) return null;
+            const cfg = getConfig(rigArenaConfig());
+            if (!cfg || !cfg.arena) return null;
+            const sampled = window.PatPreview.samplePreviewFrames(item.parsed, cfg.arena, {
+                renderIcon: generatePatternIcon,
+                iconOpts: { width: 96, height: 96, backgroundColor: '#1a1f26',
+                    innerRadiusRatio: 0.4, padding: 2, showGaps: false, showOutlines: false }
+            });
+            const frames = sampled.frames;
+            if (!frames.length) return null;
+            const meta = item.preview || {};
+            const container = el('div', { class: 'pat-preview' });
+            const img = el('img', {
+                src: frames[sampled.staticIndex], alt: name + ' preview',
+                title: name + ' — ' + (meta.frames || 1) + ' frame' + ((meta.frames || 1) === 1 ? '' : 's') +
+                    ' · GS' + (meta.gs || '?') + (frames.length > 1 ? ' · hover to animate' : '')
+            });
+            container.appendChild(img);
+            if ((meta.frames || 1) > 1) {
+                container.appendChild(el('span', { class: 'pat-preview-badge' }, meta.frames + 'f'));
+            }
+            if (frames.length > 1) {
+                let iv = null, k = 0;
+                container.addEventListener('mouseenter', () => {
+                    k = 0;
+                    iv = setInterval(() => { k = (k + 1) % frames.length; img.src = frames[k]; }, 150);
+                });
+                container.addEventListener('mouseleave', () => {
+                    if (iv) { clearInterval(iv); iv = null; }
+                    img.src = frames[sampled.staticIndex];
+                });
+            }
+            return container;
+        }
+
         function psEnsureModal() {
             if (psEl) return psEl;
             const arenaSpan = el('span', { class: 'ps-arena' });
@@ -5858,7 +6081,12 @@
             e.arenaSpan.appendChild(el('span', {}, 'Arena: '));
             e.arenaSpan.appendChild(el('span', { class: 'locked',
                 title: 'Locked — set by the rig' }, ((cfg && cfg.label) || arena) + ' (locked, from rig)'));
-            psState.set = window.PatternSet.createPatternSet({ arenaConfig: arena });
+            // Create-or-keep: the picker (LAB-96) reads psState.set as the active set,
+            // so don't wipe a set the user already built. Recreate only when there is no
+            // set yet, or the rig arena changed under it.
+            if (!psState.set || psState.set.arenaConfig !== arena) {
+                psState.set = window.PatternSet.createPatternSet({ arenaConfig: arena });
+            }
             psState.available = [];
             psState.searchText = '';
             e.search.value = '';
