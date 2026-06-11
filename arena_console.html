@@ -5,9 +5,9 @@
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Arena Console — G6 live control</title>
         <!--
-          Arena Console v1 — the experimenter-facing PControl successor for the
-          G6 arena. A standalone live-control page built entirely on the
-          Milestone-A Web Serial substrate (LAB-88/89):
+          Arena Console v2 — the experimenter-facing PControl successor for the
+          G6 arena. A standalone live-control page built on the Milestone-A Web
+          Serial substrate (LAB-88/89) with a pattern-set name picker (LAB-95):
             js/arena-wire-g6.js  (window.ArenaWireG6 — encoders/decoders)
             js/arena-link.js     (window.ArenaLink   — transport)
           loaded via <script src> (window-global dual-export path).
@@ -213,6 +213,35 @@
             .l-dim {
                 color: var(--dim);
             }
+            /* LAB-95 pattern picker — animated cylindrical preview thumbnail. */
+            #ps-preview-host {
+                min-height: 90px;
+                display: flex;
+                align-items: center;
+            }
+            .pat-preview {
+                position: relative;
+                display: inline-block;
+                line-height: 0;
+            }
+            .pat-preview img {
+                width: 90px;
+                height: 90px;
+                border-radius: 6px;
+                border: 1px solid var(--border);
+                background: var(--bg);
+            }
+            .pat-preview-badge {
+                position: absolute;
+                bottom: 3px;
+                right: 3px;
+                background: rgba(0, 0, 0, 0.7);
+                color: var(--accent);
+                font-size: 10px;
+                padding: 0 4px;
+                border-radius: 3px;
+                font-family: 'JetBrains Mono', monospace;
+            }
         </style>
     </head>
     <body>
@@ -281,6 +310,25 @@
 
             <div class="panel">
                 <h2>Pattern / Trial params (0x08)</h2>
+                <div class="row">
+                    <label title="Active pattern set (manifest.json)">set</label>
+                    <button
+                        id="btn-loadset"
+                        title="Load a built SD-bundle folder (manifest.json + patterns/) to pick patterns by name + preview. Defaults to the built-in library served with this tool."
+                    >
+                        Load set…
+                    </button>
+                    <span id="ps-status" class="l-dim">loading built-in library…</span>
+                    <input id="ps-folder" type="file" webkitdirectory directory style="display: none" />
+                </div>
+                <div class="row">
+                    <label title="Pick a pattern by name from the active set">name</label>
+                    <select
+                        id="tp-pat-name"
+                        title="Pick a pattern by name — fills the 1-based SD index below and shows a preview"
+                    ></select>
+                    <div id="ps-preview-host"></div>
+                </div>
                 <div class="row">
                     <label title="Display mode">mode</label>
                     <select
@@ -435,11 +483,17 @@
             diagnose framing problems.
         </div>
 
-        <footer id="footer">Arena Console v1 | 2026-06-08 19:04 ET</footer>
+        <footer id="footer">Arena Console v2 | 2026-06-10 19:58 ET</footer>
 
         <!-- Milestone-A substrate — window-global dual-export path (no build, no ES import). -->
         <script src="js/arena-wire-g6.js"></script>
         <script src="js/arena-link.js"></script>
+        <!-- LAB-95 pattern picker. pattern-set.js + pat-preview.js are classic-safe
+             (window.PatternSet / window.PatPreview); the import-only modules
+             (pat-parser, arena-configs, icon-generator) load in the deferred module
+             block at the end of <body>. -->
+        <script src="js/pattern-set.js"></script>
+        <script src="js/pat-preview.js"></script>
         <script>
             'use strict';
             const Wire = window.ArenaWireG6;
@@ -598,6 +652,186 @@
             cmdButtons().forEach((b) => (b.onclick = HANDLERS[b.dataset.cmd]));
 
             log('ready. Connect a G6 controller over USB, then click Connect.', 'dim');
+        </script>
+
+        <!-- LAB-95 pattern picker (deferred module). Imports the bare-export modules
+             directly; reads window.PatternSet / window.PatPreview from the classic tags
+             above. Browsers can't read the SD card, so the source is either the served
+             built-in library (auto-loaded on startup, present across tabs/reloads) or a
+             built SD-bundle folder the operator picks. Selecting a name fills #tp-pat
+             with the resolved 1-based SD index, which the existing trial handler sends.
+             Note: ES-module imports can serve stale on GitHub Pages — hard-refresh after
+             a deploy (Cmd+Shift+R). -->
+        <script type="module">
+            import PatParser from './js/pat-parser.js';
+            import { getConfig } from './js/arena-configs.js'; // also sets window.PANEL_SPECS
+            import { generatePatternIcon } from './js/icon-generator.js';
+
+            const PS = window.PatternSet;
+            const PP = window.PatPreview;
+            const $ = (id) => document.getElementById(id);
+            const tpPat = $('tp-pat');
+            const nameSel = $('tp-pat-name');
+            const statusEl = $('ps-status');
+            const previewHost = $('ps-preview-host');
+            const folderInput = $('ps-folder');
+
+            const BUILTIN_BASE = './patterns/g6_2x10/'; // the served default library
+
+            let activeManifest = null;
+            let byteSource = null; // (sd_name) => Promise<ArrayBuffer>
+            let previewCache = {};
+
+            const setStatus = (text, cls) => {
+                statusEl.textContent = text;
+                statusEl.className = cls || 'l-dim';
+            };
+
+            function arenaForManifest(m) {
+                const cfg = m && m.arenaConfig ? getConfig(m.arenaConfig) : null;
+                return cfg && cfg.arena;
+            }
+
+            function applyPick(name) {
+                const p = activeManifest && activeManifest.patterns[name];
+                if (p && p.index != null) tpPat.value = p.index; // the resolved 1-based SD index
+                renderPreview(name);
+            }
+
+            function populateDropdown(m) {
+                nameSel.innerHTML = '';
+                const names = Object.keys(m.patterns || {});
+                if (!names.length) {
+                    const o = document.createElement('option');
+                    o.value = '';
+                    o.textContent = '(empty set)';
+                    nameSel.appendChild(o);
+                    previewHost.innerHTML = '';
+                    return;
+                }
+                names.sort((a, b) => (m.patterns[a].index || 0) - (m.patterns[b].index || 0));
+                for (const n of names) {
+                    const p = m.patterns[n];
+                    const o = document.createElement('option');
+                    o.value = n;
+                    o.textContent = (p.index != null ? p.index + ' · ' : '') + n;
+                    nameSel.appendChild(o);
+                }
+                nameSel.value = names[0];
+                applyPick(names[0]);
+            }
+
+            async function renderPreview(name) {
+                previewHost.innerHTML = '';
+                if (!activeManifest || !byteSource) return;
+                const p = activeManifest.patterns[name];
+                if (!p) return;
+                const meta = p.preview || {};
+                try {
+                    let sampled = previewCache[name];
+                    if (!sampled) {
+                        const ab = await byteSource(p.sd_name);
+                        const parsed = PatParser.parsePatFile(ab);
+                        sampled = PP.samplePreviewFrames(parsed, arenaForManifest(activeManifest), {
+                            renderIcon: generatePatternIcon,
+                            iconOpts: { width: 90, height: 90, backgroundColor: '#1a1f26',
+                                innerRadiusRatio: 0.4, padding: 2, showGaps: false, showOutlines: false }
+                        });
+                        previewCache[name] = sampled;
+                    }
+                    if (!sampled.frames.length) {
+                        previewHost.appendChild(metaSpan(meta));
+                        return;
+                    }
+                    const container = document.createElement('div');
+                    container.className = 'pat-preview';
+                    const img = document.createElement('img');
+                    img.src = sampled.frames[sampled.staticIndex];
+                    img.alt = name;
+                    img.title = name + ' — ' + (meta.frames || 1) + ' frame' + ((meta.frames || 1) === 1 ? '' : 's') +
+                        ' · GS' + (meta.gs || '?') + (sampled.frames.length > 1 ? ' · hover to animate' : '');
+                    container.appendChild(img);
+                    if ((meta.frames || 1) > 1) {
+                        const b = document.createElement('span');
+                        b.className = 'pat-preview-badge';
+                        b.textContent = meta.frames + 'f';
+                        container.appendChild(b);
+                    }
+                    if (sampled.frames.length > 1) {
+                        let iv = null, k = 0;
+                        container.addEventListener('mouseenter', () => {
+                            k = 0;
+                            iv = setInterval(() => { k = (k + 1) % sampled.frames.length; img.src = sampled.frames[k]; }, 150);
+                        });
+                        container.addEventListener('mouseleave', () => {
+                            if (iv) { clearInterval(iv); iv = null; }
+                            img.src = sampled.frames[sampled.staticIndex];
+                        });
+                    }
+                    previewHost.appendChild(container);
+                } catch (e) {
+                    previewHost.appendChild(metaSpan(meta)); // bytes unavailable → metadata only
+                }
+            }
+
+            function metaSpan(meta) {
+                const s = document.createElement('span');
+                s.className = 'l-dim';
+                s.textContent = 'preview: ' + (meta.frames || '?') + 'f · GS' + (meta.gs || '?') +
+                    ' · ' + (meta.rows || '?') + '×' + (meta.cols || '?');
+                return s;
+            }
+
+            nameSel.addEventListener('change', () => applyPick(nameSel.value));
+
+            async function loadBuiltin() {
+                try {
+                    const resp = await fetch(BUILTIN_BASE + 'manifest.json', { cache: 'no-store' });
+                    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                    const m = PS.loadManifestJson(await resp.json());
+                    activeManifest = m;
+                    byteSource = async (sd) => {
+                        const r = await fetch(BUILTIN_BASE + 'patterns/' + sd, { cache: 'no-store' });
+                        if (!r.ok) throw new Error('HTTP ' + r.status);
+                        return r.arrayBuffer();
+                    };
+                    previewCache = {};
+                    const cfg = getConfig(m.arenaConfig);
+                    setStatus('built-in · ' + ((cfg && cfg.label) || m.arenaConfig) + ' · ' +
+                        Object.keys(m.patterns || {}).length + ' patterns' + (m.set_id ? ' · ' + m.set_id : ''));
+                    populateDropdown(m);
+                } catch (e) {
+                    setStatus('built-in library unavailable — use “Load set…”', 'l-err');
+                }
+            }
+
+            $('btn-loadset').addEventListener('click', () => folderInput.click());
+            folderInput.addEventListener('change', async () => {
+                const files = Array.from(folderInput.files || []);
+                folderInput.value = '';
+                if (!files.length) return;
+                const manifestFile = files.find((f) => f.name === 'manifest.json');
+                if (!manifestFile) { setStatus('no manifest.json in that folder', 'l-err'); return; }
+                try {
+                    const m = PS.loadManifestJson(JSON.parse(await manifestFile.text()));
+                    const map = {};
+                    for (const f of files) map[f.name] = f; // sd_name === base filename
+                    activeManifest = m;
+                    byteSource = (sd) => {
+                        const f = map[sd];
+                        return f ? f.arrayBuffer() : Promise.reject(new Error('missing ' + sd));
+                    };
+                    previewCache = {};
+                    const cfg = getConfig(m.arenaConfig);
+                    setStatus('loaded · ' + ((cfg && cfg.label) || m.arenaConfig || '(unknown arena)') + ' · ' +
+                        Object.keys(m.patterns || {}).length + ' patterns' + (m.set_id ? ' · ' + m.set_id : ''));
+                    populateDropdown(m);
+                } catch (e) {
+                    setStatus('load failed: ' + (e.message || e), 'l-err');
+                }
+            });
+
+            loadBuiltin();
         </script>
     </body>
 </html>
