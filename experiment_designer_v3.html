@@ -1515,7 +1515,7 @@
     <!-- Footer -->
     <div class="app-footer">
         <a href="https://github.com/reiserlab/webDisplayTools" target="_blank">Reiser Lab</a> |
-        v3 Experiment Designer v0.31 | <span id="footerTimestamp">2026-06-11 16:19 ET</span>
+        v3 Experiment Designer v0.32 | <span id="footerTimestamp">2026-06-11 16:24 ET</span>
     </div>
 
     <!-- Error modal -->
@@ -5161,9 +5161,24 @@
         // Nominal vs run order match for non-randomized sequences; for randomized
         // blocks it tracks the right block — enough as a "you are here" cue.
         function highlightTimelineStep(runIndex) {
-            document
-                .querySelectorAll('#timelineTrack .timeline-steps .step')
-                .forEach((c) => c.classList.toggle('running', Number(c.dataset.stepIdx) === runIndex));
+            const track = $('timelineTrack');
+            if (!track) return;
+            let active = null;
+            track.querySelectorAll('.timeline-steps .step').forEach((c) => {
+                const on = Number(c.dataset.stepIdx) === runIndex;
+                c.classList.toggle('running', on);
+                if (on) active = c;
+            });
+            // Keep the active step centered in the horizontally-scrolling timeline.
+            // scrollTo clamps at the ends, so the first/last few steps sit as centered
+            // as the content allows. Scrolls ONLY the track, never the page (we set the
+            // track's scrollLeft directly rather than using scrollIntoView).
+            if (active) {
+                const cRect = track.getBoundingClientRect();
+                const aRect = active.getBoundingClientRect();
+                const delta = aRect.left - cRect.left - (track.clientWidth / 2 - aRect.width / 2);
+                track.scrollTo({ left: track.scrollLeft + delta, behavior: 'smooth' });
+            }
         }
         function clearTimelineHighlight() {
             document
