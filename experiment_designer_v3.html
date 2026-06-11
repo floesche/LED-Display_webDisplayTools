@@ -1696,6 +1696,32 @@
             }
         }
 
+        // On protocol load: if rig_path matches a built-in rig (configs/rigs/index.json),
+        // auto-load it so the arena config resolves and the Pattern Set builder + W/C
+        // pattern resolution work without the user having to re-pick the (already
+        // pre-selected) rig in the dropdown. A non-built-in / local path is left for
+        // Browse… (the browser can't read an arbitrary local filesystem path). Never
+        // marks the doc dirty — onRigEdit is a no-op when the path is unchanged.
+        async function maybeAutoLoadBuiltinRig() {
+            if (!experiment || !experiment.rig_path) return;
+            const want = experiment.rig_path;
+            if (loadedRig && loadedRig.path === want) return; // already resolved
+            if (builtinRigs === null) {
+                try {
+                    const r = await fetch('./configs/rigs/index.json', { cache: 'no-store' });
+                    const j = r.ok ? await r.json() : null;
+                    builtinRigs = j && Array.isArray(j.rigs) ? j.rigs : [];
+                } catch (_) {
+                    builtinRigs = [];
+                }
+            }
+            const match = (builtinRigs || []).find((r) => r.path === want);
+            // The user may have loaded another protocol while we awaited — re-check.
+            if (!match || !experiment || experiment.rig_path !== want) return;
+            await loadBuiltinRig(match.path); // fetch + applyRigData (+ renderSettings)
+            renderAll(); // refresh W/C chips + timeline now that the arena resolves
+        }
+
         // date_created standardized to YYYY-MM-DD (local). toISODate coerces an existing
         // value (ISO with time, or anything Date can parse) to the date part, else ''.
         const pad2 = (n) => String(n).padStart(2, '0');
@@ -1874,6 +1900,10 @@
                 // undo stack (so the wipe is reversible); imports/demos clear it.
                 if (!opts.keepUndo) clearUndo();
                 renderAll();
+                // If the protocol's rig is a bundled one, resolve its arena config now
+                // (async, non-blocking) so the Pattern Set builder + W/C resolution work
+                // without re-picking the pre-selected rig. Local paths are left for Browse….
+                maybeAutoLoadBuiltinRig();
                 $('exportBtn').disabled = false;
                 $('resetBtn').disabled = false;
                 $('addCondBtn').disabled = false;
