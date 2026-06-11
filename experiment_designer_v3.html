@@ -671,8 +671,12 @@
         }
         .wc-w { color: var(--accent); border: 1px solid var(--accent); background: rgba(0, 230, 118, 0.12); }
         .wc-c { color: #6cb1ff; border: 1px solid #3b6ea5; background: rgba(88, 166, 255, 0.12); }
-        /* LAB-96: animated pattern preview next to the picker dropdown. */
-        .pat-preview-host { margin-top: 0.35rem; }
+        /* LAB-96: animated pattern preview. It sits on its OWN full-width line BELOW the
+           picker controls — the pattern kv-line wraps (.kv-pattern) and the host takes
+           flex-basis:100%, so the thumbnail stays inside the inspector column instead of
+           overflowing off the right edge. */
+        .cmd-card .kv-line.kv-pattern { flex-wrap: wrap; }
+        .pat-preview-host { margin-top: 0.35rem; flex-basis: 100%; }
         .pat-preview { position: relative; display: inline-block; line-height: 0; }
         .pat-preview img {
             width: 96px; height: 96px; border-radius: 6px;
@@ -1492,7 +1496,7 @@
     <!-- Footer -->
     <div class="app-footer">
         <a href="https://github.com/reiserlab/webDisplayTools" target="_blank">Reiser Lab</a> |
-        v3 Experiment Designer v0.28 | <span id="footerTimestamp">2026-06-10 20:35 ET</span>
+        v3 Experiment Designer v0.29 | <span id="footerTimestamp">2026-06-11 07:01 ET</span>
     </div>
 
     <!-- Error modal -->
@@ -4210,6 +4214,7 @@
         // The dropdown's trailing "C · computer / MATLAB pattern…" option switches to C.
         // Only reached when activeSet() exists (gated at the renderCommandCard call site).
         function renderPatternPickerField(wrapper, path, value, bindBtn) {
+            wrapper.classList.add('kv-pattern'); // let the preview wrap onto its own line
             const items = activeSetValidItems();
             const COMP = '__computer__';
             window.PatternSet.assignIndices(activeSet());

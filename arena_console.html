@@ -242,6 +242,12 @@
                 border-radius: 3px;
                 font-family: 'JetBrains Mono', monospace;
             }
+            /* LAB-95: the pattern # is locked (driven by the name dropdown) when a set is loaded. */
+            #tp-pat[readonly] {
+                opacity: 0.55;
+                cursor: not-allowed;
+                background: var(--surface);
+            }
         </style>
     </head>
     <body>
@@ -314,7 +320,7 @@
                     <label title="Active pattern set (manifest.json)">set</label>
                     <button
                         id="btn-loadset"
-                        title="Load a built SD-bundle folder (manifest.json + patterns/) to pick patterns by name + preview. Defaults to the built-in library served with this tool."
+                        title="Point at a built SD-bundle FOLDER — the unzipped Export-ZIP from the Pattern Set builder (a folder with manifest.json + a patterns/ subfolder), or the SD card if you copied the whole bundle onto it. The arena's built-in library loads automatically; use this only for a custom set."
                     >
                         Load set…
                     </button>
@@ -483,7 +489,7 @@
             diagnose framing problems.
         </div>
 
-        <footer id="footer">Arena Console v2 | 2026-06-10 19:58 ET</footer>
+        <footer id="footer">Arena Console v3 | 2026-06-11 07:01 ET</footer>
 
         <!-- Milestone-A substrate — window-global dual-export path (no build, no ES import). -->
         <script src="js/arena-wire-g6.js"></script>
@@ -638,6 +644,13 @@
                         gain: parseInt($('tp-gain').value, 10),
                         initPos: parseInt($('tp-init').value, 10)
                     };
+                    if (p.frameRate < 0) {
+                        log(
+                            'Negative frame rate isn’t supported in open-loop (Mode 2) — the controller advances frames forward only. For reverse playback, use Mode 4 (closed-loop) with a negative gain.',
+                            'err'
+                        );
+                        return;
+                    }
                     try {
                         run(
                             `trial-params ${JSON.stringify(p)}`,
@@ -678,6 +691,17 @@
 
             const BUILTIN_BASE = './patterns/g6_2x10/'; // the served default library
 
+            // #tp-pat is the raw SD index. When a set is loaded the name dropdown drives
+            // it, so lock it (read-only) to avoid a confusing second entry point; unlock
+            // it when there's no set so the console still works as a raw index sender.
+            const PAT_RAW_TITLE = tpPat.title;
+            function lockPat(locked) {
+                tpPat.readOnly = locked;
+                tpPat.title = locked
+                    ? 'Driven by the pattern name above — the resolved 1-based SD index sent via trial_params. (Clear/replace the set to enter an index by hand.)'
+                    : PAT_RAW_TITLE;
+            }
+
             let activeManifest = null;
             let byteSource = null; // (sd_name) => Promise<ArrayBuffer>
             let previewCache = {};
@@ -707,6 +731,7 @@
                     o.textContent = '(empty set)';
                     nameSel.appendChild(o);
                     previewHost.innerHTML = '';
+                    lockPat(false); // no set to drive it → raw index entry stays editable
                     return;
                 }
                 names.sort((a, b) => (m.patterns[a].index || 0) - (m.patterns[b].index || 0));
@@ -719,6 +744,7 @@
                 }
                 nameSel.value = names[0];
                 applyPick(names[0]);
+                lockPat(true); // a set is active → the dropdown drives the SD index
             }
 
             async function renderPreview(name) {
@@ -802,6 +828,7 @@
                     populateDropdown(m);
                 } catch (e) {
                     setStatus('built-in library unavailable — use “Load set…”', 'l-err');
+                    lockPat(false);
                 }
             }
 
@@ -828,6 +855,7 @@
                     populateDropdown(m);
                 } catch (e) {
                     setStatus('load failed: ' + (e.message || e), 'l-err');
+                    lockPat(false);
                 }
             });
 
