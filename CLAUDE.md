@@ -670,8 +670,14 @@ D4 import binds **canonical** rig plugin names instead of prefixing them (closes
 
 ### The rig→class mapping (in `js/plugin-registry.js`, pure, no YAML dep)
 - `WELL_KNOWN_RIG_PLUGIN_NAMES = ['backlight', 'camera', 'temperature']` — the
-  canonical rig plugin names. **Note** the rig calls the thermometer `temperature`
-  while the registry key is `thermometer` (class `DAQThermometerPlugin`).
+  canonical rig plugin names. The DAQ thermometer's registry key is **`temperature`**
+  (class `DAQThermometerPlugin`), matching the rig + experiment YAML — adding it in the
+  designer produces `name: temperature` so the rig's config inherits (name-based match).
+  Fixed 2026-06-11 (reported by Lisa F.): it used to be keyed `thermometer`, which
+  exported as `name: thermometer` and silently broke config inheritance. The legacy
+  `thermometer` rig key is still tolerated (`RIG_PLUGIN_KEY_MAP`/`TYPE_MAP` map it to
+  the `temperature` built-in). v3 command lookup is by `matlab.class`, so import is
+  name-agnostic regardless.
 - `mapRigPluginToBuiltin(rigKey, rigType)` — **tolerant**: match the well-known
   KEY first (`RIG_PLUGIN_KEY_MAP`), then a normalized `type` (`RIG_PLUGIN_TYPE_MAP`,
   handles `"LED Controller"`, `"Bias"`/`"BIAS"`), else `null` ("unknown plugin type").
