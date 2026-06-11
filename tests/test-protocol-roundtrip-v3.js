@@ -690,7 +690,7 @@ console.log('\n--- Suite 10: v3 plugin registry (class-based lookup + log) ---')
     check(
         'registry: findPluginDefByClass(DAQThermometerPlugin)',
         findPluginDefByClass('DAQThermometerPlugin')?.name,
-        'thermometer'
+        'temperature'
     );
     check(
         'registry: findPluginDefByClass(BiasPlugin)',
@@ -3276,22 +3276,24 @@ console.log('\n--- Suite N11: add/remove plugin from registry ---');
     const exp = parseV3Protocol(yaml);
     check('N11: starts with zero plugins', exp.plugins.length, 0);
 
-    const entry = createPluginEntry('thermometer');
+    const entry = createPluginEntry('temperature');
     checkTrue(
-        'N11: createPluginEntry builds thermometer w/ matlab class',
+        'N11: createPluginEntry builds temperature w/ matlab class',
         !!entry && entry.matlab && entry.matlab.class === 'DAQThermometerPlugin'
     );
 
     const node = exp._doc.createNode(entry);
     docInsertPluginNode(exp, node);
     check('N11: mirror has the plugin', exp.plugins.length, 1);
-    check('N11: mirror plugin name', exp.plugins[0].name, 'thermometer');
+    // Plugin name matches the canonical rig key `temperature` (Lisa F., 2026-06-10),
+    // so the rig's config carries over.
+    check('N11: mirror plugin name', exp.plugins[0].name, 'temperature');
 
     // Commands now resolve via matlab.class → available in the Add-command picker
-    checkTrue('N11: thermometer in listV3PluginNames', listV3PluginNames(exp).includes('thermometer'));
+    checkTrue('N11: temperature in listV3PluginNames', listV3PluginNames(exp).includes('temperature'));
     checkTrue(
-        'N11: thermometer commands resolve',
-        Object.keys(getV3PluginCommands(exp, 'thermometer')).length > 0
+        'N11: temperature commands resolve',
+        Object.keys(getV3PluginCommands(exp, 'temperature')).length > 0
     );
 
     // Re-parse the regenerated YAML — the new plugin survives a roundtrip
@@ -3300,7 +3302,7 @@ console.log('\n--- Suite N11: add/remove plugin from registry ---');
     check('N11: roundtrip plugin class', reparsed.plugins[0].matlab.class, 'DAQThermometerPlugin');
 
     // Now remove it — both the doc node and the mirror drop
-    checkTrue('N11: docRemovePlugin returns true', docRemovePlugin(exp, 'thermometer') === true);
+    checkTrue('N11: docRemovePlugin returns true', docRemovePlugin(exp, 'temperature') === true);
     check('N11: mirror empty after remove', exp.plugins.length, 0);
     checkTrue(
         'N11: plugins: seq empty after remove',
@@ -3358,7 +3360,8 @@ console.log('\n--- Suite N12: rig-aware plugin parse + mapping ---');
 
     // (d) tolerant fallback + unknown degradation
     check('N12d: mapRigPluginToBuiltin("camera") → camera', mapRigPluginToBuiltin('camera').builtinName, 'camera');
-    check('N12d: mapRigPluginToBuiltin("temperature") → thermometer', mapRigPluginToBuiltin('temperature').builtinName, 'thermometer');
+    check('N12d: mapRigPluginToBuiltin("temperature") → temperature', mapRigPluginToBuiltin('temperature').builtinName, 'temperature');
+    check('N12d: legacy "thermometer" rig key still maps → temperature', mapRigPluginToBuiltin('thermometer').builtinName, 'temperature');
     check('N12d: unknown key + known TYPE falls back', mapRigPluginToBuiltin('cam2', 'LED Controller').builtinName, 'backlight');
     checkTrue('N12d: unknown key + unknown type → null', mapRigPluginToBuiltin('zorp', 'Quantum Flux') === null);
     const weird = deriveRigPlugins(parseRigYAMLText('plugins:\n  zorp:\n    enabled: true\n    type: "Quantum Flux"\n'));

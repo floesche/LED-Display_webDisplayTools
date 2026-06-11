@@ -254,8 +254,12 @@ var BUILTIN_PLUGINS = {
         }
     },
 
-    thermometer: {
-        name: 'thermometer',
+    // Keyed `temperature` to match the canonical rig plugin name (per Lisa F.,
+    // 2026-06-10): rig YAMLs declare this plugin as `temperature`, so the experiment
+    // YAML must use the same name or the rig's config won't carry over (the code
+    // matches plugins by name). The MATLAB implementation class stays DAQThermometerPlugin.
+    temperature: {
+        name: 'temperature',
         label: 'DAQ Thermometer',
         type: 'class',
         matlab: { class: 'DAQThermometerPlugin' },
@@ -558,8 +562,7 @@ function getAllCommandOptions(enabledPlugins) {
  *
  * @param {string} pluginName - builtin plugin name (registry key)
  * @param {string} [overrideName] - optional name for the entry. Used when adding
- *        a plugin under its canonical RIG key (e.g. the rig calls the thermometer
- *        `temperature` while the registry key is `thermometer`). Defaults to def.name.
+ *        a plugin under a rig key that differs from the registry key. Defaults to def.name.
  * @returns {object} plugin definition suitable for experiment.plugins[]
  */
 function createPluginEntry(pluginName, overrideName) {
@@ -691,13 +694,14 @@ function getV3CommandParams(experiment, type, pluginName, commandName) {
 // Canonical rig plugin names — never namespaced on import (the #89 baseline).
 var WELL_KNOWN_RIG_PLUGIN_NAMES = ['backlight', 'camera', 'temperature'];
 
-// Well-known rig KEY → built-in registry key. Note the rig calls the thermometer
-// `temperature`; the registry key is `thermometer`.
+// Well-known rig KEY → built-in registry key. The DAQ thermometer is keyed
+// `temperature` (matching the rig + experiment YAML); the legacy `thermometer`
+// name is tolerated and still maps to the `temperature` built-in.
 var RIG_PLUGIN_KEY_MAP = {
     backlight: 'backlight',
     camera: 'camera',
-    temperature: 'thermometer',
-    thermometer: 'thermometer'
+    temperature: 'temperature',
+    thermometer: 'temperature'
 };
 
 // Normalized `type` string → built-in registry key (fallback when the rig key
@@ -705,9 +709,9 @@ var RIG_PLUGIN_KEY_MAP = {
 var RIG_PLUGIN_TYPE_MAP = {
     ledcontroller: 'backlight',
     bias: 'camera',
-    daqthermometer: 'thermometer',
-    thermometer: 'thermometer',
-    temperature: 'thermometer'
+    daqthermometer: 'temperature',
+    thermometer: 'temperature',
+    temperature: 'temperature'
 };
 
 function _normalizeRigType(rigType) {
