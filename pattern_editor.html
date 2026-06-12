@@ -1706,7 +1706,7 @@
 <body>
     <!-- Development Banner -->
     <div class="dev-banner">
-        🚧 Pattern Editor v0.9.35 | 2026-03-11 08:34 ET — <a href="https://github.com/reiserlab/webDisplayTools/issues/6" target="_blank">View progress on GitHub</a>
+        🚧 Pattern Editor v0.9.36 | 2026-06-12 07:54 ET — <a href="https://github.com/reiserlab/webDisplayTools/issues/6" target="_blank">View progress on GitHub</a>
     </div>
 
     <div class="app-container">
@@ -2319,6 +2319,7 @@
                 <div class="capture-buttons">
                     <button class="capture-btn" id="captureFrameBtn" title="Capture current frame to clipboard">↓ Frame</button>
                     <button class="capture-btn capture-pat" id="capturePatBtn" title="Capture full pattern to clipboard">↓ Pat</button>
+                    <button class="capture-btn" id="copyFrameJsonBtn" title="Copy the current frame to the system clipboard as JSON — paste into the Arena Console's Paste frame box to stream it">⧉ Copy</button>
                 </div>
             </div>
 
@@ -2676,6 +2677,7 @@
             // Capture buttons
             document.getElementById('captureFrameBtn').addEventListener('click', captureFrame);
             document.getElementById('capturePatBtn').addEventListener('click', storePatternToClipboard);
+            document.getElementById('copyFrameJsonBtn').addEventListener('click', copyCurrentFrameAsJson);
 
             // Generate button and pattern type change
             document.getElementById('generateBtn').addEventListener('click', handleGenerate);
@@ -3898,6 +3900,45 @@
             switchClipboardTab('frames');  // Show frames tab
 
             console.log('Captured frame to clipboard:', clipboardEntry.name);
+        }
+
+        // Copy the current frame to the SYSTEM clipboard as JSON, in the exact
+        // format arena_console.html's "Paste frame…" box accepts:
+        //   { gs, rows, cols, data }  — data flat row-major, row 0 = bottom.
+        // The editor, pat-encoder.js and pat-parser.js all use row-0-bottom, so
+        // no vertical flip or value rescale is needed. Lets you copy a frame here
+        // and stream it on the bench via the Arena Console.
+        async function copyCurrentFrameAsJson() {
+            if (!state.pattern) {
+                alert('No pattern loaded');
+                return;
+            }
+            const { pixelRows, pixelCols, gsMode } = state.pattern;
+            const frame = state.pattern.frames[state.editor.currentFrame];
+            const gs = gsMode === 2 ? 2 : 16;
+            const max = gs === 2 ? 1 : 15;
+            const data = Array.from(frame, (v) => Math.max(0, Math.min(max, v | 0)));
+            const json = JSON.stringify({ gs, rows: pixelRows, cols: pixelCols, data });
+
+            const btn = document.getElementById('copyFrameJsonBtn');
+            const flash = (msg) => {
+                if (!btn) return;
+                const orig = btn.textContent;
+                btn.textContent = msg;
+                setTimeout(() => (btn.textContent = orig), 1200);
+            };
+            try {
+                await navigator.clipboard.writeText(json);
+                flash('✓ Copied');
+                console.log(
+                    `Copied frame ${state.editor.currentFrame + 1} as JSON (GS${gs}, ${pixelRows}×${pixelCols})`
+                );
+            } catch (e) {
+                // file:// and older browsers have no async clipboard — offer the
+                // text so the user can copy it by hand.
+                console.warn('Clipboard write failed; falling back to prompt:', e);
+                window.prompt('Copy this frame JSON (Ctrl/Cmd+C):', json);
+            }
         }
 
         // Store current pattern to patterns clipboard

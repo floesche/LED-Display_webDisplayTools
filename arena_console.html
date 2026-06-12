@@ -5,12 +5,20 @@
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Arena Console — G6 live control</title>
         <!--
-          Arena Console v2 — the experimenter-facing PControl successor for the
-          G6 arena. A standalone live-control page built on the Milestone-A Web
-          Serial substrate (LAB-88/89) with a pattern-set name picker (LAB-95):
-            js/arena-wire-g6.js  (window.ArenaWireG6 — encoders/decoders)
-            js/arena-link.js     (window.ArenaLink   — transport)
+          Arena Console v4 — the experimenter-facing PControl successor for the
+          G6 arena. A compact, vertical, PControl-style live-control page built on
+          the Milestone-A Web Serial substrate (LAB-88/89), with a pattern-set
+          name picker (LAB-95) and host-streamed frames (LAB-112, STREAM_FRAME 0x32):
+            js/arena-wire-g6.js  (window.ArenaWireG6 — encoders/decoders + encodeStreamFrame)
+            js/arena-link.js     (window.ArenaLink   — transport, opts.expectedCmd)
+            js/pat-encoder.js    (window.PatEncoder  — builds the stream-frame payload)
           loaded via <script src> (window-global dual-export path).
+
+          Layout (LAB-112): less-common commands live in the top menu bar
+          (Controller / Debug); the core controls cluster in the middle; the
+          console log gets the bottom third. The SD-card / PS-RAM boxes are white
+          on purpose, to read as "device storage" against the dark theme. Narrow
+          and centered so it can sit side-by-side with the other web apps.
 
           Open in Chrome/Edge (file:// is fine). Close any other serial monitor
           first — only one process can hold the port. If the log shows garbled
@@ -26,6 +34,7 @@
             :root {
                 --bg: #0f1419;
                 --surface: #1a1f26;
+                --surface2: #161b22;
                 --border: #2d3640;
                 --text: #e6edf3;
                 --dim: #8b949e;
@@ -33,80 +42,246 @@
                 --hover: #00c853;
                 --err: #ff6b6b;
                 --rx: #58a6ff;
+                /* white "device memory" boxes — deliberate stand-off from the dark theme */
+                --mem-bg: #f5f7fa;
+                --mem-text: #1a1f26;
+                --mem-dim: #5a6573;
+                --mem-border: #c9d2dd;
             }
             * {
                 box-sizing: border-box;
+            }
+            html,
+            body {
+                height: 100%;
             }
             body {
                 margin: 0;
                 background: var(--bg);
                 color: var(--text);
                 font-family: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
-                font-size: 13px;
-                line-height: 1.5;
+                font-size: 12px;
+                line-height: 1.45;
+                display: flex;
+                justify-content: center;
             }
+            /* the whole console: a narrow, centered, full-height column */
+            .app {
+                width: 540px;
+                max-width: 100%;
+                height: 100vh;
+                display: flex;
+                flex-direction: column;
+                border-left: 1px solid var(--border);
+                border-right: 1px solid var(--border);
+            }
+
+            /* ── header strip ─────────────────────────────────────────── */
             header {
-                padding: 14px 18px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 9px 12px;
                 border-bottom: 1px solid var(--border);
+                flex: 0 0 auto;
             }
-            h1 {
+            .brand {
                 font-family: 'JetBrains Mono', ui-monospace, monospace;
-                font-size: 16px;
-                margin: 0 0 2px;
+                font-size: 15px;
                 color: var(--accent);
             }
-            .sub {
-                color: var(--dim);
-                font-size: 12px;
-                max-width: 720px;
-            }
-            #banner {
-                background: #3a1d1d;
-                color: var(--err);
-                padding: 10px 18px;
-                border-bottom: 1px solid var(--border);
-            }
-            main {
+            .hdr-right {
                 display: flex;
-                gap: 16px;
-                padding: 16px 18px;
-                align-items: flex-start;
-                flex-wrap: wrap;
+                align-items: center;
+                gap: 12px;
             }
-            .panel {
+            .conn {
+                font-size: 11px;
+                color: var(--err);
+            }
+            .conn.on {
+                color: var(--accent);
+            }
+            .nav-link {
+                color: var(--dim);
+                text-decoration: none;
+                font-size: 11px;
+                transition: color 0.2s;
+            }
+            .nav-link:hover {
+                color: var(--accent);
+            }
+            .dot {
+                display: inline-block;
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: var(--err);
+                margin-right: 5px;
+                vertical-align: middle;
+            }
+            .dot.on {
+                background: var(--accent);
+                box-shadow: 0 0 6px var(--accent);
+            }
+
+            /* ── menu bar ─────────────────────────────────────────────── */
+            .menubar {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 6px 12px;
+                border-bottom: 1px solid var(--border);
+                flex: 0 0 auto;
+            }
+            .menus {
+                display: flex;
+                gap: 6px;
+            }
+            .menu {
+                position: relative;
+            }
+            .menu-btn {
                 background: var(--surface);
+                color: var(--text);
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                padding: 5px 9px;
+                font-family: inherit;
+                font-size: 11px;
+                cursor: pointer;
+            }
+            .menu.open .menu-btn,
+            .menu-btn:hover {
+                border-color: var(--accent);
+                color: var(--accent);
+            }
+            .menu-pop {
+                display: none;
+                position: absolute;
+                top: calc(100% + 4px);
+                left: 0;
+                z-index: 30;
+                min-width: 220px;
+                background: var(--surface2);
                 border: 1px solid var(--border);
                 border-radius: 6px;
-                padding: 12px 14px;
-                min-width: 300px;
-                flex: 1;
+                padding: 6px;
+                box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
             }
-            .panel h2 {
-                font-family: 'JetBrains Mono', ui-monospace, monospace;
-                font-size: 12px;
+            .menu.open .menu-pop {
+                display: block;
+            }
+            .menu-item {
+                display: block;
+                width: 100%;
+                text-align: left;
+                background: none;
+                border: none;
+                color: var(--text);
+                font-family: inherit;
+                font-size: 11px;
+                padding: 6px 8px;
+                border-radius: 4px;
+                cursor: pointer;
+            }
+            .menu-item:hover:not(:disabled) {
+                background: var(--surface);
+                color: var(--accent);
+            }
+            .menu-item:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+            }
+            .menu-row {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 4px 6px;
+            }
+            .menu-row label {
+                color: var(--dim);
+                min-width: 64px;
+            }
+            .menu-sep {
+                color: var(--dim);
+                font-size: 10px;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
+                padding: 8px 8px 3px;
+                border-top: 1px solid var(--border);
+                margin-top: 4px;
+            }
+            .stub {
+                display: block;
+                width: 100%;
+                text-align: left;
+                background: none;
+                border: 1px dashed var(--border);
                 color: var(--dim);
-                margin: 0 0 10px;
+                font-family: inherit;
+                font-size: 11px;
+                padding: 5px 8px;
+                margin-top: 4px;
+                border-radius: 4px;
+                cursor: not-allowed;
+                opacity: 0.7;
             }
-            .row {
+            .conn-actions {
                 display: flex;
-                gap: 8px;
-                flex-wrap: wrap;
-                align-items: center;
-                margin-bottom: 8px;
+                gap: 6px;
             }
-            .row:last-child {
+
+            /* ── core (middle, scrolls if needed) ─────────────────────── */
+            .core {
+                flex: 2 1 0;
+                overflow-y: auto;
+                padding: 10px 12px;
+                display: flex;
+                flex-direction: column;
+                gap: 9px;
+            }
+            .grp {
+                border: 1px solid var(--border);
+                border-radius: 6px;
+                padding: 8px 9px;
+                background: var(--surface);
+            }
+            .grp-row {
+                display: flex;
+                align-items: center;
+                gap: 7px;
+                margin-bottom: 6px;
+            }
+            .grp-row:last-child {
                 margin-bottom: 0;
             }
+            .grp-row.wrap {
+                flex-wrap: wrap;
+            }
+            .lbl {
+                color: var(--dim);
+                min-width: 58px;
+                font-size: 11px;
+            }
+            .small {
+                font-size: 11px;
+            }
+            .dim {
+                color: var(--dim);
+            }
+            .mono {
+                font-family: 'JetBrains Mono', monospace;
+            }
+
             button {
                 background: var(--surface);
                 color: var(--text);
                 border: 1px solid var(--border);
                 border-radius: 5px;
-                padding: 7px 11px;
+                padding: 6px 10px;
                 font-family: inherit;
-                font-size: 12px;
+                font-size: 11px;
                 cursor: pointer;
             }
             button:hover:not(:disabled) {
@@ -131,6 +306,9 @@
                 border-color: var(--err);
                 color: var(--err);
             }
+            button.mini {
+                padding: 4px 8px;
+            }
             label {
                 color: var(--dim);
             }
@@ -140,63 +318,184 @@
                 color: var(--text);
                 border: 1px solid var(--border);
                 border-radius: 4px;
-                padding: 5px 7px;
+                padding: 4px 6px;
                 font-family: inherit;
-                font-size: 12px;
-                width: 70px;
+                font-size: 11px;
+                width: 56px;
             }
             select {
                 width: auto;
             }
-            .dot {
-                display: inline-block;
-                width: 9px;
-                height: 9px;
-                border-radius: 50%;
-                background: var(--err);
-                margin-right: 6px;
-                vertical-align: middle;
+            input[type='range'] {
+                width: 90px;
+                padding: 0;
             }
-            .dot.on {
+            #tp-pat-name {
+                max-width: 230px;
+            }
+
+            /* segmented GS toggle */
+            .seg {
+                display: inline-flex;
+                border: 1px solid var(--border);
+                border-radius: 5px;
+                overflow: hidden;
+            }
+            .seg-btn {
+                border: none;
+                border-radius: 0;
+                padding: 4px 9px;
+                background: var(--surface);
+                color: var(--dim);
+            }
+            .seg-btn.seg-on {
                 background: var(--accent);
-                box-shadow: 0 0 6px var(--accent);
+                color: #04140a;
             }
-            #status {
-                font-weight: 600;
-                color: var(--err);
-            }
-            #status.on {
+            .seg-btn:hover:not(.seg-on) {
                 color: var(--accent);
             }
+
+            /* preview thumbnails */
+            #ps-preview-host,
+            .thumb {
+                min-width: 56px;
+                min-height: 56px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .pat-preview {
+                position: relative;
+                display: inline-block;
+                line-height: 0;
+            }
+            .pat-preview img,
+            .thumb-img {
+                width: 56px;
+                height: 56px;
+                border-radius: 5px;
+                border: 1px solid var(--border);
+                background: var(--bg);
+            }
+            .pat-preview-badge {
+                position: absolute;
+                bottom: 3px;
+                right: 3px;
+                background: rgba(0, 0, 0, 0.7);
+                color: var(--accent);
+                font-size: 10px;
+                padding: 0 4px;
+                border-radius: 3px;
+                font-family: 'JetBrains Mono', monospace;
+            }
+            #tp-pat[readonly] {
+                opacity: 0.55;
+                cursor: not-allowed;
+                background: var(--surface);
+            }
+
+            /* ── white device-memory boxes ────────────────────────────── */
+            .mem-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+            .mem-box {
+                background: var(--mem-bg);
+                color: var(--mem-text);
+                border: 1px solid var(--mem-border);
+                border-radius: 6px;
+                padding: 7px 9px;
+                font-size: 11px;
+                overflow: hidden;
+            }
+            .mem-h {
+                color: var(--mem-dim);
+                font-weight: 600;
+                margin-bottom: 5px;
+                font-size: 11px;
+            }
+            .mem-body {
+                max-height: 92px;
+                overflow-y: auto;
+            }
+            .sd-row {
+                padding: 1px 0;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .mem-empty {
+                color: #a6b0bc;
+            }
+            .mem-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 11px;
+            }
+            .mem-table th {
+                text-align: left;
+                color: var(--mem-dim);
+                font-weight: 600;
+                border-bottom: 1px solid var(--mem-border);
+                padding: 1px 2px;
+            }
+            .mem-table td {
+                padding: 2px;
+                color: #6b7686;
+            }
+            .mem-table tr.empty td {
+                color: #a6b0bc;
+                text-align: center;
+            }
+
+            /* ── log (bottom third) ───────────────────────────────────── */
+            .logwrap {
+                flex: 1 1 0;
+                min-height: 150px;
+                display: flex;
+                flex-direction: column;
+                border-top: 1px solid var(--border);
+            }
+            .log-tools {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                padding: 6px 12px;
+                flex: 0 0 auto;
+            }
+            .log-tools .spacer {
+                flex: 1;
+            }
+            .log-tools button {
+                padding: 4px 9px;
+            }
             #log {
+                flex: 1 1 auto;
                 background: #0a0e12;
+                margin: 0 12px 10px;
+                padding: 9px;
                 border: 1px solid var(--border);
                 border-radius: 6px;
-                margin: 0 18px;
-                padding: 10px;
-                height: 300px;
                 overflow-y: auto;
                 white-space: pre-wrap;
                 word-break: break-word;
-                font-size: 12px;
-            }
-            .log-tools {
-                padding: 8px 18px 4px;
-                display: flex;
-                gap: 8px;
-                align-items: center;
-            }
-            .hint {
-                color: var(--dim);
                 font-size: 11px;
-                padding: 0 18px 14px;
-                max-width: 760px;
             }
             footer {
                 color: var(--dim);
-                font-size: 11px;
-                padding: 12px 18px 18px;
+                font-size: 10px;
+                padding: 7px 12px;
                 border-top: 1px solid var(--border);
+                flex: 0 0 auto;
+            }
+            #banner {
+                background: #3a1d1d;
+                color: var(--err);
+                padding: 8px 12px;
+                border-bottom: 1px solid var(--border);
+                font-size: 11px;
             }
             .l-tx {
                 color: var(--accent);
@@ -213,61 +512,206 @@
             .l-dim {
                 color: var(--dim);
             }
-            /* LAB-95 pattern picker — animated cylindrical preview thumbnail. */
-            #ps-preview-host {
-                min-height: 90px;
+            .ok-msg {
+                color: var(--accent);
+            }
+            .err-msg {
+                color: var(--err);
+            }
+
+            /* ── paste-frame modal ────────────────────────────────────── */
+            .modal {
+                position: fixed;
+                inset: 0;
+                background: rgba(0, 0, 0, 0.6);
                 display: flex;
                 align-items: center;
+                justify-content: center;
+                z-index: 100;
             }
-            .pat-preview {
-                position: relative;
-                display: inline-block;
-                line-height: 0;
+            .modal[hidden] {
+                display: none;
             }
-            .pat-preview img {
-                width: 90px;
-                height: 90px;
-                border-radius: 6px;
-                border: 1px solid var(--border);
-                background: var(--bg);
-            }
-            .pat-preview-badge {
-                position: absolute;
-                bottom: 3px;
-                right: 3px;
-                background: rgba(0, 0, 0, 0.7);
-                color: var(--accent);
-                font-size: 10px;
-                padding: 0 4px;
-                border-radius: 3px;
-                font-family: 'JetBrains Mono', monospace;
-            }
-            /* LAB-95: the pattern # is locked (driven by the name dropdown) when a set is loaded. */
-            #tp-pat[readonly] {
-                opacity: 0.55;
-                cursor: not-allowed;
+            .modal-card {
+                width: 460px;
+                max-width: 92vw;
                 background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 8px;
+                padding: 14px 16px;
+            }
+            .modal-h {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                font-family: 'JetBrains Mono', monospace;
+                color: var(--accent);
+                font-size: 13px;
+                margin-bottom: 6px;
+            }
+            .modal-h button {
+                padding: 2px 7px;
+            }
+            #paste-text {
+                width: 100%;
+                height: 130px;
+                resize: vertical;
+                background: var(--bg);
+                color: var(--text);
+                border: 1px solid var(--border);
+                border-radius: 4px;
+                font-family: 'JetBrains Mono', monospace;
+                font-size: 11px;
+                padding: 7px;
+                margin: 6px 0;
+            }
+            .modal-row {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+                margin-top: 8px;
             }
         </style>
     </head>
     <body>
-        <header>
-            <h1>Arena Console</h1>
-            <div class="sub">
-                Live control for the G6 arena over Web Serial — connect a controller over USB,
-                then drive the display directly. The experimenter-facing successor to PControl.
+        <div class="app">
+            <header>
+                <span class="brand">Arena console</span>
+                <span class="hdr-right">
+                    <span class="conn" id="conn">
+                        <span class="dot" id="dot"></span><span id="status">disconnected</span>
+                    </span>
+                    <a href="index.html" class="nav-link" title="Back to PanelDisplayTools home"
+                        >← Back to Tools</a
+                    >
+                </span>
+            </header>
+
+            <div id="banner" hidden>
+                ⚠ Web Serial is unavailable in this browser. Use Chrome, Edge, or another
+                Chromium-based desktop browser.
             </div>
-        </header>
 
-        <div id="banner" hidden>
-            ⚠ Web Serial is unavailable in this browser. Use Chrome, Edge, or another
-            Chromium-based desktop browser.
-        </div>
+            <nav class="menubar">
+                <div class="menus">
+                    <div class="menu" data-menu>
+                        <button class="menu-btn" title="Controller queries (run on demand)">
+                            Controller ▾
+                        </button>
+                        <div class="menu-pop">
+                            <button
+                                class="cmd menu-item"
+                                data-cmd="info"
+                                disabled
+                                title="GET_CONTROLLER_INFO (0x67) — firmware version + capability bitmap. The canonical round-trip check."
+                            >
+                                Get info
+                            </button>
+                            <button
+                                class="cmd menu-item"
+                                data-cmd="ip"
+                                disabled
+                                title="GET_ETHERNET_IP (0x66) — DHCP-resolved address (meaningful only with an Ethernet link)"
+                            >
+                                Get IP
+                            </button>
+                            <button
+                                class="cmd menu-item"
+                                data-cmd="frames"
+                                disabled
+                                title="GET_FRAMES_SENT (0x19) — master-side count of frames pushed to panels"
+                            >
+                                Get frames sent
+                            </button>
+                            <button
+                                class="cmd menu-item"
+                                data-cmd="resetframes"
+                                disabled
+                                title="RESET_FRAMES_SENT (0x1A) — zero the frames-sent counter"
+                            >
+                                Reset frames sent
+                            </button>
+                        </div>
+                    </div>
 
-        <main>
-            <div class="panel">
-                <h2>Connection</h2>
-                <div class="row">
+                    <div class="menu" data-menu>
+                        <button class="menu-btn" title="Advanced / debug settings">Debug ▾</button>
+                        <div class="menu-pop">
+                            <div class="menu-row">
+                                <label title="SPI master clock">SPI MHz</label>
+                                <input
+                                    id="spi-mhz"
+                                    type="number"
+                                    min="1"
+                                    max="30"
+                                    value="20"
+                                    title="SPI clock: 1–30 MHz"
+                                />
+                                <button
+                                    class="cmd menu-item"
+                                    data-cmd="setspi"
+                                    disabled
+                                    style="width: auto"
+                                    title="SET_SPI_CLOCK (0x17) — set the panel SPI master clock (echoes the applied MHz)"
+                                >
+                                    Set
+                                </button>
+                                <button
+                                    class="cmd menu-item"
+                                    data-cmd="getspi"
+                                    disabled
+                                    style="width: auto"
+                                    title="GET_SPI_CLOCK (0x18) — read the current panel SPI master clock"
+                                >
+                                    Get
+                                </button>
+                            </div>
+                            <div class="menu-row">
+                                <label title="Panel re-transmit rate">Refresh Hz</label>
+                                <input
+                                    id="rr-hz"
+                                    type="number"
+                                    min="0"
+                                    max="65535"
+                                    value="1000"
+                                    title="Refresh rate: 0–65535 Hz. Applies only if > 0. GS16 streaming defaults to ~300 Hz, GS2 ~1000 Hz."
+                                />
+                                <button
+                                    class="cmd menu-item"
+                                    data-cmd="setrate"
+                                    disabled
+                                    style="width: auto"
+                                    title="SET_REFRESH_RATE (0x16) — set the panel re-transmit rate (Hz)"
+                                >
+                                    Set
+                                </button>
+                            </div>
+                            <div class="menu-sep">Firmware-gated (planned)</div>
+                            <button
+                                class="stub"
+                                disabled
+                                title="Planned — needs a controller report-card command (LAB-100). The console currently shows the loaded manifest.json in the SD-card box."
+                            >
+                                SD card report
+                            </button>
+                            <button
+                                class="stub"
+                                disabled
+                                title="Planned — needs the canonical trial_params layout (firmware #4: reverse frame rate + controller-timed duration). Host-timed auto-stop is available now via the duration field."
+                            >
+                                Reverse rate / timed duration
+                            </button>
+                            <button
+                                class="stub"
+                                disabled
+                                title="Planned — requires controller and panel firmware updates."
+                            >
+                                Panel debug modes
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="conn-actions">
                     <button
                         id="btn-connect"
                         class="primary"
@@ -275,225 +719,330 @@
                     >
                         Connect
                     </button>
-                    <button id="btn-disconnect" class="danger" title="Close the serial port" disabled>
+                    <button
+                        id="btn-disconnect"
+                        class="danger"
+                        title="Close the serial port"
+                        disabled
+                    >
                         Disconnect
                     </button>
                 </div>
-                <div class="row">
-                    <span><span class="dot" id="dot"></span><span id="status">disconnected</span></span>
+            </nav>
+
+            <div class="core">
+                <!-- Display -->
+                <section class="grp">
+                    <div class="grp-row">
+                        <span class="lbl">display</span>
+                        <button
+                            class="cmd"
+                            data-cmd="allon"
+                            disabled
+                            title="ALL_ON (0xFF) — light every LED on every panel"
+                        >
+                            All on
+                        </button>
+                        <button
+                            class="cmd"
+                            data-cmd="alloff"
+                            disabled
+                            title="ALL_OFF (0x00) — turn every LED off"
+                        >
+                            All off
+                        </button>
+                        <button
+                            class="cmd danger"
+                            data-cmd="stop"
+                            disabled
+                            title="STOP_DISPLAY (0x30) — halt pattern playback"
+                        >
+                            Stop
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Pattern / trial params -->
+                <section class="grp">
+                    <div class="grp-row">
+                        <span class="lbl">pattern</span>
+                        <button
+                            id="btn-loadset"
+                            class="mini"
+                            title="Point at a built SD-bundle FOLDER — the unzipped Export-ZIP from the Pattern Set builder (manifest.json + a patterns/ subfolder). The arena's built-in library loads automatically; use this only for a custom set."
+                        >
+                            Load set…
+                        </button>
+                        <span id="ps-status" class="dim small">loading built-in library…</span>
+                        <input
+                            id="ps-folder"
+                            type="file"
+                            webkitdirectory
+                            directory
+                            style="display: none"
+                        />
+                    </div>
+                    <div class="grp-row">
+                        <select
+                            id="tp-pat-name"
+                            title="Pick a pattern by name — fills the 1-based SD index below and shows a preview"
+                        ></select>
+                        <div id="ps-preview-host"></div>
+                    </div>
+                    <div class="grp-row wrap">
+                        <label
+                            title="2 open-loop (advances at frame rate) / 3 show-frame (host sets frame) / 4 closed-loop (analog-in × gain)"
+                            >mode
+                            <select id="tp-mode">
+                                <option value="2">2 open-loop</option>
+                                <option value="3">3 show-frame</option>
+                                <option value="4">4 closed-loop</option>
+                            </select>
+                        </label>
+                        <label title="Pattern: 1-based SD-card index (Nth .pat in /patterns)"
+                            >pat
+                            <input id="tp-pat" type="number" min="1" value="1" />
+                        </label>
+                        <label title="Frame rate: 0–65535 Hz (used in mode 2 open-loop)"
+                            >rate
+                            <input id="tp-rate" type="number" min="0" max="65535" value="30" />
+                        </label>
+                        <label title="Gain: signed int8 −128..127 (used in mode 4 closed-loop)"
+                            >gain
+                            <input id="tp-gain" type="number" min="-128" max="127" value="0" />
+                        </label>
+                        <label title="Init pos: initial frame index 0–65535 (0-based)"
+                            >init
+                            <input id="tp-init" type="number" min="0" max="65535" value="0" />
+                        </label>
+                        <label
+                            title="Host-timed auto-stop in seconds (approximate — not controller-accurate). 0 = run until Stop. Controller-timed duration arrives with firmware #4."
+                            >dur(s)
+                            <input id="tp-dur" type="number" min="0" step="0.1" value="0" />
+                        </label>
+                    </div>
+                    <div class="grp-row">
+                        <button
+                            class="cmd primary"
+                            data-cmd="trial"
+                            disabled
+                            title="Send TRIAL_PARAMS (0x08) — start the pattern. Needs an SD card with /patterns or the controller replies status≠0."
+                        >
+                            Send trial params
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Frame stepper (mode 3) -->
+                <section class="grp">
+                    <div class="grp-row">
+                        <span class="lbl">frame · m3</span>
+                        <button
+                            class="cmd"
+                            data-cmd="loadstep"
+                            disabled
+                            title="Load the selected pattern in Mode 3 for host-stepping (sends TRIAL_PARAMS mode 3, frame rate 0), then resets the counter to 0."
+                        >
+                            Load
+                        </button>
+                        <button
+                            class="cmd"
+                            data-cmd="prevframe"
+                            disabled
+                            title="Previous frame — SET_FRAME_POSITION (0x70), clamped to 0"
+                        >
+                            ◀
+                        </button>
+                        <input
+                            id="sf-idx"
+                            type="number"
+                            min="0"
+                            max="65535"
+                            value="0"
+                            title="Frame index: 0-based. Host-driven jump in mode 3."
+                        />
+                        <button
+                            class="cmd"
+                            data-cmd="setframe"
+                            disabled
+                            title="Jump to the frame index — SET_FRAME_POSITION (0x70)"
+                        >
+                            Go
+                        </button>
+                        <button
+                            class="cmd"
+                            data-cmd="nextframe"
+                            disabled
+                            title="Next frame — SET_FRAME_POSITION (0x70), clamped to the pattern's frame count"
+                        >
+                            ▶
+                        </button>
+                        <span id="sf-counter" class="mono dim">frame – / –</span>
+                    </div>
+                </section>
+
+                <!-- Stream frame -->
+                <section class="grp">
+                    <div class="grp-row">
+                        <span class="lbl">stream</span>
+                        <span
+                            class="seg"
+                            title="Grayscale mode for streamed frames (GS16 = 16 levels, GS2 = on/off)"
+                        >
+                            <button id="gs-16" class="seg-btn seg-on" type="button">GS16</button>
+                            <button id="gs-2" class="seg-btn" type="button">GS2</button>
+                        </span>
+                        <span id="sf-stream-note" class="dim small"></span>
+                        <div id="sf-stream-preview" class="thumb" style="margin-left: auto"></div>
+                    </div>
+                    <div class="grp-row wrap">
+                        <label title="Uniform full-field brightness level (GS16: 0–15)"
+                            >level
+                            <input id="sf-level" type="range" min="0" max="15" value="15" />
+                            <span id="sf-level-val" class="mono">15</span>
+                        </label>
+                        <button
+                            class="cmd"
+                            data-cmd="stream-level"
+                            disabled
+                            title="Stream a uniform full-field frame at the chosen level (STREAM_FRAME 0x32)"
+                        >
+                            Full-field
+                        </button>
+                        <button
+                            class="cmd"
+                            data-cmd="stream-panelmap"
+                            disabled
+                            title="Stream a frame showing each panel's number (bottom-left = 1, row-major)"
+                        >
+                            Panel map
+                        </button>
+                        <button
+                            class="cmd"
+                            data-cmd="stream-orient"
+                            disabled
+                            title="Stream an orientation figure — U/D top/bottom, L/R left/right"
+                        >
+                            Orientation
+                        </button>
+                        <button
+                            class="cmd"
+                            data-cmd="stream-checker"
+                            disabled
+                            title="Stream a per-panel checkerboard (alternating panels on/off)"
+                        >
+                            Checker
+                        </button>
+                        <button
+                            class="cmd"
+                            data-cmd="stream-paste"
+                            disabled
+                            title="Paste a frame (JSON or integer grid) and stream it"
+                        >
+                            Paste frame…
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Device-memory boxes -->
+                <div class="mem-grid">
+                    <div class="mem-box">
+                        <div
+                            class="mem-h"
+                            title="Patterns in the loaded set (assumed on the SD card)"
+                        >
+                            SD card
+                        </div>
+                        <div id="sd-list" class="mem-body">
+                            <div class="mem-empty">loading…</div>
+                        </div>
+                    </div>
+                    <div class="mem-box">
+                        <div
+                            class="mem-h"
+                            title="Patterns resident in panel PS-RAM and their memory positions"
+                        >
+                            PS-RAM
+                        </div>
+                        <table class="mem-table" id="psram-table">
+                            <thead>
+                                <tr>
+                                    <th>pattern</th>
+                                    <th>fr</th>
+                                    <th>mem</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="empty">
+                                    <td colspan="3">— reported by controller —</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
-            <div class="panel">
-                <h2>Display</h2>
-                <div class="row">
-                    <button
-                        class="cmd"
-                        data-cmd="allon"
-                        disabled
-                        title="ALL_ON (0xFF) — light every LED on every panel"
-                    >
-                        All On
-                    </button>
-                    <button
-                        class="cmd"
-                        data-cmd="alloff"
-                        disabled
-                        title="ALL_OFF (0x00) — turn every LED off"
-                    >
-                        All Off
-                    </button>
-                    <button
-                        class="cmd danger"
-                        data-cmd="stop"
-                        disabled
-                        title="STOP_DISPLAY (0x30) — halt pattern playback"
-                    >
-                        Stop
+            <div class="logwrap">
+                <div class="log-tools">
+                    <span class="lbl">console log</span>
+                    <span class="spacer"></span>
+                    <button id="btn-clear" title="Clear the response log">Clear</button>
+                    <button id="btn-copy" title="Copy the log text to the clipboard">Copy</button>
+                    <button id="btn-save" title="Download the log as a timestamped .txt file">
+                        Save
                     </button>
                 </div>
+                <div id="log"></div>
             </div>
 
-            <div class="panel">
-                <h2>Pattern / Trial params (0x08)</h2>
-                <div class="row">
-                    <label title="Active pattern set (manifest.json)">set</label>
-                    <button
-                        id="btn-loadset"
-                        title="Point at a built SD-bundle FOLDER — the unzipped Export-ZIP from the Pattern Set builder (a folder with manifest.json + a patterns/ subfolder), or the SD card if you copied the whole bundle onto it. The arena's built-in library loads automatically; use this only for a custom set."
-                    >
-                        Load set…
-                    </button>
-                    <span id="ps-status" class="l-dim">loading built-in library…</span>
-                    <input id="ps-folder" type="file" webkitdirectory directory style="display: none" />
-                </div>
-                <div class="row">
-                    <label title="Pick a pattern by name from the active set">name</label>
-                    <select
-                        id="tp-pat-name"
-                        title="Pick a pattern by name — fills the 1-based SD index below and shows a preview"
-                    ></select>
-                    <div id="ps-preview-host"></div>
-                </div>
-                <div class="row">
-                    <label title="Display mode">mode</label>
-                    <select
-                        id="tp-mode"
-                        title="2 open-loop (advances at frame rate) / 3 show-frame (host sets frame) / 4 closed-loop (analog-in × gain)"
-                    >
-                        <option value="2">2 open-loop</option>
-                        <option value="3">3 show-frame</option>
-                        <option value="4">4 closed-loop</option>
-                    </select>
-                    <label title="Pattern SD index">pattern</label>
-                    <input
-                        id="tp-pat"
-                        type="number"
-                        min="1"
-                        value="1"
-                        title="Pattern: 1-based SD-card index (Nth .pat in /patterns)"
-                    />
-                </div>
-                <div class="row">
-                    <label title="Frame-advance rate (mode 2)">rate</label>
-                    <input
-                        id="tp-rate"
-                        type="number"
-                        min="0"
-                        max="65535"
-                        value="30"
-                        title="Frame rate: 0–65535 Hz (used in mode 2 open-loop)"
-                    />
-                    <label title="Velocity gain (mode 4)">gain</label>
-                    <input
-                        id="tp-gain"
-                        type="number"
-                        min="-128"
-                        max="127"
-                        value="0"
-                        title="Gain: signed int8 −128..127 (used in mode 4 closed-loop)"
-                    />
-                    <label title="Initial frame">init</label>
-                    <input
-                        id="tp-init"
-                        type="number"
-                        min="0"
-                        max="65535"
-                        value="0"
-                        title="Init pos: initial frame index 0–65535 (0-based)"
-                    />
-                </div>
-                <div class="row">
-                    <button
-                        class="cmd primary"
-                        data-cmd="trial"
-                        disabled
-                        title="Send TRIAL_PARAMS (0x08) — start the pattern. Needs an SD card with /patterns or the controller replies status≠0."
-                    >
-                        Send Trial Params
-                    </button>
-                </div>
-            </div>
-
-            <div class="panel">
-                <h2>Frame control (mode 3)</h2>
-                <div class="row">
-                    <label title="Frame index to jump to">frame</label>
-                    <input
-                        id="sf-idx"
-                        type="number"
-                        min="0"
-                        max="65535"
-                        value="0"
-                        title="Frame index: 0–65535 (0-based). Host-driven jump in mode 3."
-                    />
-                    <button
-                        class="cmd"
-                        data-cmd="setframe"
-                        disabled
-                        title="SET_FRAME_POSITION (0x70) — jump to a specific frame (mode 3 host-driven)"
-                    >
-                        Set Frame
-                    </button>
-                </div>
-            </div>
-
-            <div class="panel">
-                <h2>Controller</h2>
-                <div class="row">
-                    <button
-                        class="cmd"
-                        data-cmd="info"
-                        disabled
-                        title="GET_CONTROLLER_INFO (0x67) — firmware version + capability bitmap. The canonical round-trip check."
-                    >
-                        Get Info
-                    </button>
-                    <button
-                        class="cmd"
-                        data-cmd="ip"
-                        disabled
-                        title="GET_ETHERNET_IP (0x66) — DHCP-resolved address (meaningful only with an Ethernet link)"
-                    >
-                        Get IP
-                    </button>
-                    <button
-                        class="cmd"
-                        data-cmd="frames"
-                        disabled
-                        title="GET_FRAMES_SENT (0x19) — master-side count of frames pushed to panels"
-                    >
-                        Get Frames
-                    </button>
-                </div>
-                <div class="row">
-                    <label title="SPI master clock">MHz</label>
-                    <input
-                        id="spi-mhz"
-                        type="number"
-                        min="1"
-                        max="30"
-                        value="20"
-                        title="SPI clock: 1–30 MHz"
-                    />
-                    <button
-                        class="cmd"
-                        data-cmd="setspi"
-                        disabled
-                        title="SET_SPI_CLOCK (0x17) — set the panel SPI master clock (echoes the applied MHz)"
-                    >
-                        Set SPI
-                    </button>
-                    <button
-                        class="cmd"
-                        data-cmd="getspi"
-                        disabled
-                        title="GET_SPI_CLOCK (0x18) — read the current panel SPI master clock"
-                    >
-                        Get SPI
-                    </button>
-                </div>
-            </div>
-        </main>
-
-        <div class="log-tools">
-            <button id="btn-clear" title="Clear the response log">Clear log</button>
-            <span class="l-dim">Status / response log</span>
+            <footer id="footer">Arena Console v4 | 2026-06-12 07:28 ET</footer>
         </div>
-        <div id="log"></div>
-        <div class="hint">
-            Tip: this page needs a Chromium-based desktop browser (Web Serial). Only one program
-            can hold the serial port at a time. If replies look like garbled text instead of clean
-            status lines, the controller is running the <code>DEBUG_SERIAL</code> firmware build —
-            flash the quiet <code>teensy41</code> build; <code>serial_raw_monitor.html</code> helps
-            diagnose framing problems.
+
+        <!-- Paste-a-frame modal -->
+        <div class="modal" id="paste-modal" hidden>
+            <div class="modal-card">
+                <div class="modal-h">
+                    <span>Paste a frame to stream</span>
+                    <button id="paste-close" title="Close">✕</button>
+                </div>
+                <div class="dim small">
+                    JSON <code>{gs, rows, cols, data}</code> (flat or 2-D) or a whitespace / newline
+                    grid of integers. Row 0 = bottom. Must match the active arena (<span
+                        id="paste-dims"
+                        >40×200</span
+                    >). GS16 values 0–15, GS2 values 0–1.
+                </div>
+                <textarea
+                    id="paste-text"
+                    placeholder='{"gs":16,"rows":40,"cols":200,"data":[ ... ]}'
+                ></textarea>
+                <div class="modal-row">
+                    <button id="paste-validate" title="Parse + validate against the active arena">
+                        Validate
+                    </button>
+                    <span id="paste-msg" class="small"></span>
+                </div>
+                <div class="modal-row">
+                    <div id="paste-preview-host" class="thumb"></div>
+                </div>
+                <div class="modal-row">
+                    <button
+                        id="paste-stream"
+                        class="primary"
+                        disabled
+                        title="Stream the validated frame (STREAM_FRAME 0x32)"
+                    >
+                        Stream frame
+                    </button>
+                    <button id="paste-cancel" title="Close without streaming">Cancel</button>
+                </div>
+            </div>
         </div>
 
-        <footer id="footer">Arena Console v3 | 2026-06-11 07:01 ET</footer>
-
-        <!-- Milestone-A substrate — window-global dual-export path (no build, no ES import). -->
+        <!-- Milestone-A substrate + pat-encoder (window-global dual-export path; no build, no ES import). -->
         <script src="js/arena-wire-g6.js"></script>
         <script src="js/arena-link.js"></script>
+        <script src="js/pat-encoder.js"></script>
         <!-- LAB-95 pattern picker. pattern-set.js + pat-preview.js are classic-safe
              (window.PatternSet / window.PatPreview); the import-only modules
              (pat-parser, arena-configs, icon-generator) load in the deferred module
@@ -520,6 +1069,20 @@
                     .map((b) => (b >= 0x20 && b < 0x7f ? String.fromCharCode(b) : '.'))
                     .join('');
 
+            // Active arena geometry — published by the picker module; default to the
+            // bench G6_2x10 so streaming works even if the ES module fails to load.
+            function activeArena() {
+                return (
+                    window.__activeArena || {
+                        config: 'G6_2x10',
+                        rowCount: 2,
+                        colCount: 10,
+                        pixelRows: 40,
+                        pixelCols: 200
+                    }
+                );
+            }
+
             // Feature-detect (CLAUDE.md: non-Chromium warning).
             if (!window.ArenaLink || !window.ArenaLink.isSupported()) {
                 $('banner').hidden = false;
@@ -544,18 +1107,26 @@
                 cmdButtons().forEach((b) => (b.disabled = !on));
                 const s = $('status');
                 s.textContent = on ? 'connected' : 'disconnected';
-                s.classList.toggle('on', on);
+                $('conn').classList.toggle('on', on);
                 $('dot').classList.toggle('on', on);
+                if (!on) {
+                    stepper.loaded = false;
+                    clearAutoStop();
+                }
+                updateStepperUI();
+                updateStreamUI();
             }
 
-            // Send a request, decode the response, and print a one-line summary.
-            async function run(label, bytes, decode) {
+            // Send a request, decode the response, print a one-line summary, and
+            // return the decoded response (null on failure). `opts` is passed to the
+            // transport (e.g. { expectedCmd, timeoutMs } for stream frames).
+            async function run(label, bytes, decode, opts) {
                 try {
-                    const frame = await link.send(bytes);
+                    const frame = await link.send(bytes, opts);
                     const resp = Wire.decodeResponse(frame);
                     if (!resp) {
                         log(`${label}: no/malformed response frame`, 'err');
-                        return;
+                        return null;
                     }
                     let extra = '';
                     if (decode) {
@@ -568,8 +1139,10 @@
                             .padStart(2, '0')} ok=${resp.ok}${extra}`,
                         resp.ok ? 'info' : 'err'
                     );
+                    return resp;
                 } catch (e) {
                     log(`${label}: ERROR ${e.message || e}`, 'err');
+                    return null;
                 }
             }
 
@@ -595,13 +1168,17 @@
                 ascii: (r) => JSON.stringify(asciiOf(r.payload))
             };
 
+            // ── connection + log tools ──────────────────────────────────────
             $('btn-connect').onclick = async () => {
                 try {
                     log('requesting serial port…', 'dim');
                     await link.requestPort();
                     await link.open();
                     setConnected(true);
-                    log('-- connected; try "Get Info" for a round-trip check', 'info');
+                    log(
+                        '-- connected; try "Get info" (Controller menu) for a round-trip check',
+                        'info'
+                    );
                 } catch (e) {
                     log('connect: ' + (e.message || e), 'err');
                 }
@@ -611,15 +1188,400 @@
                 setConnected(false);
             };
             $('btn-clear').onclick = () => (logEl.textContent = '');
+            $('btn-copy').onclick = async () => {
+                try {
+                    await navigator.clipboard.writeText(logEl.textContent);
+                    log('log copied to clipboard', 'dim');
+                } catch (e) {
+                    log('copy failed: ' + (e.message || e), 'err');
+                }
+            };
+            $('btn-save').onclick = () => {
+                const blob = new Blob([logEl.textContent], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                a.href = url;
+                a.download = 'arena_console_log_' + ts + '.txt';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            };
 
+            // ── top menu bar (open/close + click-away) ──────────────────────
+            document.addEventListener('click', (e) => {
+                const menu = e.target.closest('.menu');
+                const isToggle = e.target.closest('.menu-btn');
+                const isItem = e.target.closest('.menu-item');
+                // close every menu except the one we're interacting with
+                document.querySelectorAll('.menu.open').forEach((m) => {
+                    if (m !== menu) m.classList.remove('open');
+                });
+                if (isToggle && menu) {
+                    menu.classList.toggle('open');
+                } else if (isItem && menu) {
+                    menu.classList.remove('open'); // action chosen → close
+                }
+            });
+
+            // ── host-timed auto-stop ────────────────────────────────────────
+            let autoStopTimer = null;
+            function clearAutoStop() {
+                if (autoStopTimer) {
+                    clearTimeout(autoStopTimer);
+                    autoStopTimer = null;
+                }
+            }
+
+            // ── mode-3 frame stepper ────────────────────────────────────────
+            const stepper = { loaded: false, frames: null, index: 0 };
+            function clampFrame(i) {
+                const m = stepper.frames;
+                if (m != null) return Math.max(0, Math.min(i, m - 1));
+                return Math.max(0, i);
+            }
+            function updateStepperUI() {
+                const cnt = $('sf-counter');
+                if (stepper.loaded) {
+                    const m = stepper.frames;
+                    cnt.textContent = 'frame ' + stepper.index + ' / ' + (m != null ? m - 1 : '?');
+                } else {
+                    cnt.textContent = 'frame – / –';
+                }
+                const en = link.connected && stepper.loaded;
+                document
+                    .querySelectorAll('[data-cmd="prevframe"],[data-cmd="nextframe"]')
+                    .forEach((b) => (b.disabled = !en));
+            }
+            function stepTo(i) {
+                if (!stepper.loaded) {
+                    log('frame step: load a pattern in mode 3 first', 'err');
+                    return;
+                }
+                i = clampFrame(i);
+                stepper.index = i;
+                $('sf-idx').value = i;
+                run('set-frame ' + i, Wire.encodeSetFramePosition(i), DECODE.ascii);
+                updateStepperUI();
+            }
+
+            // ── stream frame ────────────────────────────────────────────────
+            let streamGs = 16; // 16 (GS16) or 2 (GS2)
+            // 3×5 pixel font (rows top→bottom; bit2 = left column).
+            const FONT = {
+                0: [7, 5, 5, 5, 7],
+                1: [2, 6, 2, 2, 7],
+                2: [7, 1, 7, 4, 7],
+                3: [7, 1, 7, 1, 7],
+                4: [5, 5, 7, 1, 1],
+                5: [7, 4, 7, 1, 7],
+                6: [7, 4, 7, 5, 7],
+                7: [7, 1, 2, 2, 2],
+                8: [7, 5, 7, 5, 7],
+                9: [7, 5, 7, 1, 7],
+                R: [6, 5, 6, 5, 5],
+                L: [4, 4, 4, 4, 7],
+                U: [5, 5, 5, 5, 7],
+                D: [6, 5, 5, 5, 6]
+            };
+            function newGrid() {
+                const a = activeArena();
+                return new Uint8Array(a.pixelRows * a.pixelCols);
+            }
+            function setPx(grid, a, row, col, val) {
+                if (row < 0 || row >= a.pixelRows || col < 0 || col >= a.pixelCols) return;
+                grid[row * a.pixelCols + col] = val;
+            }
+            // Draw a glyph upright (row 0 = bottom): rowBottom is the arena row of
+            // the glyph's bottom; each glyph pixel becomes a scale×scale block.
+            function drawGlyph(grid, a, ch, colLeft, rowBottom, val, scale) {
+                scale = scale || 1;
+                const g = FONT[ch];
+                if (!g) return;
+                for (let r = 0; r < 5; r++) {
+                    for (let c = 0; c < 3; c++) {
+                        if ((g[r] >> (2 - c)) & 1) {
+                            for (let dy = 0; dy < scale; dy++)
+                                for (let dx = 0; dx < scale; dx++)
+                                    setPx(
+                                        grid,
+                                        a,
+                                        rowBottom + (4 - r) * scale + dy,
+                                        colLeft + c * scale + dx,
+                                        val
+                                    );
+                        }
+                    }
+                }
+            }
+            function genUniform(level) {
+                const grid = newGrid();
+                grid.fill(streamGs === 2 ? (level > 0 ? 1 : 0) : level);
+                return grid;
+            }
+            function genPanelMap() {
+                const a = activeArena();
+                const grid = newGrid();
+                const val = streamGs === 2 ? 1 : 12;
+                const scale = 2;
+                const charW = 3 * scale;
+                const gap = scale;
+                for (let pr = 0; pr < a.rowCount; pr++) {
+                    for (let pc = 0; pc < a.colCount; pc++) {
+                        const s = String(pr * a.colCount + pc + 1); // 1-based, bottom-left origin
+                        const totalW = s.length * charW + (s.length - 1) * gap;
+                        const colStart = pc * 20 + Math.floor((20 - totalW) / 2);
+                        const rowBottom = pr * 20 + Math.floor((20 - 5 * scale) / 2);
+                        for (let i = 0; i < s.length; i++)
+                            drawGlyph(
+                                grid,
+                                a,
+                                s[i],
+                                colStart + i * (charW + gap),
+                                rowBottom,
+                                val,
+                                scale
+                            );
+                    }
+                }
+                return grid;
+            }
+            function genOrient() {
+                const a = activeArena();
+                const grid = newGrid();
+                const val = streamGs === 2 ? 1 : 15;
+                const s = 2;
+                const cw = 3 * s;
+                const gh = 5 * s;
+                const midCol = Math.floor(a.pixelCols / 2 - cw / 2);
+                const midRow = Math.floor(a.pixelRows / 2 - gh / 2);
+                drawGlyph(grid, a, 'U', midCol, a.pixelRows - gh - 1, val, s);
+                drawGlyph(grid, a, 'D', midCol, 1, val, s);
+                drawGlyph(grid, a, 'L', 1, midRow, val, s);
+                drawGlyph(grid, a, 'R', a.pixelCols - cw - 1, midRow, val, s);
+                return grid;
+            }
+            function genChecker() {
+                const a = activeArena();
+                const grid = newGrid();
+                const val = streamGs === 2 ? 1 : 15;
+                for (let pr = 0; pr < a.rowCount; pr++)
+                    for (let pc = 0; pc < a.colCount; pc++)
+                        if ((pr + pc) % 2 === 0)
+                            for (let y = 0; y < 20; y++)
+                                for (let x = 0; x < 20; x++)
+                                    setPx(grid, a, pr * 20 + y, pc * 20 + x, val);
+                return grid;
+            }
+
+            // Build a stream-frame from a full-arena pixel grid by reusing the
+            // proven .pat encoder and slicing off the file header + CRC trailer.
+            function buildFrame(grid, gs) {
+                const a = activeArena();
+                const patData = {
+                    generation: 'G6',
+                    gs_val: gs,
+                    numFrames: 1,
+                    rowCount: a.rowCount,
+                    colCount: a.colCount,
+                    pixelRows: a.pixelRows,
+                    pixelCols: a.pixelCols,
+                    frames: [grid]
+                };
+                const patArrayBuffer = window.PatEncoder.encode(patData);
+                const buf = new Uint8Array(patArrayBuffer);
+                const len = Wire.STREAM_FRAME_BYTES[gs === 2 ? 'GS2' : 'GS16'];
+                const payload = buf.subarray(
+                    window.PatEncoder.G6_HEADER_SIZE,
+                    window.PatEncoder.G6_HEADER_SIZE + len
+                );
+                return { bytes: Wire.encodeStreamFrame(payload), patArrayBuffer };
+            }
+            function streamable() {
+                const a = activeArena();
+                return a.rowCount * a.colCount === 20; // FW accepts 1064/4064 (20 panels) only
+            }
+            function setThumb(host, patArrayBuffer) {
+                host.innerHTML = '';
+                if (!window.renderG6FramePreview) return;
+                try {
+                    const url = window.renderG6FramePreview(patArrayBuffer);
+                    if (url) {
+                        const img = document.createElement('img');
+                        img.src = url;
+                        img.className = 'thumb-img';
+                        host.appendChild(img);
+                    }
+                } catch (e) {
+                    /* preview is best-effort */
+                }
+            }
+            function doStream(grid, gs, label) {
+                gs = gs || streamGs;
+                if (!streamable()) {
+                    log('stream: needs a full-grid 20-panel arena (e.g. G6_2x10)', 'err');
+                    return;
+                }
+                let built;
+                try {
+                    built = buildFrame(grid, gs);
+                } catch (e) {
+                    log('stream build failed: ' + (e.message || e), 'err');
+                    return;
+                }
+                setThumb($('sf-stream-preview'), built.patArrayBuffer);
+                run(label, built.bytes, DECODE.ascii, {
+                    expectedCmd: Wire.OPCODES.STREAM_FRAME,
+                    timeoutMs: 1500
+                });
+            }
+
+            function setGs(gs) {
+                streamGs = gs;
+                $('gs-16').classList.toggle('seg-on', gs === 16);
+                $('gs-2').classList.toggle('seg-on', gs === 2);
+            }
+            $('gs-16').onclick = () => setGs(16);
+            $('gs-2').onclick = () => setGs(2);
+            $('sf-level').oninput = () => ($('sf-level-val').textContent = $('sf-level').value);
+
+            function updateStreamUI() {
+                const ok = streamable();
+                $('sf-stream-note').textContent = ok ? '' : '(needs a 20-panel arena)';
+                const en = link.connected && ok;
+                document
+                    .querySelectorAll('[data-cmd^="stream-"]')
+                    .forEach((b) => (b.disabled = !en));
+            }
+
+            // ── paste-frame modal ───────────────────────────────────────────
+            const pasteModal = $('paste-modal');
+            let pasteParsed = null;
+            function updatePasteDims() {
+                const a = activeArena();
+                const el = $('paste-dims');
+                if (el) el.textContent = a.pixelRows + '×' + a.pixelCols;
+            }
+            function openPasteModal() {
+                updatePasteDims();
+                $('paste-msg').textContent = '';
+                $('paste-stream').disabled = true;
+                $('paste-preview-host').innerHTML = '';
+                pasteParsed = null;
+                pasteModal.hidden = false;
+                $('paste-text').focus();
+            }
+            function closePasteModal() {
+                pasteModal.hidden = true;
+            }
+            // Parse JSON {gs,rows,cols,data} (flat or 2-D) or a lenient integer grid
+            // (row 0 = bottom). Validates against the active arena; throws on any problem.
+            function parsePasteText(text) {
+                text = (text || '').trim();
+                if (!text) throw new Error('empty input');
+                const a = activeArena();
+                let gs = streamGs;
+                let rows;
+                let cols;
+                let flat;
+                if (text[0] === '{' || text[0] === '[') {
+                    const o = JSON.parse(text); // may throw SyntaxError
+                    if (Array.isArray(o)) {
+                        // bare 2-D array
+                        rows = o.length;
+                        cols = Array.isArray(o[0]) ? o[0].length : o.length;
+                        flat = [].concat(...o);
+                    } else {
+                        if (o.gs === 2 || o.gs === 16) gs = o.gs;
+                        let data = o.data;
+                        if (Array.isArray(data) && Array.isArray(data[0])) {
+                            rows = data.length;
+                            cols = data[0].length;
+                            flat = [].concat(...data);
+                        } else {
+                            rows = o.rows;
+                            cols = o.cols;
+                            flat = data;
+                        }
+                        if (rows == null || cols == null)
+                            throw new Error('JSON needs rows + cols (or a 2-D data array)');
+                    }
+                } else {
+                    const lines = text.split(/[\r\n]+/).filter((l) => l.trim().length);
+                    const matrix = lines.map((l) =>
+                        l
+                            .trim()
+                            .split(/[\s,]+/)
+                            .map(Number)
+                    );
+                    rows = matrix.length;
+                    cols = matrix[0].length;
+                    if (matrix.some((r) => r.length !== cols))
+                        throw new Error('ragged grid: rows have unequal column counts');
+                    flat = [].concat(...matrix);
+                    if (flat.some((v) => v > 1)) gs = 16; // values >1 imply grayscale
+                }
+                if (!Array.isArray(flat)) throw new Error('no pixel data found');
+                if (flat.some((v) => !Number.isFinite(v)))
+                    throw new Error('non-numeric value in data');
+                if (rows !== a.pixelRows || cols !== a.pixelCols)
+                    throw new Error(
+                        `dimensions ${rows}×${cols} ≠ active arena ${a.pixelRows}×${a.pixelCols}`
+                    );
+                if (flat.length !== rows * cols)
+                    throw new Error(`expected ${rows * cols} values, got ${flat.length}`);
+                const max = gs === 2 ? 1 : 15;
+                if (flat.some((v) => v < 0 || v > max))
+                    throw new Error(`values must be 0..${max} for GS${gs}`);
+                return { grid: Uint8Array.from(flat, (v) => v | 0), gs, rows, cols };
+            }
+            $('paste-close').onclick = closePasteModal;
+            $('paste-cancel').onclick = closePasteModal;
+            $('paste-validate').onclick = () => {
+                try {
+                    pasteParsed = parsePasteText($('paste-text').value);
+                    const built = buildFrame(pasteParsed.grid, pasteParsed.gs); // also validates size
+                    setThumb($('paste-preview-host'), built.patArrayBuffer);
+                    $('paste-msg').textContent =
+                        `OK · GS${pasteParsed.gs} ${pasteParsed.rows}×${pasteParsed.cols}`;
+                    $('paste-msg').className = 'small ok-msg';
+                    $('paste-stream').disabled = !(link.connected && streamable());
+                } catch (e) {
+                    pasteParsed = null;
+                    $('paste-stream').disabled = true;
+                    $('paste-preview-host').innerHTML = '';
+                    $('paste-msg').textContent = 'Error: ' + (e.message || e);
+                    $('paste-msg').className = 'small err-msg';
+                }
+            };
+            $('paste-stream').onclick = () => {
+                if (!pasteParsed) return;
+                setGs(pasteParsed.gs);
+                doStream(pasteParsed.grid, pasteParsed.gs, 'stream pasted frame');
+                closePasteModal();
+            };
+
+            // ── command dispatch ────────────────────────────────────────────
             const HANDLERS = {
                 info: () => run('get-controller-info', Wire.encodeGetControllerInfo(), DECODE.info),
                 ip: () => run('get-ip', Wire.encodeGetIp(), DECODE.ip),
                 getspi: () => run('get-spi-clock', Wire.encodeGetSpiClock(), DECODE.spi),
                 frames: () => run('get-frames-sent', Wire.encodeGetFramesSent(), DECODE.frames),
-                allon: () => run('all-on', Wire.encodeAllOn(), DECODE.ascii),
-                alloff: () => run('all-off', Wire.encodeAllOff(), DECODE.ascii),
-                stop: () => run('stop', Wire.encodeStop(), DECODE.ascii),
+                resetframes: () =>
+                    run('reset-frames-sent', Wire.encodeResetFramesSent(), DECODE.ascii),
+                allon: () => {
+                    clearAutoStop();
+                    run('all-on', Wire.encodeAllOn(), DECODE.ascii);
+                },
+                alloff: () => {
+                    clearAutoStop();
+                    run('all-off', Wire.encodeAllOff(), DECODE.ascii);
+                },
+                stop: () => {
+                    clearAutoStop();
+                    run('stop', Wire.encodeStop(), DECODE.ascii);
+                },
                 setspi: () => {
                     const mhz = parseInt($('spi-mhz').value, 10);
                     try {
@@ -628,15 +1590,60 @@
                         log('set-spi-clock (encode rejected): ' + e.message, 'err');
                     }
                 },
-                setframe: () => {
-                    const i = parseInt($('sf-idx').value, 10);
+                setrate: () => {
+                    const hz = parseInt($('rr-hz').value, 10);
                     try {
-                        run('set-frame ' + i, Wire.encodeSetFramePosition(i), DECODE.ascii);
+                        run('set-refresh-rate ' + hz, Wire.encodeSetRefreshRate(hz), DECODE.ascii);
                     } catch (e) {
-                        log('set-frame (encode rejected): ' + e.message, 'err');
+                        log('set-refresh-rate (encode rejected): ' + e.message, 'err');
                     }
                 },
+                setframe: () => {
+                    const i = parseInt($('sf-idx').value, 10);
+                    if (Number.isNaN(i)) {
+                        log('set-frame: enter a frame index', 'err');
+                        return;
+                    }
+                    if (stepper.loaded) {
+                        stepTo(i);
+                    } else {
+                        try {
+                            run('set-frame ' + i, Wire.encodeSetFramePosition(i), DECODE.ascii);
+                        } catch (e) {
+                            log('set-frame (encode rejected): ' + e.message, 'err');
+                        }
+                    }
+                },
+                prevframe: () => stepTo(stepper.index - 1),
+                nextframe: () => stepTo(stepper.index + 1),
+                loadstep: () => {
+                    const ap = window.__activePattern || {};
+                    const patternId =
+                        ap.sdIndex != null ? ap.sdIndex : parseInt($('tp-pat').value, 10);
+                    if (!(patternId >= 1)) {
+                        log('load-for-stepping: pick a pattern first', 'err');
+                        return;
+                    }
+                    stepper.frames = ap.frames != null ? ap.frames : null;
+                    stepper.index = 0;
+                    run(
+                        'load mode-3 pat ' + patternId,
+                        Wire.encodeTrialParams({
+                            mode: 3,
+                            patternId: patternId,
+                            frameRate: 0,
+                            gain: 0,
+                            initPos: 0
+                        }),
+                        DECODE.ascii
+                    ).then((r) => {
+                        stepper.loaded = !!(r && r.ok);
+                        if (stepper.loaded) $('sf-idx').value = 0;
+                        updateStepperUI();
+                    });
+                },
                 trial: () => {
+                    clearAutoStop();
                     const p = {
                         mode: parseInt($('tp-mode').value, 10),
                         patternId: parseInt($('tp-pat').value, 10),
@@ -644,6 +1651,7 @@
                         gain: parseInt($('tp-gain').value, 10),
                         initPos: parseInt($('tp-init').value, 10)
                     };
+                    const dur = parseFloat($('tp-dur').value) || 0;
                     if (p.frameRate < 0) {
                         log(
                             'Negative frame rate isn’t supported in open-loop (Mode 2) — the controller advances frames forward only. For reverse playback, use Mode 4 (closed-loop) with a negative gain.',
@@ -656,23 +1664,49 @@
                             `trial-params ${JSON.stringify(p)}`,
                             Wire.encodeTrialParams(p),
                             DECODE.ascii
-                        );
+                        ).then((r) => {
+                            if (dur > 0 && r && r.ok) {
+                                autoStopTimer = setTimeout(() => {
+                                    log(`auto-stop after ${dur}s (host-timed)`, 'dim');
+                                    HANDLERS.stop();
+                                }, dur * 1000);
+                            }
+                        });
                     } catch (e) {
                         log('trial-params (encode rejected): ' + e.message, 'err');
                     }
-                }
+                },
+                'stream-level': () =>
+                    doStream(
+                        genUniform(parseInt($('sf-level').value, 10)),
+                        streamGs,
+                        'stream full-field ' + $('sf-level').value
+                    ),
+                'stream-panelmap': () => doStream(genPanelMap(), streamGs, 'stream panel-map'),
+                'stream-orient': () => doStream(genOrient(), streamGs, 'stream orientation'),
+                'stream-checker': () => doStream(genChecker(), streamGs, 'stream checker'),
+                'stream-paste': () => openPasteModal()
             };
             cmdButtons().forEach((b) => (b.onclick = HANDLERS[b.dataset.cmd]));
 
+            // React to the active arena changing (published by the picker module).
+            document.addEventListener('arena:changed', () => {
+                updateStreamUI();
+                updatePasteDims();
+            });
+
+            updateStepperUI();
+            updateStreamUI();
+            updatePasteDims();
             log('ready. Connect a G6 controller over USB, then click Connect.', 'dim');
         </script>
 
         <!-- LAB-95 pattern picker (deferred module). Imports the bare-export modules
              directly; reads window.PatternSet / window.PatPreview from the classic tags
-             above. Browsers can't read the SD card, so the source is either the served
-             built-in library (auto-loaded on startup, present across tabs/reloads) or a
-             built SD-bundle folder the operator picks. Selecting a name fills #tp-pat
-             with the resolved 1-based SD index, which the existing trial handler sends.
+             above. Publishes three hooks the classic script uses: window.__activeArena
+             (geometry), window.__activePattern (current pick → stepper frame count), and
+             window.renderG6FramePreview (thumbnail a generated 1-frame .pat). Also fills
+             the SD-card box from the loaded manifest.
              Note: ES-module imports can serve stale on GitHub Pages — hard-refresh after
              a deploy (Cmd+Shift+R). -->
         <script type="module">
@@ -690,10 +1724,8 @@
             const folderInput = $('ps-folder');
 
             const BUILTIN_BASE = './patterns/g6_2x10/'; // the served default library
+            const G6_PANEL_PX = 20;
 
-            // #tp-pat is the raw SD index. When a set is loaded the name dropdown drives
-            // it, so lock it (read-only) to avoid a confusing second entry point; unlock
-            // it when there's no set so the console still works as a raw index sender.
             const PAT_RAW_TITLE = tpPat.title;
             function lockPat(locked) {
                 tpPat.readOnly = locked;
@@ -708,7 +1740,7 @@
 
             const setStatus = (text, cls) => {
                 statusEl.textContent = text;
-                statusEl.className = cls || 'l-dim';
+                statusEl.className = cls || 'dim small';
             };
 
             function arenaForManifest(m) {
@@ -716,10 +1748,87 @@
                 return cfg && cfg.arena;
             }
 
+            // Publish arena geometry for the classic-script stream/stepper logic.
+            function publishArena(m) {
+                let rc = 2;
+                let cc = 10;
+                const arena = arenaForManifest(m);
+                if (arena) {
+                    rc = arena.num_rows || rc;
+                    cc = arena.num_cols || cc;
+                }
+                window.__activeArena = {
+                    config: (m && m.arenaConfig) || 'G6_2x10',
+                    rowCount: rc,
+                    colCount: cc,
+                    pixelRows: rc * G6_PANEL_PX,
+                    pixelCols: cc * G6_PANEL_PX
+                };
+                document.dispatchEvent(new CustomEvent('arena:changed'));
+            }
+            // sensible default before the built-in library loads
+            window.__activeArena = {
+                config: 'G6_2x10',
+                rowCount: 2,
+                colCount: 10,
+                pixelRows: 40,
+                pixelCols: 200
+            };
+
+            // Thumbnail a generated 1-frame .pat through the same pipeline the
+            // picker preview uses, so streamed frames preview faithfully.
+            window.renderG6FramePreview = function (patArrayBuffer) {
+                try {
+                    const arena =
+                        arenaForManifest(activeManifest) || (getConfig('G6_2x10') || {}).arena;
+                    const parsed = PatParser.parsePatFile(patArrayBuffer);
+                    const sampled = PP.samplePreviewFrames(parsed, arena, {
+                        renderIcon: generatePatternIcon,
+                        iconOpts: {
+                            width: 64,
+                            height: 64,
+                            backgroundColor: '#1a1f26',
+                            innerRadiusRatio: 0.4,
+                            padding: 2,
+                            showGaps: false,
+                            showOutlines: false
+                        }
+                    });
+                    if (sampled.frames && sampled.frames.length)
+                        return sampled.frames[sampled.staticIndex || 0];
+                } catch (e) {
+                    /* best-effort preview */
+                }
+                return null;
+            };
+
             function applyPick(name) {
                 const p = activeManifest && activeManifest.patterns[name];
                 if (p && p.index != null) tpPat.value = p.index; // the resolved 1-based SD index
+                window.__activePattern = p
+                    ? { name, sdIndex: p.index, frames: (p.preview && p.preview.frames) || null }
+                    : null;
                 renderPreview(name);
+            }
+
+            function renderSdList(m) {
+                const host = $('sd-list');
+                if (!host) return;
+                const names = Object.keys((m && m.patterns) || {});
+                if (!names.length) {
+                    host.innerHTML = '<div class="mem-empty">(empty set)</div>';
+                    return;
+                }
+                names.sort((a, b) => (m.patterns[a].index || 0) - (m.patterns[b].index || 0));
+                host.innerHTML = '';
+                for (const n of names) {
+                    const p = m.patterns[n];
+                    const d = document.createElement('div');
+                    d.className = 'sd-row';
+                    d.textContent = (p.index != null ? p.index + ' · ' : '') + n;
+                    d.title = n;
+                    host.appendChild(d);
+                }
             }
 
             function populateDropdown(m) {
@@ -732,6 +1841,7 @@
                     nameSel.appendChild(o);
                     previewHost.innerHTML = '';
                     lockPat(false); // no set to drive it → raw index entry stays editable
+                    renderSdList(m);
                     return;
                 }
                 names.sort((a, b) => (m.patterns[a].index || 0) - (m.patterns[b].index || 0));
@@ -745,6 +1855,7 @@
                 nameSel.value = names[0];
                 applyPick(names[0]);
                 lockPat(true); // a set is active → the dropdown drives the SD index
+                renderSdList(m);
             }
 
             async function renderPreview(name) {
@@ -760,8 +1871,15 @@
                         const parsed = PatParser.parsePatFile(ab);
                         sampled = PP.samplePreviewFrames(parsed, arenaForManifest(activeManifest), {
                             renderIcon: generatePatternIcon,
-                            iconOpts: { width: 90, height: 90, backgroundColor: '#1a1f26',
-                                innerRadiusRatio: 0.4, padding: 2, showGaps: false, showOutlines: false }
+                            iconOpts: {
+                                width: 56,
+                                height: 56,
+                                backgroundColor: '#1a1f26',
+                                innerRadiusRatio: 0.4,
+                                padding: 2,
+                                showGaps: false,
+                                showOutlines: false
+                            }
                         });
                         previewCache[name] = sampled;
                     }
@@ -774,8 +1892,15 @@
                     const img = document.createElement('img');
                     img.src = sampled.frames[sampled.staticIndex];
                     img.alt = name;
-                    img.title = name + ' — ' + (meta.frames || 1) + ' frame' + ((meta.frames || 1) === 1 ? '' : 's') +
-                        ' · GS' + (meta.gs || '?') + (sampled.frames.length > 1 ? ' · hover to animate' : '');
+                    img.title =
+                        name +
+                        ' — ' +
+                        (meta.frames || 1) +
+                        ' frame' +
+                        ((meta.frames || 1) === 1 ? '' : 's') +
+                        ' · GS' +
+                        (meta.gs || '?') +
+                        (sampled.frames.length > 1 ? ' · hover to animate' : '');
                     container.appendChild(img);
                     if ((meta.frames || 1) > 1) {
                         const b = document.createElement('span');
@@ -784,13 +1909,20 @@
                         container.appendChild(b);
                     }
                     if (sampled.frames.length > 1) {
-                        let iv = null, k = 0;
+                        let iv = null;
+                        let k = 0;
                         container.addEventListener('mouseenter', () => {
                             k = 0;
-                            iv = setInterval(() => { k = (k + 1) % sampled.frames.length; img.src = sampled.frames[k]; }, 150);
+                            iv = setInterval(() => {
+                                k = (k + 1) % sampled.frames.length;
+                                img.src = sampled.frames[k];
+                            }, 150);
                         });
                         container.addEventListener('mouseleave', () => {
-                            if (iv) { clearInterval(iv); iv = null; }
+                            if (iv) {
+                                clearInterval(iv);
+                                iv = null;
+                            }
                             img.src = sampled.frames[sampled.staticIndex];
                         });
                     }
@@ -802,9 +1934,16 @@
 
             function metaSpan(meta) {
                 const s = document.createElement('span');
-                s.className = 'l-dim';
-                s.textContent = 'preview: ' + (meta.frames || '?') + 'f · GS' + (meta.gs || '?') +
-                    ' · ' + (meta.rows || '?') + '×' + (meta.cols || '?');
+                s.className = 'dim small';
+                s.textContent =
+                    'preview: ' +
+                    (meta.frames || '?') +
+                    'f · GS' +
+                    (meta.gs || '?') +
+                    ' · ' +
+                    (meta.rows || '?') +
+                    '×' +
+                    (meta.cols || '?');
                 return s;
             }
 
@@ -817,18 +1956,28 @@
                     const m = PS.loadManifestJson(await resp.json());
                     activeManifest = m;
                     byteSource = async (sd) => {
-                        const r = await fetch(BUILTIN_BASE + 'patterns/' + sd, { cache: 'no-store' });
+                        const r = await fetch(BUILTIN_BASE + 'patterns/' + sd, {
+                            cache: 'no-store'
+                        });
                         if (!r.ok) throw new Error('HTTP ' + r.status);
                         return r.arrayBuffer();
                     };
                     previewCache = {};
                     const cfg = getConfig(m.arenaConfig);
-                    setStatus('built-in · ' + ((cfg && cfg.label) || m.arenaConfig) + ' · ' +
-                        Object.keys(m.patterns || {}).length + ' patterns' + (m.set_id ? ' · ' + m.set_id : ''));
+                    setStatus(
+                        'built-in · ' +
+                            ((cfg && cfg.label) || m.arenaConfig) +
+                            ' · ' +
+                            Object.keys(m.patterns || {}).length +
+                            ' patterns' +
+                            (m.set_id ? ' · ' + m.set_id : '')
+                    );
+                    publishArena(m);
                     populateDropdown(m);
                 } catch (e) {
-                    setStatus('built-in library unavailable — use “Load set…”', 'l-err');
+                    setStatus('built-in library unavailable — use “Load set…”', 'err-msg');
                     lockPat(false);
+                    renderSdList(null);
                 }
             }
 
@@ -838,7 +1987,10 @@
                 folderInput.value = '';
                 if (!files.length) return;
                 const manifestFile = files.find((f) => f.name === 'manifest.json');
-                if (!manifestFile) { setStatus('no manifest.json in that folder', 'l-err'); return; }
+                if (!manifestFile) {
+                    setStatus('no manifest.json in that folder', 'err-msg');
+                    return;
+                }
                 try {
                     const m = PS.loadManifestJson(JSON.parse(await manifestFile.text()));
                     const map = {};
@@ -850,11 +2002,18 @@
                     };
                     previewCache = {};
                     const cfg = getConfig(m.arenaConfig);
-                    setStatus('loaded · ' + ((cfg && cfg.label) || m.arenaConfig || '(unknown arena)') + ' · ' +
-                        Object.keys(m.patterns || {}).length + ' patterns' + (m.set_id ? ' · ' + m.set_id : ''));
+                    setStatus(
+                        'loaded · ' +
+                            ((cfg && cfg.label) || m.arenaConfig || '(unknown arena)') +
+                            ' · ' +
+                            Object.keys(m.patterns || {}).length +
+                            ' patterns' +
+                            (m.set_id ? ' · ' + m.set_id : '')
+                    );
+                    publishArena(m);
                     populateDropdown(m);
                 } catch (e) {
-                    setStatus('load failed: ' + (e.message || e), 'l-err');
+                    setStatus('load failed: ' + (e.message || e), 'err-msg');
                     lockPat(false);
                 }
             });
