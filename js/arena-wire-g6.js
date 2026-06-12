@@ -33,9 +33,11 @@ const ArenaWireG6 = (function () {
     'use strict';
 
     // G4-compatible host command opcodes (src/commands.h). Not every opcode is
-    // encoded here — this is the Milestone-A substrate set. Stream-frame (0x32,
-    // Mode 5) pixel assembly is deliberately out of scope (it belongs with the
-    // runner, not this transport substrate).
+    // encoded here — this is the substrate set the web tools need. Stream-frame
+    // (0x32) IS encoded (encodeStreamFrame, used by the Arena Console) but uses a
+    // different on-wire header than the binary commands below: opcode first, then
+    // a uint16 LE payload length (per the firmware SerialManager stream header),
+    // not the single leading length byte the `frame()` helper emits.
     const OPCODES = {
         ALL_OFF: 0x00,
         TRIAL_PARAMS: 0x08, // selects mode + pattern (Modes 2/3/4)
@@ -45,11 +47,19 @@ const ArenaWireG6 = (function () {
         GET_FRAMES_SENT: 0x19, // returns uint32 LE frames pushed to panels
         RESET_FRAMES_SENT: 0x1a, // zeroes the frames-sent counter
         STOP_DISPLAY: 0x30,
+        STREAM_FRAME: 0x32, // host-streamed full frame ("FR"+blocks; see encodeStreamFrame)
         GET_ETHERNET_IP: 0x66,
         GET_CONTROLLER_INFO: 0x67, // returns {version, capability_bitmap}
         SET_FRAME_POSITION: 0x70, // Mode 3: host-commanded frame index
         ALL_ON: 0xff
     };
+
+    // Stream-frame payload byte counts (firmware constants.h): a 4-byte
+    // "FR"+frame_index prefix followed by 20 row-major panel blocks. GS2 blocks
+    // are 53 B, GS16 blocks are 203 B → 4 + 20*53 and 4 + 20*203. The firmware
+    // infers the grayscale mode from the payload size, so these are the only two
+    // lengths it accepts (full-grid 20-panel arenas, e.g. G6_2x10).
+    const STREAM_FRAME_BYTES = { GS2: 1064, GS16: 4064 };
 
     // Display modes (trial-params `mode` byte). 5 = stream is set via a
     // different command and is not encodable here.
@@ -182,6 +192,52 @@ const ArenaWireG6 = (function () {
         return frame(OPCODES.SET_FRAME_POSITION, u16le(index, 'index')); // 03 70 lo hi
     }
 
+    /**
+     * stream-frame (0x32) — host-streamed full frame. The controller copies the
+     * payload into its frame buffer, enters STREAMING_FRAME, and displays it
+     * until the next command (no pattern/SD prerequisite).
+     *
+     * UNLIKE the binary commands above, the on-wire header is opcode-first with a
+     * 2-byte little-endian payload length: [0x32, len_lo, len_hi, ...payload]
+     * (firmware SerialManager stream header), NOT the single leading length byte
+     * the `frame()` helper emits. `payload` is the per-frame body — a 4-byte
+     * "FR"+frame_index prefix followed by the row-major panel blocks — i.e.
+     * exactly one .pat frame minus its 2-byte CRC trailer. Build it by reusing
+     * the proven pattern encoder and slicing off the file header + trailer:
+     *     const buf = new Uint8Array(PatEncoder.encodeG6({ ...one frame... }));
+     *     const len = STREAM_FRAME_BYTES[gs === 2 ? 'GS2' : 'GS16'];
+     *     const payload = buf.subarray(PatEncoder.G6_HEADER_SIZE,
+     *                                  PatEncoder.G6_HEADER_SIZE + len);
+     * That guarantees a streamed frame displays exactly as the same .pat would
+     * from SD. The firmware infers GS2 vs GS16 from the payload length, so only
+     * the two STREAM_FRAME_BYTES sizes are accepted.
+     *
+     * Correlation note: because the opcode is byte 0 (not byte 1), pass the
+     * matching expectedCmd to the transport — link.send(frame, {expectedCmd: 0x32}).
+     *
+     * @param {Uint8Array|number[]} payload per-frame body (1064 GS2 / 4064 GS16)
+     * @returns {Uint8Array} on-wire stream frame [0x32, len_lo, len_hi, ...payload]
+     */
+    function encodeStreamFrame(payload) {
+        const body = payload instanceof Uint8Array ? payload : Uint8Array.from(payload);
+        if (body.length !== STREAM_FRAME_BYTES.GS2 && body.length !== STREAM_FRAME_BYTES.GS16) {
+            throw new RangeError(
+                'stream-frame payload must be ' +
+                    STREAM_FRAME_BYTES.GS2 +
+                    ' (GS2) or ' +
+                    STREAM_FRAME_BYTES.GS16 +
+                    ' (GS16) bytes, got ' +
+                    body.length
+            );
+        }
+        const out = new Uint8Array(3 + body.length);
+        out[0] = OPCODES.STREAM_FRAME; // 0x32
+        out[1] = body.length & 0xff; // payload length lo
+        out[2] = (body.length >> 8) & 0xff; // payload length hi
+        out.set(body, 3);
+        return out;
+    }
+
     // set-refresh-rate (0x16) — host override of the panel re-transmit rate (Hz, u16 LE).
     function encodeSetRefreshRate(hz) {
         return frame(OPCODES.SET_REFRESH_RATE, u16le(hz, 'hz')); // 03 16 lo hi
@@ -299,6 +355,7 @@ const ArenaWireG6 = (function () {
         OPCODES,
         MODES,
         CAPABILITY_BITS,
+        STREAM_FRAME_BYTES,
 
         // Encoders (request frames)
         encodeAllOn,
@@ -306,6 +363,7 @@ const ArenaWireG6 = (function () {
         encodeStop,
         encodeTrialParams,
         encodeSetFramePosition,
+        encodeStreamFrame,
         encodeSetRefreshRate,
         encodeSetSpiClock,
         encodeGetSpiClock,

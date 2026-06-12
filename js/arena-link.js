@@ -200,6 +200,9 @@ const ArenaLink = (function () {
          * @param {Uint8Array|number[]} bytes request frame
          * @param {object} [opts]
          * @param {number} [opts.timeoutMs=500]
+         * @param {number} [opts.expectedCmd] response echo_cmd to correlate on;
+         *   defaults to bytes[1]. A stream frame ([0x32, len_lo, len_hi, ...])
+         *   carries its opcode at byte 0 (byte 1 is a length), so pass 0x32.
          * @returns {Promise<Uint8Array>}
          */
         send(bytes, opts) {
@@ -219,7 +222,10 @@ const ArenaLink = (function () {
             if (!this._writer) throw new Error('ArenaLink.send: not connected');
             const timeoutMs = (opts && opts.timeoutMs) || DEFAULT_TIMEOUT_MS;
             const payload = bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes);
-            const expectedCmd = payload[1]; // request frame is [length, cmd, ...params]
+            // Binary commands are [length, cmd, ...] so the cmd is byte 1; a
+            // stream frame is [0x32, len_lo, len_hi, ...] so its opcode is byte 0.
+            // Let callers override which echo_cmd to correlate the reply on.
+            const expectedCmd = opts && opts.expectedCmd != null ? opts.expectedCmd : payload[1];
 
             // Park the await BEFORE writing so a very fast reply can't arrive
             // before its promise exists. The executor runs synchronously, so

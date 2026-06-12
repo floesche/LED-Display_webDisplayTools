@@ -145,6 +145,34 @@ checkThrows('SPI clock 31 throws', () => Wire.encodeSetSpiClock(31));
 checkBytes('SPI clock 1 ok', Wire.encodeSetSpiClock(1), '03 17 01 00');
 checkBytes('SPI clock 30 ok', Wire.encodeSetSpiClock(30), '03 17 1e 00');
 
+console.log('\n=== stream-frame (0x32) — firmware SerialManager stream header ===');
+check('OPCODES.STREAM_FRAME', Wire.OPCODES.STREAM_FRAME, 0x32);
+check('STREAM_FRAME_BYTES.GS2', Wire.STREAM_FRAME_BYTES.GS2, 1064);
+check('STREAM_FRAME_BYTES.GS16', Wire.STREAM_FRAME_BYTES.GS16, 4064);
+// On-wire: [0x32, len_lo, len_hi, ...payload]. GS16 len 4064 = 0x0FE0 LE.
+const sfGs16 = Wire.encodeStreamFrame(new Uint8Array(4064));
+checkBytes('stream GS16 header', sfGs16.subarray(0, 3), '32 e0 0f');
+check('stream GS16 total length', sfGs16.length, 4067);
+// GS2 len 1064 = 0x0428 LE.
+const sfGs2 = Wire.encodeStreamFrame(new Uint8Array(1064));
+checkBytes('stream GS2 header', sfGs2.subarray(0, 3), '32 28 04');
+check('stream GS2 total length', sfGs2.length, 1067);
+// Payload is copied verbatim after the 3-byte header (first + last byte).
+const sfMarked = new Uint8Array(1064);
+sfMarked[0] = 0x46;
+sfMarked[1063] = 0xab;
+const sfM = Wire.encodeStreamFrame(sfMarked);
+check('stream payload[0] copied', sfM[3], 0x46);
+check('stream payload[last] copied', sfM[1066], 0xab);
+// Accepts a plain number[] receiver too.
+checkBool(
+    'stream accepts number[]',
+    Wire.encodeStreamFrame(new Array(1064).fill(0)).length === 1067
+);
+// Only the two firmware-accepted sizes are valid (mode inferred from size).
+checkThrows('stream wrong size 100 throws', () => Wire.encodeStreamFrame(new Uint8Array(100)));
+checkThrows('stream wrong size 4063 throws', () => Wire.encodeStreamFrame(new Uint8Array(4063)));
+
 console.log('\n=== decodeResponse framing ===');
 // get-controller-info reply: [len=4, status=0, echo=0x67, version=2, cap=0x11].
 // length byte = 4 = status + echo + 2 payload bytes.
