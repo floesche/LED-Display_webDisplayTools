@@ -12,14 +12,12 @@ const isBlock = (token) => token && (token.type === 'block-map' || token.type ==
 function resolveFlowCollection({ composeNode, composeEmptyNode }, ctx, fc, onError, tag) {
     const isMap = fc.start.source === '{';
     const fcName = isMap ? 'flow map' : 'flow sequence';
-    const NodeClass = (tag?.nodeClass ?? (isMap ? YAMLMap : YAMLSeq));
+    const NodeClass = tag?.nodeClass ?? (isMap ? YAMLMap : YAMLSeq);
     const coll = new NodeClass(ctx.schema);
     coll.flow = true;
     const atRoot = ctx.atRoot;
-    if (atRoot)
-        ctx.atRoot = false;
-    if (ctx.atKey)
-        ctx.atKey = false;
+    if (atRoot) ctx.atRoot = false;
+    if (ctx.atKey) ctx.atKey = false;
     let offset = fc.offset + fc.start.source.length;
     for (let i = 0; i < fc.items.length; ++i) {
         const collItem = fc.items[i];
@@ -40,23 +38,22 @@ function resolveFlowCollection({ composeNode, composeEmptyNode }, ctx, fc, onErr
                 else if (i < fc.items.length - 1)
                     onError(props.start, 'UNEXPECTED_TOKEN', `Unexpected empty item in ${fcName}`);
                 if (props.comment) {
-                    if (coll.comment)
-                        coll.comment += '\n' + props.comment;
-                    else
-                        coll.comment = props.comment;
+                    if (coll.comment) coll.comment += '\n' + props.comment;
+                    else coll.comment = props.comment;
                 }
                 offset = props.end;
                 continue;
             }
             if (!isMap && ctx.options.strict && containsNewline(key))
-                onError(key, // checked by containsNewline()
-                'MULTILINE_IMPLICIT_KEY', 'Implicit keys of flow sequence pairs need to be on a single line');
+                onError(
+                    key, // checked by containsNewline()
+                    'MULTILINE_IMPLICIT_KEY',
+                    'Implicit keys of flow sequence pairs need to be on a single line'
+                );
         }
         if (i === 0) {
-            if (props.comma)
-                onError(props.comma, 'UNEXPECTED_TOKEN', `Unexpected , in ${fcName}`);
-        }
-        else {
+            if (props.comma) onError(props.comma, 'UNEXPECTED_TOKEN', `Unexpected , in ${fcName}`);
+        } else {
             if (!props.comma)
                 onError(props.start, 'MISSING_CHAR', `Missing , between ${fcName} items`);
             if (props.comment) {
@@ -75,12 +72,9 @@ function resolveFlowCollection({ composeNode, composeEmptyNode }, ctx, fc, onErr
                 }
                 if (prevItemComment) {
                     let prev = coll.items[coll.items.length - 1];
-                    if (isPair(prev))
-                        prev = prev.value ?? prev.key;
-                    if (prev.comment)
-                        prev.comment += '\n' + prevItemComment;
-                    else
-                        prev.comment = prevItemComment;
+                    if (isPair(prev)) prev = prev.value ?? prev.key;
+                    if (prev.comment) prev.comment += '\n' + prevItemComment;
+                    else prev.comment = prevItemComment;
                     props.comment = props.comment.substring(prevItemComment.length + 1);
                 }
             }
@@ -93,10 +87,8 @@ function resolveFlowCollection({ composeNode, composeEmptyNode }, ctx, fc, onErr
                 : composeEmptyNode(ctx, props.end, sep, null, props, onError);
             coll.items.push(valueNode);
             offset = valueNode.range[2];
-            if (isBlock(value))
-                onError(valueNode.range, 'BLOCK_IN_FLOW', blockMsg);
-        }
-        else {
+            if (isBlock(value)) onError(valueNode.range, 'BLOCK_IN_FLOW', blockMsg);
+        } else {
             // item is a key+value pair
             // key value
             ctx.atKey = true;
@@ -104,8 +96,7 @@ function resolveFlowCollection({ composeNode, composeEmptyNode }, ctx, fc, onErr
             const keyNode = key
                 ? composeNode(ctx, key, props, onError)
                 : composeEmptyNode(ctx, keyStart, start, null, props, onError);
-            if (isBlock(key))
-                onError(keyNode.range, 'BLOCK_IN_FLOW', blockMsg);
+            if (isBlock(key)) onError(keyNode.range, 'BLOCK_IN_FLOW', blockMsg);
             ctx.atKey = false;
             // value properties
             const valueProps = resolveProps(sep ?? [], {
@@ -121,49 +112,53 @@ function resolveFlowCollection({ composeNode, composeEmptyNode }, ctx, fc, onErr
                 if (!isMap && !props.found && ctx.options.strict) {
                     if (sep)
                         for (const st of sep) {
-                            if (st === valueProps.found)
-                                break;
+                            if (st === valueProps.found) break;
                             if (st.type === 'newline') {
-                                onError(st, 'MULTILINE_IMPLICIT_KEY', 'Implicit keys of flow sequence pairs need to be on a single line');
+                                onError(
+                                    st,
+                                    'MULTILINE_IMPLICIT_KEY',
+                                    'Implicit keys of flow sequence pairs need to be on a single line'
+                                );
                                 break;
                             }
                         }
                     if (props.start < valueProps.found.offset - 1024)
-                        onError(valueProps.found, 'KEY_OVER_1024_CHARS', 'The : indicator must be at most 1024 chars after the start of an implicit flow sequence key');
+                        onError(
+                            valueProps.found,
+                            'KEY_OVER_1024_CHARS',
+                            'The : indicator must be at most 1024 chars after the start of an implicit flow sequence key'
+                        );
                 }
-            }
-            else if (value) {
+            } else if (value) {
                 if ('source' in value && value.source?.[0] === ':')
                     onError(value, 'MISSING_CHAR', `Missing space after : in ${fcName}`);
                 else
-                    onError(valueProps.start, 'MISSING_CHAR', `Missing , or : between ${fcName} items`);
+                    onError(
+                        valueProps.start,
+                        'MISSING_CHAR',
+                        `Missing , or : between ${fcName} items`
+                    );
             }
             // value value
             const valueNode = value
                 ? composeNode(ctx, value, valueProps, onError)
                 : valueProps.found
-                    ? composeEmptyNode(ctx, valueProps.end, sep, null, valueProps, onError)
-                    : null;
+                  ? composeEmptyNode(ctx, valueProps.end, sep, null, valueProps, onError)
+                  : null;
             if (valueNode) {
-                if (isBlock(value))
-                    onError(valueNode.range, 'BLOCK_IN_FLOW', blockMsg);
-            }
-            else if (valueProps.comment) {
-                if (keyNode.comment)
-                    keyNode.comment += '\n' + valueProps.comment;
-                else
-                    keyNode.comment = valueProps.comment;
+                if (isBlock(value)) onError(valueNode.range, 'BLOCK_IN_FLOW', blockMsg);
+            } else if (valueProps.comment) {
+                if (keyNode.comment) keyNode.comment += '\n' + valueProps.comment;
+                else keyNode.comment = valueProps.comment;
             }
             const pair = new Pair(keyNode, valueNode);
-            if (ctx.options.keepSourceTokens)
-                pair.srcToken = collItem;
+            if (ctx.options.keepSourceTokens) pair.srcToken = collItem;
             if (isMap) {
                 const map = coll;
                 if (mapIncludes(ctx, map.items, keyNode))
                     onError(keyStart, 'DUPLICATE_KEY', 'Map keys must be unique');
                 map.items.push(pair);
-            }
-            else {
+            } else {
                 const map = new YAMLMap(ctx.schema);
                 map.flow = true;
                 map.items.push(pair);
@@ -177,28 +172,23 @@ function resolveFlowCollection({ composeNode, composeEmptyNode }, ctx, fc, onErr
     const expectedEnd = isMap ? '}' : ']';
     const [ce, ...ee] = fc.end;
     let cePos = offset;
-    if (ce?.source === expectedEnd)
-        cePos = ce.offset + ce.source.length;
+    if (ce?.source === expectedEnd) cePos = ce.offset + ce.source.length;
     else {
         const name = fcName[0].toUpperCase() + fcName.substring(1);
         const msg = atRoot
             ? `${name} must end with a ${expectedEnd}`
             : `${name} in block collection must be sufficiently indented and end with a ${expectedEnd}`;
         onError(offset, atRoot ? 'MISSING_CHAR' : 'BAD_INDENT', msg);
-        if (ce && ce.source.length !== 1)
-            ee.unshift(ce);
+        if (ce && ce.source.length !== 1) ee.unshift(ce);
     }
     if (ee.length > 0) {
         const end = resolveEnd(ee, cePos, ctx.options.strict, onError);
         if (end.comment) {
-            if (coll.comment)
-                coll.comment += '\n' + end.comment;
-            else
-                coll.comment = end.comment;
+            if (coll.comment) coll.comment += '\n' + end.comment;
+            else coll.comment = end.comment;
         }
         coll.range = [fc.offset, cePos, end.offset];
-    }
-    else {
+    } else {
         coll.range = [fc.offset, cePos, cePos];
     }
     return coll;

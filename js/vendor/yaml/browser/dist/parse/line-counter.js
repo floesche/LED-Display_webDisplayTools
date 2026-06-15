@@ -21,15 +21,11 @@ class LineCounter {
             let high = this.lineStarts.length;
             while (low < high) {
                 const mid = (low + high) >> 1; // Math.floor((low + high) / 2)
-                if (this.lineStarts[mid] < offset)
-                    low = mid + 1;
-                else
-                    high = mid;
+                if (this.lineStarts[mid] < offset) low = mid + 1;
+                else high = mid;
             }
-            if (this.lineStarts[low] === offset)
-                return { line: low + 1, col: 1 };
-            if (low === 0)
-                return { line: 0, col: offset };
+            if (this.lineStarts[low] === offset) return { line: low + 1, col: 1 };
+            if (low === 0) return { line: 0, col: offset };
             const start = this.lineStarts[low - 1];
             return { line: low, col: offset - start + 1 };
         };

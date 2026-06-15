@@ -3,8 +3,7 @@ import { stringifyNumber } from '../../stringify/stringifyNumber.js';
 const intIdentify = (value) => typeof value === 'bigint' || Number.isInteger(value);
 function intResolve(str, offset, radix, { intAsBigInt }) {
     const sign = str[0];
-    if (sign === '-' || sign === '+')
-        offset += 1;
+    if (sign === '-' || sign === '+') offset += 1;
     str = str.substring(offset).replace(/_/g, '');
     if (intAsBigInt) {
         switch (radix) {
@@ -39,7 +38,7 @@ const intBin = {
     format: 'BIN',
     test: /^[-+]?0b[0-1_]+$/,
     resolve: (str, _onError, opt) => intResolve(str, 2, 2, opt),
-    stringify: node => intStringify(node, 2, '0b')
+    stringify: (node) => intStringify(node, 2, '0b')
 };
 const intOct = {
     identify: intIdentify,
@@ -48,7 +47,7 @@ const intOct = {
     format: 'OCT',
     test: /^[-+]?0[0-7_]+$/,
     resolve: (str, _onError, opt) => intResolve(str, 1, 8, opt),
-    stringify: node => intStringify(node, 8, '0')
+    stringify: (node) => intStringify(node, 8, '0')
 };
 const int = {
     identify: intIdentify,
@@ -65,7 +64,7 @@ const intHex = {
     format: 'HEX',
     test: /^[-+]?0x[0-9a-fA-F_]+$/,
     resolve: (str, _onError, opt) => intResolve(str, 2, 16, opt),
-    stringify: node => intStringify(node, 16, '0x')
+    stringify: (node) => intStringify(node, 16, '0x')
 };
 
 export { int, intBin, intHex, intOct };

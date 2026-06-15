@@ -2,7 +2,8 @@ import { SCALAR } from './identity.js';
 import { NodeBase } from './Node.js';
 import { toJS } from './toJS.js';
 
-const isScalarValue = (value) => !value || (typeof value !== 'function' && typeof value !== 'object');
+const isScalarValue = (value) =>
+    !value || (typeof value !== 'function' && typeof value !== 'object');
 class Scalar extends NodeBase {
     constructor(value) {
         super(SCALAR);

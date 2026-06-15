@@ -62,8 +62,7 @@ function plainValue(source, onError) {
             break;
         }
     }
-    if (badChar)
-        onError(0, 'BAD_SCALAR_START', `Plain value cannot start with ${badChar}`);
+    if (badChar) onError(0, 'BAD_SCALAR_START', `Plain value cannot start with ${badChar}`);
     return foldLines(source);
 }
 function singleQuotedValue(source, onError) {
@@ -83,26 +82,21 @@ function foldLines(source) {
     try {
         first = new RegExp('(.*?)(?<![ \t])[ \t]*\r?\n', 'sy');
         line = new RegExp('[ \t]*(.*?)(?:(?<![ \t])[ \t]*)?\r?\n', 'sy');
-    }
-    catch {
+    } catch {
         first = /(.*?)[ \t]*\r?\n/sy;
         line = /[ \t]*(.*?)[ \t]*\r?\n/sy;
     }
     let match = first.exec(source);
-    if (!match)
-        return source;
+    if (!match) return source;
     let res = match[1];
     let sep = ' ';
     let pos = first.lastIndex;
     line.lastIndex = pos;
     while ((match = line.exec(source))) {
         if (match[1] === '') {
-            if (sep === '\n')
-                res += sep;
-            else
-                sep = '\n';
-        }
-        else {
+            if (sep === '\n') res += sep;
+            else sep = '\n';
+        } else {
             res += sep + match[1];
             sep = ' ';
         }
@@ -117,51 +111,40 @@ function doubleQuotedValue(source, onError) {
     let res = '';
     for (let i = 1; i < source.length - 1; ++i) {
         const ch = source[i];
-        if (ch === '\r' && source[i + 1] === '\n')
-            continue;
+        if (ch === '\r' && source[i + 1] === '\n') continue;
         if (ch === '\n') {
             const { fold, offset } = foldNewline(source, i);
             res += fold;
             i = offset;
-        }
-        else if (ch === '\\') {
+        } else if (ch === '\\') {
             let next = source[++i];
             const cc = escapeCodes[next];
-            if (cc)
-                res += cc;
+            if (cc) res += cc;
             else if (next === '\n') {
                 // skip escaped newlines, but still trim the following line
                 next = source[i + 1];
-                while (next === ' ' || next === '\t')
-                    next = source[++i + 1];
-            }
-            else if (next === '\r' && source[i + 1] === '\n') {
+                while (next === ' ' || next === '\t') next = source[++i + 1];
+            } else if (next === '\r' && source[i + 1] === '\n') {
                 // skip escaped CRLF newlines, but still trim the following line
                 next = source[++i + 1];
-                while (next === ' ' || next === '\t')
-                    next = source[++i + 1];
-            }
-            else if (next === 'x' || next === 'u' || next === 'U') {
+                while (next === ' ' || next === '\t') next = source[++i + 1];
+            } else if (next === 'x' || next === 'u' || next === 'U') {
                 const length = next === 'x' ? 2 : next === 'u' ? 4 : 8;
                 res += parseCharCode(source, i + 1, length, onError);
                 i += length;
-            }
-            else {
+            } else {
                 const raw = source.substr(i - 1, 2);
                 onError(i - 1, 'BAD_DQ_ESCAPE', `Invalid escape sequence ${raw}`);
                 res += raw;
             }
-        }
-        else if (ch === ' ' || ch === '\t') {
+        } else if (ch === ' ' || ch === '\t') {
             // trim trailing whitespace
             const wsStart = i;
             let next = source[i + 1];
-            while (next === ' ' || next === '\t')
-                next = source[++i + 1];
+            while (next === ' ' || next === '\t') next = source[++i + 1];
             if (next !== '\n' && !(next === '\r' && source[i + 2] === '\n'))
                 res += i > wsStart ? source.slice(wsStart, i + 1) : ch;
-        }
-        else {
+        } else {
             res += ch;
         }
     }
@@ -177,19 +160,16 @@ function foldNewline(source, offset) {
     let fold = '';
     let ch = source[offset + 1];
     while (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r') {
-        if (ch === '\r' && source[offset + 2] !== '\n')
-            break;
-        if (ch === '\n')
-            fold += '\n';
+        if (ch === '\r' && source[offset + 2] !== '\n') break;
+        if (ch === '\n') fold += '\n';
         offset += 1;
         ch = source[offset + 1];
     }
-    if (!fold)
-        fold = ' ';
+    if (!fold) fold = ' ';
     return { fold, offset };
 }
 const escapeCodes = {
-    '0': '\0', // null character
+    0: '\0', // null character
     a: '\x07', // bell character
     b: '\b', // backspace
     e: '\x1b', // escape character
@@ -214,8 +194,7 @@ function parseCharCode(source, offset, length, onError) {
     const code = ok ? parseInt(cc, 16) : NaN;
     try {
         return String.fromCodePoint(code);
-    }
-    catch {
+    } catch {
         const raw = source.substr(offset - 2, length + 2);
         onError(offset - 2, 'BAD_DQ_ESCAPE', `Invalid escape sequence ${raw}`);
         return raw;

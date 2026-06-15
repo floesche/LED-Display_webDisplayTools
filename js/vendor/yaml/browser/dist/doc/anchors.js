@@ -18,8 +18,7 @@ function anchorNames(root) {
     const anchors = new Set();
     visit(root, {
         Value(_key, node) {
-            if (node.anchor)
-                anchors.add(node.anchor);
+            if (node.anchor) anchors.add(node.anchor);
         }
     });
     return anchors;
@@ -28,8 +27,7 @@ function anchorNames(root) {
 function findNewAnchor(prefix, exclude) {
     for (let i = 1; true; ++i) {
         const name = `${prefix}${i}`;
-        if (!exclude.has(name))
-            return name;
+        if (!exclude.has(name)) return name;
     }
 }
 function createNodeAnchors(doc, prefix) {
@@ -52,13 +50,16 @@ function createNodeAnchors(doc, prefix) {
         setAnchors: () => {
             for (const source of aliasObjects) {
                 const ref = sourceObjects.get(source);
-                if (typeof ref === 'object' &&
+                if (
+                    typeof ref === 'object' &&
                     ref.anchor &&
-                    (isScalar(ref.node) || isCollection(ref.node))) {
+                    (isScalar(ref.node) || isCollection(ref.node))
+                ) {
                     ref.node.anchor = ref.anchor;
-                }
-                else {
-                    const error = new Error('Failed to resolve repeated object (this should not happen)');
+                } else {
+                    const error = new Error(
+                        'Failed to resolve repeated object (this should not happen)'
+                    );
                     error.source = source;
                     throw error;
                 }

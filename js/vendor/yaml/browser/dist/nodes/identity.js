@@ -33,4 +33,21 @@ function isNode(node) {
 }
 const hasAnchor = (node) => (isScalar(node) || isCollection(node)) && !!node.anchor;
 
-export { ALIAS, DOC, MAP, NODE_TYPE, PAIR, SCALAR, SEQ, hasAnchor, isAlias, isCollection, isDocument, isMap, isNode, isPair, isScalar, isSeq };
+export {
+    ALIAS,
+    DOC,
+    MAP,
+    NODE_TYPE,
+    PAIR,
+    SCALAR,
+    SEQ,
+    hasAnchor,
+    isAlias,
+    isCollection,
+    isDocument,
+    isMap,
+    isNode,
+    isPair,
+    isScalar,
+    isSeq
+};

@@ -2,31 +2,32 @@ import { Scalar } from '../../nodes/Scalar.js';
 import { stringifyNumber } from '../../stringify/stringifyNumber.js';
 
 const floatNaN = {
-    identify: value => typeof value === 'number',
+    identify: (value) => typeof value === 'number',
     default: true,
     tag: 'tag:yaml.org,2002:float',
     test: /^(?:[-+]?\.(?:inf|Inf|INF)|\.nan|\.NaN|\.NAN)$/,
-    resolve: str => str.slice(-3).toLowerCase() === 'nan'
-        ? NaN
-        : str[0] === '-'
-            ? Number.NEGATIVE_INFINITY
-            : Number.POSITIVE_INFINITY,
+    resolve: (str) =>
+        str.slice(-3).toLowerCase() === 'nan'
+            ? NaN
+            : str[0] === '-'
+              ? Number.NEGATIVE_INFINITY
+              : Number.POSITIVE_INFINITY,
     stringify: stringifyNumber
 };
 const floatExp = {
-    identify: value => typeof value === 'number',
+    identify: (value) => typeof value === 'number',
     default: true,
     tag: 'tag:yaml.org,2002:float',
     format: 'EXP',
     test: /^[-+]?(?:\.[0-9]+|[0-9]+(?:\.[0-9]*)?)[eE][-+]?[0-9]+$/,
-    resolve: str => parseFloat(str),
+    resolve: (str) => parseFloat(str),
     stringify(node) {
         const num = Number(node.value);
         return isFinite(num) ? num.toExponential() : stringifyNumber(node);
     }
 };
 const float = {
-    identify: value => typeof value === 'number',
+    identify: (value) => typeof value === 'number',
     default: true,
     tag: 'tag:yaml.org,2002:float',
     test: /^[-+]?(?:\.[0-9]+|[0-9]+\.[0-9]*)$/,

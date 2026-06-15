@@ -26,15 +26,13 @@ class YAMLSeq extends Collection {
      */
     delete(key) {
         const idx = asItemIndex(key);
-        if (typeof idx !== 'number')
-            return false;
+        if (typeof idx !== 'number') return false;
         const del = this.items.splice(idx, 1);
         return del.length > 0;
     }
     get(key, keepScalar) {
         const idx = asItemIndex(key);
-        if (typeof idx !== 'number')
-            return undefined;
+        if (typeof idx !== 'number') return undefined;
         const it = this.items[idx];
         return !keepScalar && isScalar(it) ? it.value : it;
     }
@@ -57,26 +55,20 @@ class YAMLSeq extends Collection {
      */
     set(key, value) {
         const idx = asItemIndex(key);
-        if (typeof idx !== 'number')
-            throw new Error(`Expected a valid index, not ${key}.`);
+        if (typeof idx !== 'number') throw new Error(`Expected a valid index, not ${key}.`);
         const prev = this.items[idx];
-        if (isScalar(prev) && isScalarValue(value))
-            prev.value = value;
-        else
-            this.items[idx] = value;
+        if (isScalar(prev) && isScalarValue(value)) prev.value = value;
+        else this.items[idx] = value;
     }
     toJSON(_, ctx) {
         const seq = [];
-        if (ctx?.onCreate)
-            ctx.onCreate(seq);
+        if (ctx?.onCreate) ctx.onCreate(seq);
         let i = 0;
-        for (const item of this.items)
-            seq.push(toJS(item, String(i++), ctx));
+        for (const item of this.items) seq.push(toJS(item, String(i++), ctx));
         return seq;
     }
     toString(ctx, onComment, onChompKeep) {
-        if (!ctx)
-            return JSON.stringify(this);
+        if (!ctx) return JSON.stringify(this);
         return stringifyCollection(this, ctx, {
             blockItemPrefix: '- ',
             flowChars: { start: '[', end: ']' },
@@ -103,11 +95,8 @@ class YAMLSeq extends Collection {
 }
 function asItemIndex(key) {
     let idx = isScalar(key) ? key.value : key;
-    if (idx && typeof idx === 'string')
-        idx = Number(idx);
-    return typeof idx === 'number' && Number.isInteger(idx) && idx >= 0
-        ? idx
-        : null;
+    if (idx && typeof idx === 'string') idx = Number(idx);
+    return typeof idx === 'number' && Number.isInteger(idx) && idx >= 0 ? idx : null;
 }
 
 export { YAMLSeq };

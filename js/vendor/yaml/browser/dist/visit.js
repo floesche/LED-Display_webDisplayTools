@@ -1,4 +1,13 @@
-import { isDocument, isNode, isPair, isCollection, isMap, isSeq, isScalar, isAlias } from './nodes/identity.js';
+import {
+    isDocument,
+    isNode,
+    isPair,
+    isCollection,
+    isMap,
+    isSeq,
+    isScalar,
+    isAlias
+} from './nodes/identity.js';
 
 const BREAK = Symbol('break visit');
 const SKIP = Symbol('skip children');
@@ -37,11 +46,8 @@ function visit(node, visitor) {
     const visitor_ = initVisitor(visitor);
     if (isDocument(node)) {
         const cd = visit_(null, node.contents, visitor_, Object.freeze([node]));
-        if (cd === REMOVE)
-            node.contents = null;
-    }
-    else
-        visit_(null, node, visitor_, Object.freeze([]));
+        if (cd === REMOVE) node.contents = null;
+    } else visit_(null, node, visitor_, Object.freeze([]));
 }
 // Without the `as symbol` casts, TS declares these in the `visit`
 // namespace using `var`, but then complains about that because
@@ -63,28 +69,21 @@ function visit_(key, node, visitor, path) {
             path = Object.freeze(path.concat(node));
             for (let i = 0; i < node.items.length; ++i) {
                 const ci = visit_(i, node.items[i], visitor, path);
-                if (typeof ci === 'number')
-                    i = ci - 1;
-                else if (ci === BREAK)
-                    return BREAK;
+                if (typeof ci === 'number') i = ci - 1;
+                else if (ci === BREAK) return BREAK;
                 else if (ci === REMOVE) {
                     node.items.splice(i, 1);
                     i -= 1;
                 }
             }
-        }
-        else if (isPair(node)) {
+        } else if (isPair(node)) {
             path = Object.freeze(path.concat(node));
             const ck = visit_('key', node.key, visitor, path);
-            if (ck === BREAK)
-                return BREAK;
-            else if (ck === REMOVE)
-                node.key = null;
+            if (ck === BREAK) return BREAK;
+            else if (ck === REMOVE) node.key = null;
             const cv = visit_('value', node.value, visitor, path);
-            if (cv === BREAK)
-                return BREAK;
-            else if (cv === REMOVE)
-                node.value = null;
+            if (cv === BREAK) return BREAK;
+            else if (cv === REMOVE) node.value = null;
         }
     }
     return ctrl;
@@ -124,11 +123,8 @@ async function visitAsync(node, visitor) {
     const visitor_ = initVisitor(visitor);
     if (isDocument(node)) {
         const cd = await visitAsync_(null, node.contents, visitor_, Object.freeze([node]));
-        if (cd === REMOVE)
-            node.contents = null;
-    }
-    else
-        await visitAsync_(null, node, visitor_, Object.freeze([]));
+        if (cd === REMOVE) node.contents = null;
+    } else await visitAsync_(null, node, visitor_, Object.freeze([]));
 }
 // Without the `as symbol` casts, TS declares these in the `visit`
 // namespace using `var`, but then complains about that because
@@ -150,81 +146,67 @@ async function visitAsync_(key, node, visitor, path) {
             path = Object.freeze(path.concat(node));
             for (let i = 0; i < node.items.length; ++i) {
                 const ci = await visitAsync_(i, node.items[i], visitor, path);
-                if (typeof ci === 'number')
-                    i = ci - 1;
-                else if (ci === BREAK)
-                    return BREAK;
+                if (typeof ci === 'number') i = ci - 1;
+                else if (ci === BREAK) return BREAK;
                 else if (ci === REMOVE) {
                     node.items.splice(i, 1);
                     i -= 1;
                 }
             }
-        }
-        else if (isPair(node)) {
+        } else if (isPair(node)) {
             path = Object.freeze(path.concat(node));
             const ck = await visitAsync_('key', node.key, visitor, path);
-            if (ck === BREAK)
-                return BREAK;
-            else if (ck === REMOVE)
-                node.key = null;
+            if (ck === BREAK) return BREAK;
+            else if (ck === REMOVE) node.key = null;
             const cv = await visitAsync_('value', node.value, visitor, path);
-            if (cv === BREAK)
-                return BREAK;
-            else if (cv === REMOVE)
-                node.value = null;
+            if (cv === BREAK) return BREAK;
+            else if (cv === REMOVE) node.value = null;
         }
     }
     return ctrl;
 }
 function initVisitor(visitor) {
-    if (typeof visitor === 'object' &&
-        (visitor.Collection || visitor.Node || visitor.Value)) {
-        return Object.assign({
-            Alias: visitor.Node,
-            Map: visitor.Node,
-            Scalar: visitor.Node,
-            Seq: visitor.Node
-        }, visitor.Value && {
-            Map: visitor.Value,
-            Scalar: visitor.Value,
-            Seq: visitor.Value
-        }, visitor.Collection && {
-            Map: visitor.Collection,
-            Seq: visitor.Collection
-        }, visitor);
+    if (typeof visitor === 'object' && (visitor.Collection || visitor.Node || visitor.Value)) {
+        return Object.assign(
+            {
+                Alias: visitor.Node,
+                Map: visitor.Node,
+                Scalar: visitor.Node,
+                Seq: visitor.Node
+            },
+            visitor.Value && {
+                Map: visitor.Value,
+                Scalar: visitor.Value,
+                Seq: visitor.Value
+            },
+            visitor.Collection && {
+                Map: visitor.Collection,
+                Seq: visitor.Collection
+            },
+            visitor
+        );
     }
     return visitor;
 }
 function callVisitor(key, node, visitor, path) {
-    if (typeof visitor === 'function')
-        return visitor(key, node, path);
-    if (isMap(node))
-        return visitor.Map?.(key, node, path);
-    if (isSeq(node))
-        return visitor.Seq?.(key, node, path);
-    if (isPair(node))
-        return visitor.Pair?.(key, node, path);
-    if (isScalar(node))
-        return visitor.Scalar?.(key, node, path);
-    if (isAlias(node))
-        return visitor.Alias?.(key, node, path);
+    if (typeof visitor === 'function') return visitor(key, node, path);
+    if (isMap(node)) return visitor.Map?.(key, node, path);
+    if (isSeq(node)) return visitor.Seq?.(key, node, path);
+    if (isPair(node)) return visitor.Pair?.(key, node, path);
+    if (isScalar(node)) return visitor.Scalar?.(key, node, path);
+    if (isAlias(node)) return visitor.Alias?.(key, node, path);
     return undefined;
 }
 function replaceNode(key, path, node) {
     const parent = path[path.length - 1];
     if (isCollection(parent)) {
         parent.items[key] = node;
-    }
-    else if (isPair(parent)) {
-        if (key === 'key')
-            parent.key = node;
-        else
-            parent.value = node;
-    }
-    else if (isDocument(parent)) {
+    } else if (isPair(parent)) {
+        if (key === 'key') parent.key = node;
+        else parent.value = node;
+    } else if (isDocument(parent)) {
         parent.contents = node;
-    }
-    else {
+    } else {
         const pt = isAlias(parent) ? 'alias' : 'scalar';
         throw new Error(`Cannot replace node with ${pt} parent`);
     }

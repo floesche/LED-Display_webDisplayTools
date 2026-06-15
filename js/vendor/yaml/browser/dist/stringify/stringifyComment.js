@@ -7,14 +7,14 @@
  */
 const stringifyComment = (str) => str.replace(/^(?!$)(?: $)?/gm, '#');
 function indentComment(comment, indent) {
-    if (/^\n+$/.test(comment))
-        return comment.substring(1);
+    if (/^\n+$/.test(comment)) return comment.substring(1);
     return indent ? comment.replace(/^(?! *$)/gm, indent) : comment;
 }
-const lineComment = (str, indent, comment) => str.endsWith('\n')
-    ? indentComment(comment, indent)
-    : comment.includes('\n')
-        ? '\n' + indentComment(comment, indent)
-        : (str.endsWith(' ') ? '' : ' ') + comment;
+const lineComment = (str, indent, comment) =>
+    str.endsWith('\n')
+        ? indentComment(comment, indent)
+        : comment.includes('\n')
+          ? '\n' + indentComment(comment, indent)
+          : (str.endsWith(' ') ? '' : ' ') + comment;
 
 export { indentComment, lineComment, stringifyComment };

@@ -6,10 +6,8 @@ import { composeDoc } from './compose-doc.js';
 import { resolveEnd } from './resolve-end.js';
 
 function getErrorPos(src) {
-    if (typeof src === 'number')
-        return [src, src + 1];
-    if (Array.isArray(src))
-        return src.length === 2 ? src : [src[0], src[1]];
+    if (typeof src === 'number') return [src, src + 1];
+    if (Array.isArray(src)) return src.length === 2 ? src : [src[0], src[1]];
     const { offset, source } = src;
     return [offset, offset + (typeof source === 'string' ? source.length : 1)];
 }
@@ -23,19 +21,17 @@ function parsePrelude(prelude) {
             case '#':
                 comment +=
                     (comment === '' ? '' : afterEmptyLine ? '\n\n' : '\n') +
-                        (source.substring(1) || ' ');
+                    (source.substring(1) || ' ');
                 atComment = true;
                 afterEmptyLine = false;
                 break;
             case '%':
-                if (prelude[i + 1]?.[0] !== '#')
-                    i += 1;
+                if (prelude[i + 1]?.[0] !== '#') i += 1;
                 atComment = false;
                 break;
             default:
                 // This may be wrong after doc-end, but in that case it doesn't matter
-                if (!atComment)
-                    afterEmptyLine = true;
+                if (!atComment) afterEmptyLine = true;
                 atComment = false;
         }
     }
@@ -61,10 +57,8 @@ class Composer {
         this.warnings = [];
         this.onError = (source, code, message, warning) => {
             const pos = getErrorPos(source);
-            if (warning)
-                this.warnings.push(new YAMLWarning(pos, code, message));
-            else
-                this.errors.push(new YAMLParseError(pos, code, message));
+            if (warning) this.warnings.push(new YAMLWarning(pos, code, message));
+            else this.errors.push(new YAMLParseError(pos, code, message));
         };
         // eslint-disable-next-line @typescript-eslint/prefer-nullish-coalescing
         this.directives = new Directives({ version: options.version || '1.2' });
@@ -77,29 +71,22 @@ class Composer {
             const dc = doc.contents;
             if (afterDoc) {
                 doc.comment = doc.comment ? `${doc.comment}\n${comment}` : comment;
-            }
-            else if (afterEmptyLine || doc.directives.docStart || !dc) {
+            } else if (afterEmptyLine || doc.directives.docStart || !dc) {
                 doc.commentBefore = comment;
-            }
-            else if (isCollection(dc) && !dc.flow && dc.items.length > 0) {
+            } else if (isCollection(dc) && !dc.flow && dc.items.length > 0) {
                 let it = dc.items[0];
-                if (isPair(it))
-                    it = it.key;
+                if (isPair(it)) it = it.key;
                 const cb = it.commentBefore;
                 it.commentBefore = cb ? `${comment}\n${cb}` : comment;
-            }
-            else {
+            } else {
                 const cb = dc.commentBefore;
                 dc.commentBefore = cb ? `${comment}\n${cb}` : comment;
             }
         }
         if (afterDoc) {
-            for (let i = 0; i < this.errors.length; ++i)
-                doc.errors.push(this.errors[i]);
-            for (let i = 0; i < this.warnings.length; ++i)
-                doc.warnings.push(this.warnings[i]);
-        }
-        else {
+            for (let i = 0; i < this.errors.length; ++i) doc.errors.push(this.errors[i]);
+            for (let i = 0; i < this.warnings.length; ++i) doc.warnings.push(this.warnings[i]);
+        } else {
             doc.errors = this.errors;
             doc.warnings = this.warnings;
         }
@@ -127,8 +114,7 @@ class Composer {
      * @param endOffset - Should be set if `forceDoc` is also set, to set the document range end and to indicate errors correctly.
      */
     *compose(tokens, forceDoc = false, endOffset = -1) {
-        for (const token of tokens)
-            yield* this.next(token);
+        for (const token of tokens) yield* this.next(token);
         yield* this.end(forceDoc, endOffset);
     }
     /** Advance the composer by one CST token. */
@@ -146,10 +132,13 @@ class Composer {
             case 'document': {
                 const doc = composeDoc(this.options, this.directives, token, this.onError);
                 if (this.atDirectives && !doc.directives.docStart)
-                    this.onError(token, 'MISSING_CHAR', 'Missing directives-end/doc-start indicator line');
+                    this.onError(
+                        token,
+                        'MISSING_CHAR',
+                        'Missing directives-end/doc-start indicator line'
+                    );
                 this.decorate(doc, false);
-                if (this.doc)
-                    yield this.doc;
+                if (this.doc) yield this.doc;
                 this.doc = doc;
                 this.atDirectives = false;
                 break;
@@ -166,20 +155,25 @@ class Composer {
                     ? `${token.message}: ${JSON.stringify(token.source)}`
                     : token.message;
                 const error = new YAMLParseError(getErrorPos(token), 'UNEXPECTED_TOKEN', msg);
-                if (this.atDirectives || !this.doc)
-                    this.errors.push(error);
-                else
-                    this.doc.errors.push(error);
+                if (this.atDirectives || !this.doc) this.errors.push(error);
+                else this.doc.errors.push(error);
                 break;
             }
             case 'doc-end': {
                 if (!this.doc) {
                     const msg = 'Unexpected doc-end without preceding document';
-                    this.errors.push(new YAMLParseError(getErrorPos(token), 'UNEXPECTED_TOKEN', msg));
+                    this.errors.push(
+                        new YAMLParseError(getErrorPos(token), 'UNEXPECTED_TOKEN', msg)
+                    );
                     break;
                 }
                 this.doc.directives.docEnd = true;
-                const end = resolveEnd(token.end, token.offset + token.source.length, this.doc.options.strict, this.onError);
+                const end = resolveEnd(
+                    token.end,
+                    token.offset + token.source.length,
+                    this.doc.options.strict,
+                    this.onError
+                );
                 this.decorate(this.doc, true);
                 if (end.comment) {
                     const dc = this.doc.comment;
@@ -189,7 +183,13 @@ class Composer {
                 break;
             }
             default:
-                this.errors.push(new YAMLParseError(getErrorPos(token), 'UNEXPECTED_TOKEN', `Unsupported token ${token.type}`));
+                this.errors.push(
+                    new YAMLParseError(
+                        getErrorPos(token),
+                        'UNEXPECTED_TOKEN',
+                        `Unsupported token ${token.type}`
+                    )
+                );
         }
     }
     /**
@@ -203,8 +203,7 @@ class Composer {
             this.decorate(this.doc, true);
             yield this.doc;
             this.doc = null;
-        }
-        else if (forceDoc) {
+        } else if (forceDoc) {
             const opts = Object.assign({ _directives: this.directives }, this.options);
             const doc = new Document(undefined, opts);
             if (this.atDirectives)

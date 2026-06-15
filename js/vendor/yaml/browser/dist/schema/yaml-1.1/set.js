@@ -9,19 +9,18 @@ class YAMLSet extends YAMLMap {
     }
     add(key) {
         let pair;
-        if (isPair(key))
-            pair = key;
-        else if (key &&
+        if (isPair(key)) pair = key;
+        else if (
+            key &&
             typeof key === 'object' &&
             'key' in key &&
             'value' in key &&
-            key.value === null)
+            key.value === null
+        )
             pair = new Pair(key.key, null);
-        else
-            pair = new Pair(key, null);
+        else pair = new Pair(key, null);
         const prev = findPair(this.items, pair.key);
-        if (!prev)
-            this.items.push(pair);
+        if (!prev) this.items.push(pair);
     }
     /**
      * If `keepPair` is `true`, returns the Pair matching `key`.
@@ -29,20 +28,17 @@ class YAMLSet extends YAMLMap {
      */
     get(key, keepPair) {
         const pair = findPair(this.items, key);
-        return !keepPair && isPair(pair)
-            ? isScalar(pair.key)
-                ? pair.key.value
-                : pair.key
-            : pair;
+        return !keepPair && isPair(pair) ? (isScalar(pair.key) ? pair.key.value : pair.key) : pair;
     }
     set(key, value) {
         if (typeof value !== 'boolean')
-            throw new Error(`Expected boolean value for set(key, value) in a YAML set, not ${typeof value}`);
+            throw new Error(
+                `Expected boolean value for set(key, value) in a YAML set, not ${typeof value}`
+            );
         const prev = findPair(this.items, key);
         if (prev && !value) {
             this.items.splice(this.items.indexOf(prev), 1);
-        }
-        else if (!prev && value) {
+        } else if (!prev && value) {
             this.items.push(new Pair(key));
         }
     }
@@ -50,20 +46,21 @@ class YAMLSet extends YAMLMap {
         return super.toJSON(_, ctx, Set);
     }
     toString(ctx, onComment, onChompKeep) {
-        if (!ctx)
-            return JSON.stringify(this);
+        if (!ctx) return JSON.stringify(this);
         if (this.hasAllNullValues(true))
-            return super.toString(Object.assign({}, ctx, { allNullValues: true }), onComment, onChompKeep);
-        else
-            throw new Error('Set items must all have null values');
+            return super.toString(
+                Object.assign({}, ctx, { allNullValues: true }),
+                onComment,
+                onChompKeep
+            );
+        else throw new Error('Set items must all have null values');
     }
     static from(schema, iterable, ctx) {
         const { replacer } = ctx;
         const set = new this(schema);
         if (iterable && Symbol.iterator in Object(iterable))
             for (let value of iterable) {
-                if (typeof replacer === 'function')
-                    value = replacer.call(iterable, value, value);
+                if (typeof replacer === 'function') value = replacer.call(iterable, value, value);
                 set.items.push(createPair(value, null, ctx));
             }
         return set;
@@ -72,20 +69,16 @@ class YAMLSet extends YAMLMap {
 YAMLSet.tag = 'tag:yaml.org,2002:set';
 const set = {
     collection: 'map',
-    identify: value => value instanceof Set,
+    identify: (value) => value instanceof Set,
     nodeClass: YAMLSet,
     default: false,
     tag: 'tag:yaml.org,2002:set',
     createNode: (schema, iterable, ctx) => YAMLSet.from(schema, iterable, ctx),
     resolve(map, onError) {
         if (isMap(map)) {
-            if (map.hasAllNullValues(true))
-                return Object.assign(new YAMLSet(), map);
-            else
-                onError('Set items must all have null values');
-        }
-        else
-            onError('Expected a mapping for this tag');
+            if (map.hasAllNullValues(true)) return Object.assign(new YAMLSet(), map);
+            else onError('Set items must all have null values');
+        } else onError('Expected a mapping for this tag');
         return map;
     }
 };

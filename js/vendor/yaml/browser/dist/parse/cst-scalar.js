@@ -7,10 +7,8 @@ function resolveAsScalar(token, strict = true, onError) {
     if (token) {
         const _onError = (pos, code, message) => {
             const offset = typeof pos === 'number' ? pos : Array.isArray(pos) ? pos[0] : pos.offset;
-            if (onError)
-                onError(offset, code, message);
-            else
-                throw new YAMLParseError([offset, offset + 1], code, message);
+            if (onError) onError(offset, code, message);
+            else throw new YAMLParseError([offset, offset + 1], code, message);
         };
         switch (token.type) {
             case 'scalar':
@@ -39,24 +37,23 @@ function resolveAsScalar(token, strict = true, onError) {
  */
 function createScalarToken(value, context) {
     const { implicitKey = false, indent, inFlow = false, offset = -1, type = 'PLAIN' } = context;
-    const source = stringifyString({ type, value }, {
-        implicitKey,
-        indent: indent > 0 ? ' '.repeat(indent) : '',
-        inFlow,
-        options: { blockQuote: true, lineWidth: -1 }
-    });
-    const end = context.end ?? [
-        { type: 'newline', offset: -1, indent, source: '\n' }
-    ];
+    const source = stringifyString(
+        { type, value },
+        {
+            implicitKey,
+            indent: indent > 0 ? ' '.repeat(indent) : '',
+            inFlow,
+            options: { blockQuote: true, lineWidth: -1 }
+        }
+    );
+    const end = context.end ?? [{ type: 'newline', offset: -1, indent, source: '\n' }];
     switch (source[0]) {
         case '|':
         case '>': {
             const he = source.indexOf('\n');
             const head = source.substring(0, he);
             const body = source.substring(he + 1) + '\n';
-            const props = [
-                { type: 'block-scalar-header', offset, indent, source: head }
-            ];
+            const props = [{ type: 'block-scalar-header', offset, indent, source: head }];
             if (!addEndtoBlockProps(props, end))
                 props.push({ type: 'newline', offset: -1, indent, source: '\n' });
             return { type: 'block-scalar', offset, indent, props, source: body };
@@ -88,8 +85,7 @@ function createScalarToken(value, context) {
 function setScalarValue(token, value, context = {}) {
     let { afterKey = false, implicitKey = false, inFlow = false, type } = context;
     let indent = 'indent' in token ? token.indent : null;
-    if (afterKey && typeof indent === 'number')
-        indent += 2;
+    if (afterKey && typeof indent === 'number') indent += 2;
     if (!type)
         switch (token.type) {
             case 'single-quoted-scalar':
@@ -108,12 +104,15 @@ function setScalarValue(token, value, context = {}) {
             default:
                 type = 'PLAIN';
         }
-    const source = stringifyString({ type, value }, {
-        implicitKey: implicitKey || indent === null,
-        indent: indent !== null && indent > 0 ? ' '.repeat(indent) : '',
-        inFlow,
-        options: { blockQuote: true, lineWidth: -1 }
-    });
+    const source = stringifyString(
+        { type, value },
+        {
+            implicitKey: implicitKey || indent === null,
+            indent: indent !== null && indent > 0 ? ' '.repeat(indent) : '',
+            inFlow,
+            options: { blockQuote: true, lineWidth: -1 }
+        }
+    );
     switch (source[0]) {
         case '|':
         case '>':
@@ -135,22 +134,17 @@ function setBlockScalarValue(token, source) {
     const body = source.substring(he + 1) + '\n';
     if (token.type === 'block-scalar') {
         const header = token.props[0];
-        if (header.type !== 'block-scalar-header')
-            throw new Error('Invalid block scalar header');
+        if (header.type !== 'block-scalar-header') throw new Error('Invalid block scalar header');
         header.source = head;
         token.source = body;
-    }
-    else {
+    } else {
         const { offset } = token;
         const indent = 'indent' in token ? token.indent : -1;
-        const props = [
-            { type: 'block-scalar-header', offset, indent, source: head }
-        ];
+        const props = [{ type: 'block-scalar-header', offset, indent, source: head }];
         if (!addEndtoBlockProps(props, 'end' in token ? token.end : undefined))
             props.push({ type: 'newline', offset: -1, indent, source: '\n' });
         for (const key of Object.keys(token))
-            if (key !== 'type' && key !== 'offset')
-                delete token[key];
+            if (key !== 'type' && key !== 'offset') delete token[key];
         Object.assign(token, { type: 'block-scalar', indent, props, source: body });
     }
 }
@@ -180,10 +174,8 @@ function setFlowScalarValue(token, source, type) {
         case 'block-scalar': {
             const end = token.props.slice(1);
             let oa = source.length;
-            if (token.props[0].type === 'block-scalar-header')
-                oa -= token.props[0].source.length;
-            for (const tok of end)
-                tok.offset += oa;
+            if (token.props[0].type === 'block-scalar-header') oa -= token.props[0].source.length;
+            for (const tok of end) tok.offset += oa;
             delete token.props;
             Object.assign(token, { type, source, end });
             break;
@@ -198,14 +190,15 @@ function setFlowScalarValue(token, source, type) {
         }
         default: {
             const indent = 'indent' in token ? token.indent : -1;
-            const end = 'end' in token && Array.isArray(token.end)
-                ? token.end.filter(st => st.type === 'space' ||
-                    st.type === 'comment' ||
-                    st.type === 'newline')
-                : [];
+            const end =
+                'end' in token && Array.isArray(token.end)
+                    ? token.end.filter(
+                          (st) =>
+                              st.type === 'space' || st.type === 'comment' || st.type === 'newline'
+                      )
+                    : [];
             for (const key of Object.keys(token))
-                if (key !== 'type' && key !== 'offset')
-                    delete token[key];
+                if (key !== 'type' && key !== 'offset') delete token[key];
             Object.assign(token, { type, indent, source, end });
         }
     }

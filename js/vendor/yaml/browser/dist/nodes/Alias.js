@@ -19,35 +19,28 @@ class Alias extends NodeBase {
      * instance of the `source` anchor before this node.
      */
     resolve(doc, ctx) {
-        if (ctx?.maxAliasCount === 0)
-            throw new ReferenceError('Alias resolution is disabled');
+        if (ctx?.maxAliasCount === 0) throw new ReferenceError('Alias resolution is disabled');
         let nodes;
         if (ctx?.aliasResolveCache) {
             nodes = ctx.aliasResolveCache;
-        }
-        else {
+        } else {
             nodes = [];
             visit(doc, {
                 Node: (_key, node) => {
-                    if (isAlias(node) || hasAnchor(node))
-                        nodes.push(node);
+                    if (isAlias(node) || hasAnchor(node)) nodes.push(node);
                 }
             });
-            if (ctx)
-                ctx.aliasResolveCache = nodes;
+            if (ctx) ctx.aliasResolveCache = nodes;
         }
         let found = undefined;
         for (const node of nodes) {
-            if (node === this)
-                break;
-            if (node.anchor === this.source)
-                found = node;
+            if (node === this) break;
+            if (node.anchor === this.source) found = node;
         }
         return found;
     }
     toJSON(_arg, ctx) {
-        if (!ctx)
-            return { source: this.source };
+        if (!ctx) return { source: this.source };
         const { anchors, doc, maxAliasCount } = ctx;
         const source = this.resolve(doc, ctx);
         if (!source) {
@@ -67,8 +60,7 @@ class Alias extends NodeBase {
         }
         if (maxAliasCount >= 0) {
             data.count += 1;
-            if (data.aliasCount === 0)
-                data.aliasCount = getAliasCount(doc, source, anchors);
+            if (data.aliasCount === 0) data.aliasCount = getAliasCount(doc, source, anchors);
             if (data.count * data.aliasCount > maxAliasCount) {
                 const msg = 'Excessive alias count indicates a resource exhaustion attack';
                 throw new ReferenceError(msg);
@@ -84,8 +76,7 @@ class Alias extends NodeBase {
                 const msg = `Unresolved alias (the anchor must be set before the alias): ${this.source}`;
                 throw new Error(msg);
             }
-            if (ctx.implicitKey)
-                return `${src} `;
+            if (ctx.implicitKey) return `${src} `;
         }
         return src;
     }
@@ -95,17 +86,14 @@ function getAliasCount(doc, node, anchors) {
         const source = node.resolve(doc);
         const anchor = anchors && source && anchors.get(source);
         return anchor ? anchor.count * anchor.aliasCount : 0;
-    }
-    else if (isCollection(node)) {
+    } else if (isCollection(node)) {
         let count = 0;
         for (const item of node.items) {
             const c = getAliasCount(doc, item, anchors);
-            if (c > count)
-                count = c;
+            if (c > count) count = c;
         }
         return count;
-    }
-    else if (isPair(node)) {
+    } else if (isPair(node)) {
         const kc = getAliasCount(doc, node.key, anchors);
         const vc = getAliasCount(doc, node.value, anchors);
         return Math.max(kc, vc);

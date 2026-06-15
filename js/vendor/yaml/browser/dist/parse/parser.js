@@ -2,9 +2,7 @@ import { tokenType } from './cst.js';
 import { Lexer } from './lexer.js';
 
 function includesToken(list, type) {
-    for (let i = 0; i < list.length; ++i)
-        if (list[i].type === type)
-            return true;
+    for (let i = 0; i < list.length; ++i) if (list[i].type === type) return true;
     return false;
 }
 function findNonEmptyIndex(list) {
@@ -49,8 +47,7 @@ function getPrevProps(parent) {
 }
 /** Note: May modify input array */
 function getFirstKeyStartProps(prev) {
-    if (prev.length === 0)
-        return [];
+    if (prev.length === 0) return [];
     let i = prev.length;
     loop: while (--i >= 0) {
         switch (prev[i].type) {
@@ -69,30 +66,24 @@ function getFirstKeyStartProps(prev) {
 }
 function arrayPushArray(target, source) {
     // May exhaust call stack with large `source` array
-    if (source.length < 1e5)
-        Array.prototype.push.apply(target, source);
-    else
-        for (let i = 0; i < source.length; ++i)
-            target.push(source[i]);
+    if (source.length < 1e5) Array.prototype.push.apply(target, source);
+    else for (let i = 0; i < source.length; ++i) target.push(source[i]);
 }
 function fixFlowSeqItems(fc) {
     if (fc.start.type === 'flow-seq-start') {
         for (const it of fc.items) {
-            if (it.sep &&
+            if (
+                it.sep &&
                 !it.value &&
                 !includesToken(it.start, 'explicit-key-ind') &&
-                !includesToken(it.sep, 'map-value-ind')) {
-                if (it.key)
-                    it.value = it.key;
+                !includesToken(it.sep, 'map-value-ind')
+            ) {
+                if (it.key) it.value = it.key;
                 delete it.key;
                 if (isFlowToken(it.value)) {
-                    if (it.value.end)
-                        arrayPushArray(it.value.end, it.sep);
-                    else
-                        it.value.end = it.sep;
-                }
-                else
-                    arrayPushArray(it.start, it.sep);
+                    if (it.value.end) arrayPushArray(it.value.end, it.sep);
+                    else it.value.end = it.sep;
+                } else arrayPushArray(it.start, it.sep);
                 delete it.sep;
             }
         }
@@ -160,12 +151,9 @@ class Parser {
      * @returns A generator of tokens representing each directive, document, and other structure.
      */
     *parse(source, incomplete = false) {
-        if (this.onNewLine && this.offset === 0)
-            this.onNewLine(0);
-        for (const lexeme of this.lexer.lex(source, incomplete))
-            yield* this.next(lexeme);
-        if (!incomplete)
-            yield* this.end();
+        if (this.onNewLine && this.offset === 0) this.onNewLine(0);
+        for (const lexeme of this.lexer.lex(source, incomplete)) yield* this.next(lexeme);
+        if (!incomplete) yield* this.end();
     }
     /**
      * Advance the parser by the `source` of one lexical token.
@@ -183,31 +171,26 @@ class Parser {
             const message = `Not a YAML token: ${source}`;
             yield* this.pop({ type: 'error', offset: this.offset, message, source });
             this.offset += source.length;
-        }
-        else if (type === 'scalar') {
+        } else if (type === 'scalar') {
             this.atNewLine = false;
             this.atScalar = true;
             this.type = 'scalar';
-        }
-        else {
+        } else {
             this.type = type;
             yield* this.step();
             switch (type) {
                 case 'newline':
                     this.atNewLine = true;
                     this.indent = 0;
-                    if (this.onNewLine)
-                        this.onNewLine(this.offset + source.length);
+                    if (this.onNewLine) this.onNewLine(this.offset + source.length);
                     break;
                 case 'space':
-                    if (this.atNewLine && source[0] === ' ')
-                        this.indent += source.length;
+                    if (this.atNewLine && source[0] === ' ') this.indent += source.length;
                     break;
                 case 'explicit-key-ind':
                 case 'map-value-ind':
                 case 'seq-item-ind':
-                    if (this.atNewLine)
-                        this.indent += source.length;
+                    if (this.atNewLine) this.indent += source.length;
                     break;
                 case 'doc-mode':
                 case 'flow-error-end':
@@ -220,8 +203,7 @@ class Parser {
     }
     /** Call at end of input to push out any remaining constructions */
     *end() {
-        while (this.stack.length > 0)
-            yield* this.pop();
+        while (this.stack.length > 0) yield* this.pop();
     }
     get sourceToken() {
         const st = {
@@ -235,8 +217,7 @@ class Parser {
     *step() {
         const top = this.peek(1);
         if (this.type === 'doc-end' && top?.type !== 'doc-end') {
-            while (this.stack.length > 0)
-                yield* this.pop();
+            while (this.stack.length > 0) yield* this.pop();
             this.stack.push({
                 type: 'doc-end',
                 offset: this.offset,
@@ -244,8 +225,7 @@ class Parser {
             });
             return;
         }
-        if (!top)
-            return yield* this.stream();
+        if (!top) return yield* this.stream();
         switch (top.type) {
             case 'document':
                 return yield* this.document(top);
@@ -277,22 +257,18 @@ class Parser {
         if (!token) {
             const message = 'Tried to pop an empty stack';
             yield { type: 'error', offset: this.offset, source: '', message };
-        }
-        else if (this.stack.length === 0) {
+        } else if (this.stack.length === 0) {
             yield token;
-        }
-        else {
+        } else {
             const top = this.peek(1);
             if (token.type === 'block-scalar') {
                 // Block scalars use their parent rather than header indent
                 token.indent = 'indent' in top ? top.indent : 0;
-            }
-            else if (token.type === 'flow-collection' && top.type === 'document') {
+            } else if (token.type === 'flow-collection' && top.type === 'document') {
                 // Ignore all indent for top-level flow collections
                 token.indent = 0;
             }
-            if (token.type === 'flow-collection')
-                fixFlowSeqItems(token);
+            if (token.type === 'flow-collection') fixFlowSeqItems(token);
             switch (top.type) {
                 case 'document':
                     top.value = token;
@@ -306,11 +282,9 @@ class Parser {
                         top.items.push({ start: [], key: token, sep: [] });
                         this.onKeyLine = true;
                         return;
-                    }
-                    else if (it.sep) {
+                    } else if (it.sep) {
                         it.value = token;
-                    }
-                    else {
+                    } else {
                         Object.assign(it, { key: token, sep: [] });
                         this.onKeyLine = !it.explicitKey;
                         return;
@@ -319,20 +293,15 @@ class Parser {
                 }
                 case 'block-seq': {
                     const it = top.items[top.items.length - 1];
-                    if (it.value)
-                        top.items.push({ start: [], value: token });
-                    else
-                        it.value = token;
+                    if (it.value) top.items.push({ start: [], value: token });
+                    else it.value = token;
                     break;
                 }
                 case 'flow-collection': {
                     const it = top.items[top.items.length - 1];
-                    if (!it || it.value)
-                        top.items.push({ start: [], key: token, sep: [] });
-                    else if (it.sep)
-                        it.value = token;
-                    else
-                        Object.assign(it, { key: token, sep: [] });
+                    if (!it || it.value) top.items.push({ start: [], key: token, sep: [] });
+                    else if (it.sep) it.value = token;
+                    else Object.assign(it, { key: token, sep: [] });
                     return;
                 }
                 /* istanbul ignore next should not happen */
@@ -340,22 +309,22 @@ class Parser {
                     yield* this.pop();
                     yield* this.pop(token);
             }
-            if ((top.type === 'document' ||
-                top.type === 'block-map' ||
-                top.type === 'block-seq') &&
-                (token.type === 'block-map' || token.type === 'block-seq')) {
+            if (
+                (top.type === 'document' || top.type === 'block-map' || top.type === 'block-seq') &&
+                (token.type === 'block-map' || token.type === 'block-seq')
+            ) {
                 const last = token.items[token.items.length - 1];
-                if (last &&
+                if (
+                    last &&
                     !last.sep &&
                     !last.value &&
                     last.start.length > 0 &&
                     findNonEmptyIndex(last.start) === -1 &&
                     (token.indent === 0 ||
-                        last.start.every(st => st.type !== 'comment' || st.indent < token.indent))) {
-                    if (top.type === 'document')
-                        top.end = last.start;
-                    else
-                        top.items.push({ start: last.start });
+                        last.start.every((st) => st.type !== 'comment' || st.indent < token.indent))
+                ) {
+                    if (top.type === 'document') top.end = last.start;
+                    else top.items.push({ start: last.start });
                     token.items.splice(-1, 1);
                 }
             }
@@ -379,8 +348,7 @@ class Parser {
                     offset: this.offset,
                     start: []
                 };
-                if (this.type === 'doc-start')
-                    doc.start.push(this.sourceToken);
+                if (this.type === 'doc-start') doc.start.push(this.sourceToken);
                 this.stack.push(doc);
                 return;
             }
@@ -393,16 +361,13 @@ class Parser {
         };
     }
     *document(doc) {
-        if (doc.value)
-            return yield* this.lineEnd(doc);
+        if (doc.value) return yield* this.lineEnd(doc);
         switch (this.type) {
             case 'doc-start': {
                 if (findNonEmptyIndex(doc.start) !== -1) {
                     yield* this.pop();
                     yield* this.step();
-                }
-                else
-                    doc.start.push(this.sourceToken);
+                } else doc.start.push(this.sourceToken);
                 return;
             }
             case 'anchor':
@@ -414,8 +379,7 @@ class Parser {
                 return;
         }
         const bv = this.startBlockValue(doc);
-        if (bv)
-            this.stack.push(bv);
+        if (bv) this.stack.push(bv);
         else {
             yield {
                 type: 'error',
@@ -434,9 +398,7 @@ class Parser {
                 sep = scalar.end;
                 sep.push(this.sourceToken);
                 delete scalar.end;
-            }
-            else
-                sep = [this.sourceToken];
+            } else sep = [this.sourceToken];
             const map = {
                 type: 'block-map',
                 offset: scalar.offset,
@@ -445,9 +407,7 @@ class Parser {
             };
             this.onKeyLine = true;
             this.stack[this.stack.length - 1] = map;
-        }
-        else
-            yield* this.lineEnd(scalar);
+        } else yield* this.lineEnd(scalar);
     }
     *blockScalar(scalar) {
         switch (this.type) {
@@ -485,15 +445,11 @@ class Parser {
                 if (it.value) {
                     const end = 'end' in it.value ? it.value.end : undefined;
                     const last = Array.isArray(end) ? end[end.length - 1] : undefined;
-                    if (last?.type === 'comment')
-                        end?.push(this.sourceToken);
-                    else
-                        map.items.push({ start: [this.sourceToken] });
-                }
-                else if (it.sep) {
+                    if (last?.type === 'comment') end?.push(this.sourceToken);
+                    else map.items.push({ start: [this.sourceToken] });
+                } else if (it.sep) {
                     it.sep.push(this.sourceToken);
-                }
-                else {
+                } else {
                     it.start.push(this.sourceToken);
                 }
                 return;
@@ -501,11 +457,9 @@ class Parser {
             case 'comment':
                 if (it.value) {
                     map.items.push({ start: [this.sourceToken] });
-                }
-                else if (it.sep) {
+                } else if (it.sep) {
                     it.sep.push(this.sourceToken);
-                }
-                else {
+                } else {
                     if (this.atIndentedComment(it.start, map.indent)) {
                         const prev = map.items[map.items.length - 2];
                         const end = prev?.value?.end;
@@ -522,9 +476,8 @@ class Parser {
         }
         if (this.indent >= map.indent) {
             const atMapIndent = !this.onKeyLine && this.indent === map.indent;
-            const atNextItem = atMapIndent &&
-                (it.sep || it.explicitKey) &&
-                this.type !== 'seq-item-ind';
+            const atNextItem =
+                atMapIndent && (it.sep || it.explicitKey) && this.type !== 'seq-item-ind';
             // For empty nodes, assign newline-separated not indented empty tokens to following node
             let start = [];
             if (atNextItem && it.sep && !it.value) {
@@ -538,15 +491,13 @@ class Parser {
                         case 'space':
                             break;
                         case 'comment':
-                            if (st.indent > map.indent)
-                                nl.length = 0;
+                            if (st.indent > map.indent) nl.length = 0;
                             break;
                         default:
                             nl.length = 0;
                     }
                 }
-                if (nl.length >= 2)
-                    start = it.sep.splice(nl[1]);
+                if (nl.length >= 2) start = it.sep.splice(nl[1]);
             }
             switch (this.type) {
                 case 'anchor':
@@ -555,11 +506,9 @@ class Parser {
                         start.push(this.sourceToken);
                         map.items.push({ start });
                         this.onKeyLine = true;
-                    }
-                    else if (it.sep) {
+                    } else if (it.sep) {
                         it.sep.push(this.sourceToken);
-                    }
-                    else {
+                    } else {
                         it.start.push(this.sourceToken);
                     }
                     return;
@@ -567,12 +516,10 @@ class Parser {
                     if (!it.sep && !it.explicitKey) {
                         it.start.push(this.sourceToken);
                         it.explicitKey = true;
-                    }
-                    else if (atNextItem || it.value) {
+                    } else if (atNextItem || it.value) {
                         start.push(this.sourceToken);
                         map.items.push({ start, explicitKey: true });
-                    }
-                    else {
+                    } else {
                         this.stack.push({
                             type: 'block-map',
                             offset: this.offset,
@@ -587,8 +534,7 @@ class Parser {
                         if (!it.sep) {
                             if (includesToken(it.start, 'newline')) {
                                 Object.assign(it, { key: null, sep: [this.sourceToken] });
-                            }
-                            else {
+                            } else {
                                 const start = getFirstKeyStartProps(it.start);
                                 this.stack.push({
                                     type: 'block-map',
@@ -597,20 +543,16 @@ class Parser {
                                     items: [{ start, key: null, sep: [this.sourceToken] }]
                                 });
                             }
-                        }
-                        else if (it.value) {
+                        } else if (it.value) {
                             map.items.push({ start: [], key: null, sep: [this.sourceToken] });
-                        }
-                        else if (includesToken(it.sep, 'map-value-ind')) {
+                        } else if (includesToken(it.sep, 'map-value-ind')) {
                             this.stack.push({
                                 type: 'block-map',
                                 offset: this.offset,
                                 indent: this.indent,
                                 items: [{ start, key: null, sep: [this.sourceToken] }]
                             });
-                        }
-                        else if (isFlowToken(it.key) &&
-                            !includesToken(it.sep, 'newline')) {
+                        } else if (isFlowToken(it.key) && !includesToken(it.sep, 'newline')) {
                             const start = getFirstKeyStartProps(it.start);
                             const key = it.key;
                             const sep = it.sep;
@@ -625,31 +567,25 @@ class Parser {
                                 indent: this.indent,
                                 items: [{ start, key, sep }]
                             });
-                        }
-                        else if (start.length > 0) {
+                        } else if (start.length > 0) {
                             // Not actually at next item
                             it.sep = it.sep.concat(start, this.sourceToken);
-                        }
-                        else {
+                        } else {
                             it.sep.push(this.sourceToken);
                         }
-                    }
-                    else {
+                    } else {
                         if (!it.sep) {
                             Object.assign(it, { key: null, sep: [this.sourceToken] });
-                        }
-                        else if (it.value || atNextItem) {
+                        } else if (it.value || atNextItem) {
                             map.items.push({ start, key: null, sep: [this.sourceToken] });
-                        }
-                        else if (includesToken(it.sep, 'map-value-ind')) {
+                        } else if (includesToken(it.sep, 'map-value-ind')) {
                             this.stack.push({
                                 type: 'block-map',
                                 offset: this.offset,
                                 indent: this.indent,
                                 items: [{ start: [], key: null, sep: [this.sourceToken] }]
                             });
-                        }
-                        else {
+                        } else {
                             it.sep.push(this.sourceToken);
                         }
                     }
@@ -663,11 +599,9 @@ class Parser {
                     if (atNextItem || it.value) {
                         map.items.push({ start, key: fs, sep: [] });
                         this.onKeyLine = true;
-                    }
-                    else if (it.sep) {
+                    } else if (it.sep) {
                         this.stack.push(fs);
-                    }
-                    else {
+                    } else {
                         Object.assign(it, { key: fs, sep: [] });
                         this.onKeyLine = true;
                     }
@@ -677,9 +611,7 @@ class Parser {
                     const bv = this.startBlockValue(map);
                     if (bv) {
                         if (bv.type === 'block-seq') {
-                            if (!it.explicitKey &&
-                                it.sep &&
-                                !includesToken(it.sep, 'newline')) {
+                            if (!it.explicitKey && it.sep && !includesToken(it.sep, 'newline')) {
                                 yield* this.pop({
                                     type: 'error',
                                     offset: this.offset,
@@ -688,8 +620,7 @@ class Parser {
                                 });
                                 return;
                             }
-                        }
-                        else if (atMapIndent) {
+                        } else if (atMapIndent) {
                             map.items.push({ start });
                         }
                         this.stack.push(bv);
@@ -708,18 +639,13 @@ class Parser {
                 if (it.value) {
                     const end = 'end' in it.value ? it.value.end : undefined;
                     const last = Array.isArray(end) ? end[end.length - 1] : undefined;
-                    if (last?.type === 'comment')
-                        end?.push(this.sourceToken);
-                    else
-                        seq.items.push({ start: [this.sourceToken] });
-                }
-                else
-                    it.start.push(this.sourceToken);
+                    if (last?.type === 'comment') end?.push(this.sourceToken);
+                    else seq.items.push({ start: [this.sourceToken] });
+                } else it.start.push(this.sourceToken);
                 return;
             case 'space':
             case 'comment':
-                if (it.value)
-                    seq.items.push({ start: [this.sourceToken] });
+                if (it.value) seq.items.push({ start: [this.sourceToken] });
                 else {
                     if (this.atIndentedComment(it.start, seq.indent)) {
                         const prev = seq.items[seq.items.length - 2];
@@ -736,17 +662,14 @@ class Parser {
                 return;
             case 'anchor':
             case 'tag':
-                if (it.value || this.indent <= seq.indent)
-                    break;
+                if (it.value || this.indent <= seq.indent) break;
                 it.start.push(this.sourceToken);
                 return;
             case 'seq-item-ind':
-                if (this.indent !== seq.indent)
-                    break;
+                if (this.indent !== seq.indent) break;
                 if (it.value || includesToken(it.start, 'seq-item-ind'))
                     seq.items.push({ start: [this.sourceToken] });
-                else
-                    it.start.push(this.sourceToken);
+                else it.start.push(this.sourceToken);
                 return;
         }
         if (this.indent > seq.indent) {
@@ -767,47 +690,36 @@ class Parser {
                 yield* this.pop();
                 top = this.peek(1);
             } while (top?.type === 'flow-collection');
-        }
-        else if (fc.end.length === 0) {
+        } else if (fc.end.length === 0) {
             switch (this.type) {
                 case 'comma':
                 case 'explicit-key-ind':
-                    if (!it || it.sep)
-                        fc.items.push({ start: [this.sourceToken] });
-                    else
-                        it.start.push(this.sourceToken);
+                    if (!it || it.sep) fc.items.push({ start: [this.sourceToken] });
+                    else it.start.push(this.sourceToken);
                     return;
                 case 'map-value-ind':
                     if (!it || it.value)
                         fc.items.push({ start: [], key: null, sep: [this.sourceToken] });
-                    else if (it.sep)
-                        it.sep.push(this.sourceToken);
-                    else
-                        Object.assign(it, { key: null, sep: [this.sourceToken] });
+                    else if (it.sep) it.sep.push(this.sourceToken);
+                    else Object.assign(it, { key: null, sep: [this.sourceToken] });
                     return;
                 case 'space':
                 case 'comment':
                 case 'newline':
                 case 'anchor':
                 case 'tag':
-                    if (!it || it.value)
-                        fc.items.push({ start: [this.sourceToken] });
-                    else if (it.sep)
-                        it.sep.push(this.sourceToken);
-                    else
-                        it.start.push(this.sourceToken);
+                    if (!it || it.value) fc.items.push({ start: [this.sourceToken] });
+                    else if (it.sep) it.sep.push(this.sourceToken);
+                    else it.start.push(this.sourceToken);
                     return;
                 case 'alias':
                 case 'scalar':
                 case 'single-quoted-scalar':
                 case 'double-quoted-scalar': {
                     const fs = this.flowScalar(this.type);
-                    if (!it || it.value)
-                        fc.items.push({ start: [], key: fs, sep: [] });
-                    else if (it.sep)
-                        this.stack.push(fs);
-                    else
-                        Object.assign(it, { key: fs, sep: [] });
+                    if (!it || it.value) fc.items.push({ start: [], key: fs, sep: [] });
+                    else if (it.sep) this.stack.push(fs);
+                    else Object.assign(it, { key: fs, sep: [] });
                     return;
                 }
                 case 'flow-map-end':
@@ -817,24 +729,21 @@ class Parser {
             }
             const bv = this.startBlockValue(fc);
             /* istanbul ignore else should not happen */
-            if (bv)
-                this.stack.push(bv);
+            if (bv) this.stack.push(bv);
             else {
                 yield* this.pop();
                 yield* this.step();
             }
-        }
-        else {
+        } else {
             const parent = this.peek(2);
-            if (parent.type === 'block-map' &&
+            if (
+                parent.type === 'block-map' &&
                 ((this.type === 'map-value-ind' && parent.indent === fc.indent) ||
-                    (this.type === 'newline' &&
-                        !parent.items[parent.items.length - 1].sep))) {
+                    (this.type === 'newline' && !parent.items[parent.items.length - 1].sep))
+            ) {
                 yield* this.pop();
                 yield* this.step();
-            }
-            else if (this.type === 'map-value-ind' &&
-                parent.type !== 'flow-collection') {
+            } else if (this.type === 'map-value-ind' && parent.type !== 'flow-collection') {
                 const prev = getPrevProps(parent);
                 const start = getFirstKeyStartProps(prev);
                 fixFlowSeqItems(fc);
@@ -848,8 +757,7 @@ class Parser {
                 };
                 this.onKeyLine = true;
                 this.stack[this.stack.length - 1] = map;
-            }
-            else {
+            } else {
                 yield* this.lineEnd(fc);
             }
         }
@@ -928,20 +836,15 @@ class Parser {
         return null;
     }
     atIndentedComment(start, indent) {
-        if (this.type !== 'comment')
-            return false;
-        if (this.indent <= indent)
-            return false;
-        return start.every(st => st.type === 'newline' || st.type === 'space');
+        if (this.type !== 'comment') return false;
+        if (this.indent <= indent) return false;
+        return start.every((st) => st.type === 'newline' || st.type === 'space');
     }
     *documentEnd(docEnd) {
         if (this.type !== 'doc-mode') {
-            if (docEnd.end)
-                docEnd.end.push(this.sourceToken);
-            else
-                docEnd.end = [this.sourceToken];
-            if (this.type === 'newline')
-                yield* this.pop();
+            if (docEnd.end) docEnd.end.push(this.sourceToken);
+            else docEnd.end = [this.sourceToken];
+            if (this.type === 'newline') yield* this.pop();
         }
     }
     *lineEnd(token) {
@@ -962,12 +865,9 @@ class Parser {
             case 'comment':
             default:
                 // all other values are errors
-                if (token.end)
-                    token.end.push(this.sourceToken);
-                else
-                    token.end = [this.sourceToken];
-                if (this.type === 'newline')
-                    yield* this.pop();
+                if (token.end) token.end.push(this.sourceToken);
+                else token.end = [this.sourceToken];
+                if (this.type === 'newline') yield* this.pop();
         }
     }
 }

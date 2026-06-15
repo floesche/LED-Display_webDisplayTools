@@ -9,7 +9,7 @@ const escapeChars = {
     '{': '%7B',
     '}': '%7D'
 };
-const escapeTagName = (tn) => tn.replace(/[!,[\]{}]/g, ch => escapeChars[ch]);
+const escapeTagName = (tn) => tn.replace(/[!,[\]{}]/g, (ch) => escapeChars[ch]);
 class Directives {
     constructor(yaml, tags) {
         /**
@@ -64,8 +64,7 @@ class Directives {
             case '%TAG': {
                 if (parts.length !== 2) {
                     onError(0, '%TAG directive should contain exactly two parts');
-                    if (parts.length < 2)
-                        return false;
+                    if (parts.length < 2) return false;
                 }
                 const [handle, prefix] = parts;
                 this.tags[handle] = prefix;
@@ -81,8 +80,7 @@ class Directives {
                 if (version === '1.1' || version === '1.2') {
                     this.yaml.version = version;
                     return true;
-                }
-                else {
+                } else {
                     const isValid = /^\d+\.\d+$/.test(version);
                     onError(6, `Unsupported YAML version ${version}`, isValid);
                     return false;
@@ -100,8 +98,7 @@ class Directives {
      *   `'!local'` tag, or `null` if unresolvable.
      */
     tagName(source, onError) {
-        if (source === '!')
-            return '!'; // non-specific tag
+        if (source === '!') return '!'; // non-specific tag
         if (source[0] !== '!') {
             onError(`Not a valid tag: ${source}`);
             return null;
@@ -112,25 +109,21 @@ class Directives {
                 onError(`Verbatim tags aren't resolved, so ${source} is invalid.`);
                 return null;
             }
-            if (source[source.length - 1] !== '>')
-                onError('Verbatim tags must end with a >');
+            if (source[source.length - 1] !== '>') onError('Verbatim tags must end with a >');
             return verbatim;
         }
         const [, handle, suffix] = source.match(/^(.*!)([^!]*)$/s);
-        if (!suffix)
-            onError(`The ${source} tag has no suffix`);
+        if (!suffix) onError(`The ${source} tag has no suffix`);
         const prefix = this.tags[handle];
         if (prefix) {
             try {
                 return prefix + decodeURIComponent(suffix);
-            }
-            catch (error) {
+            } catch (error) {
                 onError(String(error));
                 return null;
             }
         }
-        if (handle === '!')
-            return source; // local tag
+        if (handle === '!') return source; // local tag
         onError(`Could not resolve tag: ${source}`);
         return null;
     }
@@ -140,31 +133,24 @@ class Directives {
      */
     tagString(tag) {
         for (const [handle, prefix] of Object.entries(this.tags)) {
-            if (tag.startsWith(prefix))
-                return handle + escapeTagName(tag.substring(prefix.length));
+            if (tag.startsWith(prefix)) return handle + escapeTagName(tag.substring(prefix.length));
         }
         return tag[0] === '!' ? tag : `!<${tag}>`;
     }
     toString(doc) {
-        const lines = this.yaml.explicit
-            ? [`%YAML ${this.yaml.version || '1.2'}`]
-            : [];
+        const lines = this.yaml.explicit ? [`%YAML ${this.yaml.version || '1.2'}`] : [];
         const tagEntries = Object.entries(this.tags);
         let tagNames;
         if (doc && tagEntries.length > 0 && isNode(doc.contents)) {
             const tags = {};
             visit(doc.contents, (_key, node) => {
-                if (isNode(node) && node.tag)
-                    tags[node.tag] = true;
+                if (isNode(node) && node.tag) tags[node.tag] = true;
             });
             tagNames = Object.keys(tags);
-        }
-        else
-            tagNames = [];
+        } else tagNames = [];
         for (const [handle, prefix] of tagEntries) {
-            if (handle === '!!' && prefix === 'tag:yaml.org,2002:')
-                continue;
-            if (!doc || tagNames.some(tn => tn.startsWith(prefix)))
+            if (handle === '!!' && prefix === 'tag:yaml.org,2002:') continue;
+            if (!doc || tagNames.some((tn) => tn.startsWith(prefix)))
                 lines.push(`%TAG ${handle} ${prefix}`);
         }
         return lines.join('\n');

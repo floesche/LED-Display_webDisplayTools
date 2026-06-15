@@ -4,7 +4,13 @@ import { stringify } from './stringify.js';
 import { lineComment, indentComment } from './stringifyComment.js';
 
 function stringifyPair({ key, value }, ctx, onComment, onChompKeep) {
-    const { allNullValues, doc, indent, indentStep, options: { commentString, indentSeq, simpleKeys } } = ctx;
+    const {
+        allNullValues,
+        doc,
+        indent,
+        indentStep,
+        options: { commentString, indentSeq, simpleKeys }
+    } = ctx;
     let keyComment = (isNode(key) && key.comment) || null;
     if (simpleKeys) {
         if (keyComment) {
@@ -15,7 +21,8 @@ function stringifyPair({ key, value }, ctx, onComment, onChompKeep) {
             throw new Error(msg);
         }
     }
-    let explicitKey = !simpleKeys &&
+    let explicitKey =
+        !simpleKeys &&
         (!key ||
             (keyComment && value == null && !ctx.inFlow) ||
             isCollection(key) ||
@@ -29,70 +36,73 @@ function stringifyPair({ key, value }, ctx, onComment, onChompKeep) {
     });
     let keyCommentDone = false;
     let chompKeep = false;
-    let str = stringify(key, ctx, () => (keyCommentDone = true), () => (chompKeep = true));
+    let str = stringify(
+        key,
+        ctx,
+        () => (keyCommentDone = true),
+        () => (chompKeep = true)
+    );
     if (!explicitKey && !ctx.inFlow && str.length > 1024) {
         if (simpleKeys)
-            throw new Error('With simple keys, single line scalar must not span more than 1024 characters');
+            throw new Error(
+                'With simple keys, single line scalar must not span more than 1024 characters'
+            );
         explicitKey = true;
     }
     if (ctx.inFlow) {
         if (allNullValues || value == null) {
-            if (keyCommentDone && onComment)
-                onComment();
+            if (keyCommentDone && onComment) onComment();
             return str === '' ? '?' : explicitKey ? `? ${str}` : str;
         }
-    }
-    else if ((allNullValues && !simpleKeys) || (value == null && explicitKey)) {
+    } else if ((allNullValues && !simpleKeys) || (value == null && explicitKey)) {
         str = `? ${str}`;
         if (keyComment && !keyCommentDone) {
             str += lineComment(str, ctx.indent, commentString(keyComment));
-        }
-        else if (chompKeep && onChompKeep)
-            onChompKeep();
+        } else if (chompKeep && onChompKeep) onChompKeep();
         return str;
     }
-    if (keyCommentDone)
-        keyComment = null;
+    if (keyCommentDone) keyComment = null;
     if (explicitKey) {
-        if (keyComment)
-            str += lineComment(str, ctx.indent, commentString(keyComment));
+        if (keyComment) str += lineComment(str, ctx.indent, commentString(keyComment));
         str = `? ${str}\n${indent}:`;
-    }
-    else {
+    } else {
         str = `${str}:`;
-        if (keyComment)
-            str += lineComment(str, ctx.indent, commentString(keyComment));
+        if (keyComment) str += lineComment(str, ctx.indent, commentString(keyComment));
     }
     let vsb, vcb, valueComment;
     if (isNode(value)) {
         vsb = !!value.spaceBefore;
         vcb = value.commentBefore;
         valueComment = value.comment;
-    }
-    else {
+    } else {
         vsb = false;
         vcb = null;
         valueComment = null;
-        if (value && typeof value === 'object')
-            value = doc.createNode(value);
+        if (value && typeof value === 'object') value = doc.createNode(value);
     }
     ctx.implicitKey = false;
-    if (!explicitKey && !keyComment && isScalar(value))
-        ctx.indentAtStart = str.length + 1;
+    if (!explicitKey && !keyComment && isScalar(value)) ctx.indentAtStart = str.length + 1;
     chompKeep = false;
-    if (!indentSeq &&
+    if (
+        !indentSeq &&
         indentStep.length >= 2 &&
         !ctx.inFlow &&
         !explicitKey &&
         isSeq(value) &&
         !value.flow &&
         !value.tag &&
-        !value.anchor) {
+        !value.anchor
+    ) {
         // If indentSeq === false, consider '- ' as part of indentation where possible
         ctx.indent = ctx.indent.substring(2);
     }
     let valueCommentDone = false;
-    const valueStr = stringify(value, ctx, () => (valueCommentDone = true), () => (chompKeep = true));
+    const valueStr = stringify(
+        value,
+        ctx,
+        () => (valueCommentDone = true),
+        () => (chompKeep = true)
+    );
     let ws = ' ';
     if (keyComment || vsb || vcb) {
         ws = vsb ? '\n' : '';
@@ -101,14 +111,11 @@ function stringifyPair({ key, value }, ctx, onComment, onChompKeep) {
             ws += `\n${indentComment(cs, ctx.indent)}`;
         }
         if (valueStr === '' && !ctx.inFlow) {
-            if (ws === '\n' && valueComment)
-                ws = '\n\n';
-        }
-        else {
+            if (ws === '\n' && valueComment) ws = '\n\n';
+        } else {
             ws += `\n${ctx.indent}`;
         }
-    }
-    else if (!explicitKey && isCollection(value)) {
+    } else if (!explicitKey && isCollection(value)) {
         const vs0 = valueStr[0];
         const nl0 = valueStr.indexOf('\n');
         const hasNewline = nl0 !== -1;
@@ -117,31 +124,22 @@ function stringifyPair({ key, value }, ctx, onComment, onChompKeep) {
             let hasPropsLine = false;
             if (hasNewline && (vs0 === '&' || vs0 === '!')) {
                 let sp0 = valueStr.indexOf(' ');
-                if (vs0 === '&' &&
-                    sp0 !== -1 &&
-                    sp0 < nl0 &&
-                    valueStr[sp0 + 1] === '!') {
+                if (vs0 === '&' && sp0 !== -1 && sp0 < nl0 && valueStr[sp0 + 1] === '!') {
                     sp0 = valueStr.indexOf(' ', sp0 + 1);
                 }
-                if (sp0 === -1 || nl0 < sp0)
-                    hasPropsLine = true;
+                if (sp0 === -1 || nl0 < sp0) hasPropsLine = true;
             }
-            if (!hasPropsLine)
-                ws = `\n${ctx.indent}`;
+            if (!hasPropsLine) ws = `\n${ctx.indent}`;
         }
-    }
-    else if (valueStr === '' || valueStr[0] === '\n') {
+    } else if (valueStr === '' || valueStr[0] === '\n') {
         ws = '';
     }
     str += ws + valueStr;
     if (ctx.inFlow) {
-        if (valueCommentDone && onComment)
-            onComment();
-    }
-    else if (valueComment && !valueCommentDone) {
+        if (valueCommentDone && onComment) onComment();
+    } else if (valueComment && !valueCommentDone) {
         str += lineComment(str, ctx.indent, commentString(valueComment));
-    }
-    else if (chompKeep && onChompKeep) {
+    } else if (chompKeep && onChompKeep) {
         onChompKeep();
     }
     return str;

@@ -12,40 +12,30 @@ function applyReviver(reviver, obj, key, val) {
                 const v0 = val[i];
                 const v1 = applyReviver(reviver, val, String(i), v0);
                 // eslint-disable-next-line @typescript-eslint/no-array-delete
-                if (v1 === undefined)
-                    delete val[i];
-                else if (v1 !== v0)
-                    val[i] = v1;
+                if (v1 === undefined) delete val[i];
+                else if (v1 !== v0) val[i] = v1;
             }
-        }
-        else if (val instanceof Map) {
+        } else if (val instanceof Map) {
             for (const k of Array.from(val.keys())) {
                 const v0 = val.get(k);
                 const v1 = applyReviver(reviver, val, k, v0);
-                if (v1 === undefined)
-                    val.delete(k);
-                else if (v1 !== v0)
-                    val.set(k, v1);
+                if (v1 === undefined) val.delete(k);
+                else if (v1 !== v0) val.set(k, v1);
             }
-        }
-        else if (val instanceof Set) {
+        } else if (val instanceof Set) {
             for (const v0 of Array.from(val)) {
                 const v1 = applyReviver(reviver, val, v0, v0);
-                if (v1 === undefined)
-                    val.delete(v0);
+                if (v1 === undefined) val.delete(v0);
                 else if (v1 !== v0) {
                     val.delete(v0);
                     val.add(v1);
                 }
             }
-        }
-        else {
+        } else {
             for (const [k, v0] of Object.entries(val)) {
                 const v1 = applyReviver(reviver, val, k, v0);
-                if (v1 === undefined)
-                    delete val[k];
-                else if (v1 !== v0)
-                    val[k] = v1;
+                if (v1 === undefined) delete val[k];
+                else if (v1 !== v0) val[k] = v1;
             }
         }
     }

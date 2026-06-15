@@ -23,10 +23,16 @@ function composeDoc(options, directives, { offset, start, value, end }, onError)
     });
     if (props.found) {
         doc.directives.docStart = true;
-        if (value &&
+        if (
+            value &&
             (value.type === 'block-map' || value.type === 'block-seq') &&
-            !props.hasNewline)
-            onError(props.end, 'MISSING_CHAR', 'Block collection cannot start on same line with directives-end marker');
+            !props.hasNewline
+        )
+            onError(
+                props.end,
+                'MISSING_CHAR',
+                'Block collection cannot start on same line with directives-end marker'
+            );
     }
     // @ts-expect-error If Contents is set, let's trust the user
     doc.contents = value
@@ -34,8 +40,7 @@ function composeDoc(options, directives, { offset, start, value, end }, onError)
         : composeEmptyNode(ctx, props.end, start, null, props, onError);
     const contentEnd = doc.contents.range[2];
     const re = resolveEnd(end, contentEnd, false, onError);
-    if (re.comment)
-        doc.comment = re.comment;
+    if (re.comment) doc.comment = re.comment;
     doc.range = [offset, contentEnd, re.offset];
     return doc;
 }

@@ -59,36 +59,33 @@ function getTags(customTags, schemaName, addMergeTag) {
     }
     let tags = schemaTags;
     if (!tags) {
-        if (Array.isArray(customTags))
-            tags = [];
+        if (Array.isArray(customTags)) tags = [];
         else {
             const keys = Array.from(schemas.keys())
-                .filter(key => key !== 'yaml11')
-                .map(key => JSON.stringify(key))
+                .filter((key) => key !== 'yaml11')
+                .map((key) => JSON.stringify(key))
                 .join(', ');
-            throw new Error(`Unknown schema "${schemaName}"; use one of ${keys} or define customTags array`);
+            throw new Error(
+                `Unknown schema "${schemaName}"; use one of ${keys} or define customTags array`
+            );
         }
     }
     if (Array.isArray(customTags)) {
-        for (const tag of customTags)
-            tags = tags.concat(tag);
-    }
-    else if (typeof customTags === 'function') {
+        for (const tag of customTags) tags = tags.concat(tag);
+    } else if (typeof customTags === 'function') {
         tags = customTags(tags.slice());
     }
-    if (addMergeTag)
-        tags = tags.concat(merge);
+    if (addMergeTag) tags = tags.concat(merge);
     return tags.reduce((tags, tag) => {
         const tagObj = typeof tag === 'string' ? tagsByName[tag] : tag;
         if (!tagObj) {
             const tagName = JSON.stringify(tag);
             const keys = Object.keys(tagsByName)
-                .map(key => JSON.stringify(key))
+                .map((key) => JSON.stringify(key))
                 .join(', ');
             throw new Error(`Unknown custom tag ${tagName}; use one of ${keys}`);
         }
-        if (!tags.includes(tagObj))
-            tags.push(tagObj);
+        if (!tags.includes(tagObj)) tags.push(tagObj);
         return tags;
     }, []);
 }
