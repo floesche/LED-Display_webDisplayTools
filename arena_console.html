@@ -5,13 +5,14 @@
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Arena Console — G6 live control</title>
         <!--
-          Arena Console v4 — the experimenter-facing PControl successor for the
+          Arena Console v5 — the experimenter-facing PControl successor for the
           G6 arena. A compact, vertical, PControl-style live-control page built on
           the Milestone-A Web Serial substrate (LAB-88/89), with a pattern-set
           name picker (LAB-95) and host-streamed frames (LAB-112, STREAM_FRAME 0x32):
             js/arena-wire-g6.js  (window.ArenaWireG6 — encoders/decoders + encodeStreamFrame)
             js/arena-link.js     (window.ArenaLink   — transport, opts.expectedCmd)
             js/pat-encoder.js    (window.PatEncoder  — builds the stream-frame payload)
+            js/bin-classifier.js (window.BinClassifier — .bin/.pat → stream-frame bodies)
           loaded via <script src> (window-global dual-export path).
 
           Layout (LAB-112): less-common commands live in the top menu bar
@@ -949,6 +950,25 @@
                         >
                             Paste frame…
                         </button>
+                        <label
+                            title="Playback frame rate for a multi-frame .pat (host-timed; single-frame files ignore it). 1–120 fps."
+                            >fps
+                            <input id="sf-fps" type="number" min="1" max="120" value="30" />
+                        </label>
+                        <button
+                            class="cmd"
+                            data-cmd="stream-file"
+                            disabled
+                            title="Load a .bin or .pat file and host-stream it (STREAM_FRAME 0x32), like scripts/web-serial. Accepts raw pixels (50/200, 1000/4000), panel blocks (53/203, 1060/4060), a full frame (1064/4064), or a G6PT .pat. A multi-frame .pat plays at the fps box; click again to stop."
+                        >
+                            Load file…
+                        </button>
+                        <input
+                            id="sf-file"
+                            type="file"
+                            accept=".bin,.pat,application/octet-stream"
+                            style="display: none"
+                        />
                     </div>
                 </section>
 
@@ -993,6 +1013,22 @@
             <div class="logwrap">
                 <div class="log-tools">
                     <span class="lbl">console log</span>
+                    <input
+                        id="cmd-hex"
+                        class="mono"
+                        type="text"
+                        style="min-width: 12rem"
+                        placeholder="hex bytes, e.g. 01 66"
+                        title="Raw command bytes sent verbatim (hex; spaces and 0x optional), exactly like scripts/web-serial. Byte 0 is the length byte — nothing is added. e.g. 01 66 = GET_IP. Enter to send."
+                    />
+                    <button
+                        class="cmd"
+                        data-cmd="send-raw"
+                        disabled
+                        title="Send the hex bytes verbatim and log the raw reply + decoded status/echo"
+                    >
+                        Send
+                    </button>
                     <span class="spacer"></span>
                     <button id="btn-clear" title="Clear the response log">Clear</button>
                     <button id="btn-copy" title="Copy the log text to the clipboard">Copy</button>
@@ -1003,7 +1039,7 @@
                 <div id="log"></div>
             </div>
 
-            <footer id="footer">Arena Console v4 | 2026-06-12 09:33 ET</footer>
+            <footer id="footer">Arena Console v5 | 2026-06-15 12:37 ET</footer>
         </div>
 
         <!-- Paste-a-frame modal -->
@@ -1051,6 +1087,7 @@
         <script src="js/arena-wire-g6.js"></script>
         <script src="js/arena-link.js"></script>
         <script src="js/pat-encoder.js"></script>
+        <script src="js/bin-classifier.js"></script>
         <!-- LAB-95 pattern picker. pattern-set.js + pat-preview.js are classic-safe
              (window.PatternSet / window.PatPreview); the import-only modules
              (pat-parser, arena-configs, icon-generator) load in the deferred module
@@ -1120,6 +1157,7 @@
                 if (!on) {
                     stepper.loaded = false;
                     clearAutoStop();
+                    stopFilePlay('disconnected');
                 }
                 updateStepperUI();
                 updateStreamUI();
@@ -1469,6 +1507,143 @@
                 document
                     .querySelectorAll('[data-cmd^="stream-"]')
                     .forEach((b) => (b.disabled = !en));
+                if (filePlaying() && !en) stopFilePlay('arena/link change');
+            }
+
+            // ── load a .bin / .pat file and host-stream it (0x32) ────────────
+            // The pure .bin/.pat → stream-frame-body classifier lives in
+            // js/bin-classifier.js (window.BinClassifier); transport + UI stay here.
+            // Its bodies are the 1064/4064 "FR"+blocks payload Wire.encodeStreamFrame()
+            // wraps; a multi-frame .pat plays host-timed below.
+            const Bin = window.BinClassifier;
+
+            // host-timed playback state for a multi-frame .pat
+            const filePlay = { frames: [], idx: 0, timer: null, name: '' };
+            function filePlaying() {
+                return filePlay.timer != null;
+            }
+            function stopFilePlay(reason) {
+                const was = filePlay.timer != null;
+                if (filePlay.timer != null) {
+                    clearTimeout(filePlay.timer);
+                    filePlay.timer = null;
+                }
+                filePlay.frames = [];
+                const b = document.querySelector('[data-cmd="stream-file"]');
+                if (b) b.textContent = 'Load file…';
+                if (was) log('file playback stopped' + (reason ? ' (' + reason + ')' : ''), 'dim');
+            }
+            async function playFileFrames() {
+                if (!filePlaying()) return;
+                const i = filePlay.idx % filePlay.frames.length;
+                filePlay.idx = i + 1;
+                try {
+                    await link.send(filePlay.frames[i], {
+                        expectedCmd: Wire.OPCODES.STREAM_FRAME,
+                        timeoutMs: 1500
+                    });
+                } catch (e) {
+                    log('file playback: ' + (e.message || e) + ' — stopping', 'err');
+                    stopFilePlay();
+                    return;
+                }
+                if (!filePlaying()) return;
+                const fps = Math.max(1, Math.min(120, parseInt($('sf-fps').value, 10) || 30));
+                filePlay.timer = setTimeout(playFileFrames, 1000 / fps);
+            }
+            async function loadStreamFile(file) {
+                stopFilePlay();
+                if (!streamable()) {
+                    log('stream: needs a full-grid 20-panel arena (e.g. G6_2x10)', 'err');
+                    return;
+                }
+                let buf;
+                try {
+                    buf = new Uint8Array(await file.arrayBuffer());
+                } catch (e) {
+                    log('file read failed: ' + (e.message || e), 'err');
+                    return;
+                }
+                const n = buf.length;
+
+                if (Bin.isPat(buf)) {
+                    const { gs16, numPanels, bodies } = Bin.patFrameBodies(buf);
+                    if (numPanels !== Bin.NUM_PANELS || !bodies.length) {
+                        log(
+                            `${file.name}: G6PT .pat with ${numPanels} panels — firmware streams ` +
+                                '20-panel frames only (1064/4064)',
+                            'err'
+                        );
+                        return;
+                    }
+                    setThumb($('sf-stream-preview'), buf.buffer);
+                    if (bodies.length === 1) {
+                        log(
+                            `${file.name}: G6PT .pat, 1 frame ${gs16 ? 'GS16' : 'GS2'} — streaming`,
+                            'dim'
+                        );
+                        run('stream-file ' + file.name, Wire.encodeStreamFrame(bodies[0]), DECODE.ascii, {
+                            expectedCmd: Wire.OPCODES.STREAM_FRAME,
+                            timeoutMs: 1500
+                        });
+                        return;
+                    }
+                    filePlay.frames = bodies.map((b) => Wire.encodeStreamFrame(b));
+                    filePlay.idx = 0;
+                    filePlay.name = file.name;
+                    const fps = Math.max(1, Math.min(120, parseInt($('sf-fps').value, 10) || 30));
+                    log(
+                        `${file.name}: G6PT .pat, ${bodies.length} frames ${gs16 ? 'GS16' : 'GS2'} ` +
+                            `— playing at ${fps} fps (click “Stop file” to halt)`,
+                        'info'
+                    );
+                    const b = document.querySelector('[data-cmd="stream-file"]');
+                    if (b) b.textContent = 'Stop file ■';
+                    filePlay.timer = setTimeout(playFileFrames, 0);
+                    return;
+                }
+
+                const res = Bin.classifyBin(buf, streamDuty);
+                if (!res) {
+                    log(
+                        `${file.name}: unrecognized size ${n} B. Expected raw pixels (50/200), ` +
+                            'full-arena pixels (1000/4000), blocks (53/203/1060/4060), a frame ' +
+                            '(1064/4064), or a G6PT .pat.',
+                        'err'
+                    );
+                    return;
+                }
+                log(
+                    `${file.name}: ${n} B → ${res.gs16 ? 'GS16' : 'GS2'} stream frame ` +
+                        `(${res.body.length}-byte body)`,
+                    'dim'
+                );
+                run('stream-file ' + file.name, Wire.encodeStreamFrame(res.body), DECODE.ascii, {
+                    expectedCmd: Wire.OPCODES.STREAM_FRAME,
+                    timeoutMs: 1500
+                });
+            }
+
+            // ── raw-hex command sender (verbatim, like scripts/web-serial) ───
+            function sendRawHex() {
+                const raw = $('cmd-hex')
+                    .value.trim()
+                    .replace(/0x/gi, '')
+                    .replace(/[^0-9a-fA-F]/g, '');
+                if (!raw.length) {
+                    log('send: enter hex bytes, e.g. 01 66', 'err');
+                    return;
+                }
+                if (raw.length % 2 !== 0) {
+                    log('send: hex has an odd number of digits', 'err');
+                    return;
+                }
+                const bytes = [];
+                for (let i = 0; i < raw.length; i += 2) {
+                    bytes.push(parseInt(raw.slice(i, i + 2), 16));
+                }
+                const label = 'send ' + bytes.map((b) => b.toString(16).padStart(2, '0')).join(' ');
+                run(label, bytes, DECODE.ascii);
             }
 
             // ── paste-frame modal ───────────────────────────────────────────
@@ -1701,9 +1876,27 @@
                 'stream-panelmap': () => doStream(genPanelMap(), streamGs, 'stream panel-map'),
                 'stream-orient': () => doStream(genOrient(), streamGs, 'stream orientation'),
                 'stream-checker': () => doStream(genChecker(), streamGs, 'stream checker'),
-                'stream-paste': () => openPasteModal()
+                'stream-paste': () => openPasteModal(),
+                'stream-file': () => {
+                    if (filePlaying()) {
+                        stopFilePlay('user');
+                        return;
+                    }
+                    $('sf-file').click();
+                },
+                'send-raw': () => sendRawHex()
             };
             cmdButtons().forEach((b) => (b.onclick = HANDLERS[b.dataset.cmd]));
+
+            // file picker → host-stream; Enter in the hex box → send verbatim
+            $('sf-file').addEventListener('change', () => {
+                const f = $('sf-file').files && $('sf-file').files[0];
+                $('sf-file').value = ''; // allow re-picking the same file
+                if (f) loadStreamFile(f);
+            });
+            $('cmd-hex').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && link.connected) sendRawHex();
+            });
 
             // React to the active arena changing (published by the picker module).
             document.addEventListener('arena:changed', () => {
