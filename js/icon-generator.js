@@ -437,7 +437,7 @@ function generatePatternGIF(patternData, arenaConfig, options = {}, onProgress =
                 quality: opts.quality,
                 width: opts.width,
                 height: opts.height,
-                workerScript: './js/gif.worker.js'
+                workerScript: './js/vendor/gif.worker.js'
             });
 
             const frameDelay = Math.round(1000 / opts.fps);
