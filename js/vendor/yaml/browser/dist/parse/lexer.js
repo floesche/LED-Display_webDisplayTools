@@ -80,9 +80,7 @@ function isEmpty(ch) {
     }
 }
 const hexDigits = new Set('0123456789ABCDEFabcdef');
-const tagChars = new Set(
-    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-#;/?:@&=+$_.!~*'()"
-);
+const tagChars = new Set("0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-#;/?:@&=+$_.!~*'()");
 const flowIndicatorChars = new Set(',[]{}');
 const invalidAnchorChars = new Set(' ,[]{}\n\r\t');
 const isNotAnchorChar = (ch) => !ch || invalidAnchorChars.has(ch);
@@ -151,20 +149,25 @@ class Lexer {
      */
     *lex(source, incomplete = false) {
         if (source) {
-            if (typeof source !== 'string') throw TypeError('source is not a string');
+            if (typeof source !== 'string')
+                throw TypeError('source is not a string');
             this.buffer = this.buffer ? this.buffer + source : source;
             this.lineEndPos = null;
         }
         this.atEnd = !incomplete;
         let next = this.next ?? 'stream';
-        while (next && (incomplete || this.hasChars(1))) next = yield* this.parseNext(next);
+        while (next && (incomplete || this.hasChars(1)))
+            next = yield* this.parseNext(next);
     }
     atLineEnd() {
         let i = this.pos;
         let ch = this.buffer[i];
-        while (ch === ' ' || ch === '\t') ch = this.buffer[++i];
-        if (!ch || ch === '#' || ch === '\n') return true;
-        if (ch === '\r') return this.buffer[i + 1] === '\n';
+        while (ch === ' ' || ch === '\t')
+            ch = this.buffer[++i];
+        if (!ch || ch === '#' || ch === '\n')
+            return true;
+        if (ch === '\r')
+            return this.buffer[i + 1] === '\n';
         return false;
     }
     charAt(n) {
@@ -174,10 +177,12 @@ class Lexer {
         let ch = this.buffer[offset];
         if (this.indentNext > 0) {
             let indent = 0;
-            while (ch === ' ') ch = this.buffer[++indent + offset];
+            while (ch === ' ')
+                ch = this.buffer[++indent + offset];
             if (ch === '\r') {
                 const next = this.buffer[indent + offset + 1];
-                if (next === '\n' || (!next && !this.atEnd)) return offset + indent + 1;
+                if (next === '\n' || (!next && !this.atEnd))
+                    return offset + indent + 1;
             }
             return ch === '\n' || indent >= this.indentNext || (!ch && !this.atEnd)
                 ? offset + indent
@@ -185,7 +190,8 @@ class Lexer {
         }
         if (ch === '-' || ch === '.') {
             const dt = this.buffer.substr(offset, 3);
-            if ((dt === '---' || dt === '...') && isEmpty(this.buffer[offset + 3])) return -1;
+            if ((dt === '---' || dt === '...') && isEmpty(this.buffer[offset + 3]))
+                return -1;
         }
         return offset;
     }
@@ -195,8 +201,10 @@ class Lexer {
             end = this.buffer.indexOf('\n', this.pos);
             this.lineEndPos = end;
         }
-        if (end === -1) return this.atEnd ? this.buffer.substring(this.pos) : null;
-        if (this.buffer[end - 1] === '\r') end -= 1;
+        if (end === -1)
+            return this.atEnd ? this.buffer.substring(this.pos) : null;
+        if (this.buffer[end - 1] === '\r')
+            end -= 1;
         return this.buffer.substring(this.pos, end);
     }
     hasChars(n) {
@@ -234,7 +242,8 @@ class Lexer {
     }
     *parseStream() {
         let line = this.getLine();
-        if (line === null) return this.setNext('stream');
+        if (line === null)
+            return this.setNext('stream');
         if (line[0] === BOM) {
             yield* this.pushCount(1);
             line = line.substring(1);
@@ -247,14 +256,17 @@ class Lexer {
                 if (ch === ' ' || ch === '\t') {
                     dirEnd = cs - 1;
                     break;
-                } else {
+                }
+                else {
                     cs = line.indexOf('#', cs + 1);
                 }
             }
             while (true) {
                 const ch = line[dirEnd - 1];
-                if (ch === ' ' || ch === '\t') dirEnd -= 1;
-                else break;
+                if (ch === ' ' || ch === '\t')
+                    dirEnd -= 1;
+                else
+                    break;
             }
             const n = (yield* this.pushCount(dirEnd)) + (yield* this.pushSpaces(true));
             yield* this.pushCount(line.length - n); // possible comment
@@ -272,9 +284,11 @@ class Lexer {
     }
     *parseLineStart() {
         const ch = this.charAt(0);
-        if (!ch && !this.atEnd) return this.setNext('line-start');
+        if (!ch && !this.atEnd)
+            return this.setNext('line-start');
         if (ch === '-' || ch === '.') {
-            if (!this.atEnd && !this.hasChars(4)) return this.setNext('line-start');
+            if (!this.atEnd && !this.hasChars(4))
+                return this.setNext('line-start');
             const s = this.peek(3);
             if ((s === '---' || s === '...') && isEmpty(this.charAt(3))) {
                 yield* this.pushCount(3);
@@ -290,7 +304,8 @@ class Lexer {
     }
     *parseBlockStart() {
         const [ch0, ch1] = this.peek(2);
-        if (!ch1 && !this.atEnd) return this.setNext('block-start');
+        if (!ch1 && !this.atEnd)
+            return this.setNext('block-start');
         if ((ch0 === '-' || ch0 === '?' || ch0 === ':') && isEmpty(ch1)) {
             const n = (yield* this.pushCount(1)) + (yield* this.pushSpaces(true));
             this.indentNext = this.indentValue + 1;
@@ -302,7 +317,8 @@ class Lexer {
     *parseDocument() {
         yield* this.pushSpaces(true);
         const line = this.getLine();
-        if (line === null) return this.setNext('doc');
+        if (line === null)
+            return this.setNext('doc');
         let n = yield* this.pushIndicators();
         switch (line[n]) {
             case '#':
@@ -347,22 +363,23 @@ class Lexer {
             if (nl > 0) {
                 sp = yield* this.pushSpaces(false);
                 this.indentValue = indent = sp;
-            } else {
+            }
+            else {
                 sp = 0;
             }
             sp += yield* this.pushSpaces(true);
         } while (nl + sp > 0);
         const line = this.getLine();
-        if (line === null) return this.setNext('flow');
-        if (
-            (indent !== -1 && indent < this.indentNext && line[0] !== '#') ||
-            (indent === 0 && (line.startsWith('---') || line.startsWith('...')) && isEmpty(line[3]))
-        ) {
+        if (line === null)
+            return this.setNext('flow');
+        if ((indent !== -1 && indent < this.indentNext && line[0] !== '#') ||
+            (indent === 0 &&
+                (line.startsWith('---') || line.startsWith('...')) &&
+                isEmpty(line[3]))) {
             // Allowing for the terminal ] or } at the same (rather than greater)
             // indent level as the initial [ or { is technically invalid, but
             // failing here would be surprising to users.
-            const atFlowEndMarker =
-                indent === this.indentNext - 1 &&
+            const atFlowEndMarker = indent === this.indentNext - 1 &&
                 this.flowLevel === 1 &&
                 (line[0] === ']' || line[0] === '}');
             if (!atFlowEndMarker) {
@@ -425,12 +442,15 @@ class Lexer {
         if (quote === "'") {
             while (end !== -1 && this.buffer[end + 1] === "'")
                 end = this.buffer.indexOf("'", end + 2);
-        } else {
+        }
+        else {
             // double-quote
             while (end !== -1) {
                 let n = 0;
-                while (this.buffer[end - 1 - n] === '\\') n += 1;
-                if (n % 2 === 0) break;
+                while (this.buffer[end - 1 - n] === '\\')
+                    n += 1;
+                if (n % 2 === 0)
+                    break;
                 end = this.buffer.indexOf('"', end + 1);
             }
         }
@@ -440,7 +460,8 @@ class Lexer {
         if (nl !== -1) {
             while (nl !== -1) {
                 const cs = this.continueScalar(nl + 1);
-                if (cs === -1) break;
+                if (cs === -1)
+                    break;
                 nl = qb.indexOf('\n', cs);
             }
             if (nl !== -1) {
@@ -449,7 +470,8 @@ class Lexer {
             }
         }
         if (end === -1) {
-            if (!this.atEnd) return this.setNext('quoted-scalar');
+            if (!this.atEnd)
+                return this.setNext('quoted-scalar');
             end = this.buffer.length;
         }
         yield* this.pushToIndex(end + 1, false);
@@ -461,11 +483,14 @@ class Lexer {
         let i = this.pos;
         while (true) {
             const ch = this.buffer[++i];
-            if (ch === '+') this.blockScalarKeep = true;
-            else if (ch > '0' && ch <= '9') this.blockScalarIndent = Number(ch) - 1;
-            else if (ch !== '-') break;
+            if (ch === '+')
+                this.blockScalarKeep = true;
+            else if (ch > '0' && ch <= '9')
+                this.blockScalarIndent = Number(ch) - 1;
+            else if (ch !== '-')
+                break;
         }
-        return yield* this.pushUntil((ch) => isEmpty(ch) || ch === '#');
+        return yield* this.pushUntil(ch => isEmpty(ch) || ch === '#');
     }
     *parseBlockScalar() {
         let nl = this.pos - 1; // may be -1 if this.pos === 0
@@ -482,27 +507,33 @@ class Lexer {
                     break;
                 case '\r': {
                     const next = this.buffer[i + 1];
-                    if (!next && !this.atEnd) return this.setNext('block-scalar');
-                    if (next === '\n') break;
+                    if (!next && !this.atEnd)
+                        return this.setNext('block-scalar');
+                    if (next === '\n')
+                        break;
                 } // fallthrough
                 default:
                     break loop;
             }
         }
-        if (!ch && !this.atEnd) return this.setNext('block-scalar');
+        if (!ch && !this.atEnd)
+            return this.setNext('block-scalar');
         if (indent >= this.indentNext) {
-            if (this.blockScalarIndent === -1) this.indentNext = indent;
+            if (this.blockScalarIndent === -1)
+                this.indentNext = indent;
             else {
                 this.indentNext =
                     this.blockScalarIndent + (this.indentNext === 0 ? 1 : this.indentNext);
             }
             do {
                 const cs = this.continueScalar(nl + 1);
-                if (cs === -1) break;
+                if (cs === -1)
+                    break;
                 nl = this.buffer.indexOf('\n', cs);
             } while (nl !== -1);
             if (nl === -1) {
-                if (!this.atEnd) return this.setNext('block-scalar');
+                if (!this.atEnd)
+                    return this.setNext('block-scalar');
                 nl = this.buffer.length;
             }
         }
@@ -510,19 +541,26 @@ class Lexer {
         // To catch that during parsing, we include them in the block scalar value.
         let i = nl + 1;
         ch = this.buffer[i];
-        while (ch === ' ') ch = this.buffer[++i];
+        while (ch === ' ')
+            ch = this.buffer[++i];
         if (ch === '\t') {
-            while (ch === '\t' || ch === ' ' || ch === '\r' || ch === '\n') ch = this.buffer[++i];
+            while (ch === '\t' || ch === ' ' || ch === '\r' || ch === '\n')
+                ch = this.buffer[++i];
             nl = i - 1;
-        } else if (!this.blockScalarKeep) {
+        }
+        else if (!this.blockScalarKeep) {
             do {
                 let i = nl - 1;
                 let ch = this.buffer[i];
-                if (ch === '\r') ch = this.buffer[--i];
+                if (ch === '\r')
+                    ch = this.buffer[--i];
                 const lastChar = i; // Drop the line if last char not more indented
-                while (ch === ' ') ch = this.buffer[--i];
-                if (ch === '\n' && i >= this.pos && i + 1 + indent > lastChar) nl = i;
-                else break;
+                while (ch === ' ')
+                    ch = this.buffer[--i];
+                if (ch === '\n' && i >= this.pos && i + 1 + indent > lastChar)
+                    nl = i;
+                else
+                    break;
             } while (true);
         }
         yield SCALAR;
@@ -537,29 +575,38 @@ class Lexer {
         while ((ch = this.buffer[++i])) {
             if (ch === ':') {
                 const next = this.buffer[i + 1];
-                if (isEmpty(next) || (inFlow && flowIndicatorChars.has(next))) break;
+                if (isEmpty(next) || (inFlow && flowIndicatorChars.has(next)))
+                    break;
                 end = i;
-            } else if (isEmpty(ch)) {
+            }
+            else if (isEmpty(ch)) {
                 let next = this.buffer[i + 1];
                 if (ch === '\r') {
                     if (next === '\n') {
                         i += 1;
                         ch = '\n';
                         next = this.buffer[i + 1];
-                    } else end = i;
+                    }
+                    else
+                        end = i;
                 }
-                if (next === '#' || (inFlow && flowIndicatorChars.has(next))) break;
+                if (next === '#' || (inFlow && flowIndicatorChars.has(next)))
+                    break;
                 if (ch === '\n') {
                     const cs = this.continueScalar(i + 1);
-                    if (cs === -1) break;
+                    if (cs === -1)
+                        break;
                     i = Math.max(i, cs - 2); // to advance, but still account for ' #'
                 }
-            } else {
-                if (inFlow && flowIndicatorChars.has(ch)) break;
+            }
+            else {
+                if (inFlow && flowIndicatorChars.has(ch))
+                    break;
                 end = i;
             }
         }
-        if (!ch && !this.atEnd) return this.setNext('plain-scalar');
+        if (!ch && !this.atEnd)
+            return this.setNext('plain-scalar');
         yield SCALAR;
         yield* this.pushToIndex(end + 1, true);
         return inFlow ? 'flow' : 'doc';
@@ -578,7 +625,9 @@ class Lexer {
             yield s;
             this.pos += s.length;
             return s.length;
-        } else if (allowEmpty) yield '';
+        }
+        else if (allowEmpty)
+            yield '';
         return 0;
     }
     *pushIndicators() {
@@ -599,8 +648,10 @@ class Lexer {
                     const inFlow = this.flowLevel > 0;
                     const ch1 = this.charAt(1);
                     if (isEmpty(ch1) || (inFlow && flowIndicatorChars.has(ch1))) {
-                        if (!inFlow) this.indentNext = this.indentValue + 1;
-                        else if (this.flowKey) this.flowKey = false;
+                        if (!inFlow)
+                            this.indentNext = this.indentValue + 1;
+                        else if (this.flowKey)
+                            this.flowKey = false;
                         n += yield* this.pushCount(1);
                         n += yield* this.pushSpaces(true);
                         continue loop;
@@ -615,29 +666,35 @@ class Lexer {
         if (this.charAt(1) === '<') {
             let i = this.pos + 2;
             let ch = this.buffer[i];
-            while (!isEmpty(ch) && ch !== '>') ch = this.buffer[++i];
+            while (!isEmpty(ch) && ch !== '>')
+                ch = this.buffer[++i];
             return yield* this.pushToIndex(ch === '>' ? i + 1 : i, false);
-        } else {
+        }
+        else {
             let i = this.pos + 1;
             let ch = this.buffer[i];
             while (ch) {
-                if (tagChars.has(ch)) ch = this.buffer[++i];
-                else if (
-                    ch === '%' &&
+                if (tagChars.has(ch))
+                    ch = this.buffer[++i];
+                else if (ch === '%' &&
                     hexDigits.has(this.buffer[i + 1]) &&
-                    hexDigits.has(this.buffer[i + 2])
-                ) {
+                    hexDigits.has(this.buffer[i + 2])) {
                     ch = this.buffer[(i += 3)];
-                } else break;
+                }
+                else
+                    break;
             }
             return yield* this.pushToIndex(i, false);
         }
     }
     *pushNewline() {
         const ch = this.buffer[this.pos];
-        if (ch === '\n') return yield* this.pushCount(1);
-        else if (ch === '\r' && this.charAt(1) === '\n') return yield* this.pushCount(2);
-        else return 0;
+        if (ch === '\n')
+            return yield* this.pushCount(1);
+        else if (ch === '\r' && this.charAt(1) === '\n')
+            return yield* this.pushCount(2);
+        else
+            return 0;
     }
     *pushSpaces(allowTabs) {
         let i = this.pos - 1;
@@ -655,7 +712,8 @@ class Lexer {
     *pushUntil(test) {
         let i = this.pos;
         let ch = this.buffer[i];
-        while (!test(ch)) ch = this.buffer[++i];
+        while (!test(ch))
+            ch = this.buffer[++i];
         return yield* this.pushToIndex(i, false);
     }
 }

@@ -11,19 +11,18 @@ function resolveEnd(end, offset, reqSpace, onError) {
                     break;
                 case 'comment': {
                     if (reqSpace && !hasSpace)
-                        onError(
-                            token,
-                            'MISSING_CHAR',
-                            'Comments must be separated from other tokens by white space characters'
-                        );
+                        onError(token, 'MISSING_CHAR', 'Comments must be separated from other tokens by white space characters');
                     const cb = source.substring(1) || ' ';
-                    if (!comment) comment = cb;
-                    else comment += sep + cb;
+                    if (!comment)
+                        comment = cb;
+                    else
+                        comment += sep + cb;
                     sep = '';
                     break;
                 }
                 case 'newline':
-                    if (comment) sep += source;
+                    if (comment)
+                        sep += source;
                     hasSpace = true;
                     break;
                 default:

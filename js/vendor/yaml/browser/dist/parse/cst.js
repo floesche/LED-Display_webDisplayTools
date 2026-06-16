@@ -13,8 +13,7 @@ const SCALAR = '\x1f'; // C0: Unit Separator
 /** @returns `true` if `token` is a flow or block collection */
 const isCollection = (token) => !!token && 'items' in token;
 /** @returns `true` if `token` is a flow or block scalar; not an alias */
-const isScalar = (token) =>
-    !!token &&
+const isScalar = (token) => !!token &&
     (token.type === 'scalar' ||
         token.type === 'single-quoted-scalar' ||
         token.type === 'double-quoted-scalar' ||

@@ -10,37 +10,46 @@ import { Scalar } from '../../nodes/Scalar.js';
 // later mapping nodes. -- http://yaml.org/type/merge.html
 const MERGE_KEY = '<<';
 const merge = {
-    identify: (value) =>
-        value === MERGE_KEY || (typeof value === 'symbol' && value.description === MERGE_KEY),
+    identify: value => value === MERGE_KEY ||
+        (typeof value === 'symbol' && value.description === MERGE_KEY),
     default: 'key',
     tag: 'tag:yaml.org,2002:merge',
     test: /^<<$/,
-    resolve: () =>
-        Object.assign(new Scalar(Symbol(MERGE_KEY)), {
-            addToJSMap: addMergeToJSMap
-        }),
+    resolve: () => Object.assign(new Scalar(Symbol(MERGE_KEY)), {
+        addToJSMap: addMergeToJSMap
+    }),
     stringify: () => MERGE_KEY
 };
-const isMergeKey = (ctx, key) =>
-    (merge.identify(key) ||
-        (isScalar(key) && (!key.type || key.type === Scalar.PLAIN) && merge.identify(key.value))) &&
-    ctx?.doc.schema.tags.some((tag) => tag.tag === merge.tag && tag.default);
+const isMergeKey = (ctx, key) => (merge.identify(key) ||
+    (isScalar(key) &&
+        (!key.type || key.type === Scalar.PLAIN) &&
+        merge.identify(key.value))) &&
+    ctx?.doc.schema.tags.some(tag => tag.tag === merge.tag && tag.default);
 function addMergeToJSMap(ctx, map, value) {
     const source = resolveAliasValue(ctx, value);
-    if (isSeq(source)) for (const it of source.items) mergeValue(ctx, map, it);
-    else if (Array.isArray(source)) for (const it of source) mergeValue(ctx, map, it);
-    else mergeValue(ctx, map, source);
+    if (isSeq(source))
+        for (const it of source.items)
+            mergeValue(ctx, map, it);
+    else if (Array.isArray(source))
+        for (const it of source)
+            mergeValue(ctx, map, it);
+    else
+        mergeValue(ctx, map, source);
 }
 function mergeValue(ctx, map, value) {
     const source = resolveAliasValue(ctx, value);
-    if (!isMap(source)) throw new Error('Merge sources must be maps or map aliases');
+    if (!isMap(source))
+        throw new Error('Merge sources must be maps or map aliases');
     const srcMap = source.toJSON(null, ctx, Map);
     for (const [key, value] of srcMap) {
         if (map instanceof Map) {
-            if (!map.has(key)) map.set(key, value);
-        } else if (map instanceof Set) {
+            if (!map.has(key))
+                map.set(key, value);
+        }
+        else if (map instanceof Set) {
             map.add(key);
-        } else if (!Object.prototype.hasOwnProperty.call(map, key)) {
+        }
+        else if (!Object.prototype.hasOwnProperty.call(map, key)) {
             Object.defineProperty(map, key, {
                 value,
                 writable: true,

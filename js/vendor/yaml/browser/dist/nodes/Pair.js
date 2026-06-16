@@ -16,8 +16,10 @@ class Pair {
     }
     clone(schema) {
         let { key, value } = this;
-        if (isNode(key)) key = key.clone(schema);
-        if (isNode(value)) value = value.clone(schema);
+        if (isNode(key))
+            key = key.clone(schema);
+        if (isNode(value))
+            value = value.clone(schema);
         return new Pair(key, value);
     }
     toJSON(_, ctx) {
@@ -25,7 +27,9 @@ class Pair {
         return addPairToJSMap(ctx, pair, this);
     }
     toString(ctx, onComment, onChompKeep) {
-        return ctx?.doc ? stringifyPair(this, ctx, onComment, onChompKeep) : JSON.stringify(this);
+        return ctx?.doc
+            ? stringifyPair(this, ctx, onComment, onChompKeep)
+            : JSON.stringify(this);
     }
 }
 

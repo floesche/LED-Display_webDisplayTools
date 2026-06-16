@@ -30,7 +30,8 @@ const REMOVE = Symbol('remove item');
  *     a non-empty `key` and when exiting the item.
  */
 function visit(cst, visitor) {
-    if ('type' in cst && cst.type === 'document') cst = { start: cst.start, value: cst.value };
+    if ('type' in cst && cst.type === 'document')
+        cst = { start: cst.start, value: cst.value };
     _visit(Object.freeze([]), cst, visitor);
 }
 // Without the `as symbol` casts, TS declares these in the `visit`
@@ -49,7 +50,9 @@ visit.itemAtPath = (cst, path) => {
         const tok = item?.[field];
         if (tok && 'items' in tok) {
             item = tok.items[index];
-        } else return undefined;
+        }
+        else
+            return undefined;
     }
     return item;
 };
@@ -62,29 +65,30 @@ visit.parentCollection = (cst, path) => {
     const parent = visit.itemAtPath(cst, path.slice(0, -1));
     const field = path[path.length - 1][0];
     const coll = parent?.[field];
-    if (coll && 'items' in coll) return coll;
+    if (coll && 'items' in coll)
+        return coll;
     throw new Error('Parent collection not found');
 };
 function _visit(path, item, visitor) {
     let ctrl = visitor(item, path);
-    if (typeof ctrl === 'symbol') return ctrl;
+    if (typeof ctrl === 'symbol')
+        return ctrl;
     for (const field of ['key', 'value']) {
         const token = item[field];
         if (token && 'items' in token) {
             for (let i = 0; i < token.items.length; ++i) {
-                const ci = _visit(
-                    Object.freeze(path.concat([[field, i]])),
-                    token.items[i],
-                    visitor
-                );
-                if (typeof ci === 'number') i = ci - 1;
-                else if (ci === BREAK) return BREAK;
+                const ci = _visit(Object.freeze(path.concat([[field, i]])), token.items[i], visitor);
+                if (typeof ci === 'number')
+                    i = ci - 1;
+                else if (ci === BREAK)
+                    return BREAK;
                 else if (ci === REMOVE) {
                     token.items.splice(i, 1);
                     i -= 1;
                 }
             }
-            if (typeof ctrl === 'function' && field === 'key') ctrl = ctrl(item, path);
+            if (typeof ctrl === 'function' && field === 'key')
+                ctrl = ctrl(item, path);
         }
     }
     return typeof ctrl === 'function' ? ctrl(item, path) : ctrl;

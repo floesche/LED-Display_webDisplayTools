@@ -10,22 +10,27 @@ const getFoldOptions = (ctx, isBlock) => ({
 // presume that's starting a new document.
 const containsDocumentMarker = (str) => /^(%|---|\.\.\.)/m.test(str);
 function lineLengthOverLimit(str, lineWidth, indentLength) {
-    if (!lineWidth || lineWidth < 0) return false;
+    if (!lineWidth || lineWidth < 0)
+        return false;
     const limit = lineWidth - indentLength;
     const strLen = str.length;
-    if (strLen <= limit) return false;
+    if (strLen <= limit)
+        return false;
     for (let i = 0, start = 0; i < strLen; ++i) {
         if (str[i] === '\n') {
-            if (i - start > limit) return true;
+            if (i - start > limit)
+                return true;
             start = i + 1;
-            if (strLen - start <= limit) return false;
+            if (strLen - start <= limit)
+                return false;
         }
     }
     return true;
 }
 function doubleQuotedString(value, ctx) {
     const json = JSON.stringify(value);
-    if (ctx.options.doubleQuotedAsJSON) return json;
+    if (ctx.options.doubleQuotedAsJSON)
+        return json;
     const { implicitKey } = ctx;
     const minMultiLineLength = ctx.options.doubleQuotedMinMultiLineLength;
     const indent = ctx.indent || (containsDocumentMarker(value) ? '  ' : '');
@@ -71,26 +76,34 @@ function doubleQuotedString(value, ctx) {
                                 str += '\\P';
                                 break;
                             default:
-                                if (code.substr(0, 2) === '00') str += '\\x' + code.substr(2);
-                                else str += json.substr(i, 6);
+                                if (code.substr(0, 2) === '00')
+                                    str += '\\x' + code.substr(2);
+                                else
+                                    str += json.substr(i, 6);
                         }
                         i += 5;
                         start = i + 1;
                     }
                     break;
                 case 'n':
-                    if (implicitKey || json[i + 2] === '"' || json.length < minMultiLineLength) {
+                    if (implicitKey ||
+                        json[i + 2] === '"' ||
+                        json.length < minMultiLineLength) {
                         i += 1;
-                    } else {
+                    }
+                    else {
                         // folding will eat first newline
                         str += json.slice(start, i) + '\n\n';
-                        while (json[i + 2] === '\\' && json[i + 3] === 'n' && json[i + 4] !== '"') {
+                        while (json[i + 2] === '\\' &&
+                            json[i + 3] === 'n' &&
+                            json[i + 4] !== '"') {
                             str += '\n';
                             i += 2;
                         }
                         str += indent;
                         // space after newline needs to be escaped to not be folded
-                        if (json[i + 2] === ' ') str += '\\';
+                        if (json[i + 2] === ' ')
+                            str += '\\';
                         i += 1;
                         start = i + 1;
                     }
@@ -100,11 +113,12 @@ function doubleQuotedString(value, ctx) {
             }
     }
     str = start ? str + json.slice(start) : json;
-    return implicitKey ? str : foldFlowLines(str, indent, FOLD_QUOTED, getFoldOptions(ctx, false));
+    return implicitKey
+        ? str
+        : foldFlowLines(str, indent, FOLD_QUOTED, getFoldOptions(ctx, false));
 }
 function singleQuotedString(value, ctx) {
-    if (
-        ctx.options.singleQuote === false ||
+    if (ctx.options.singleQuote === false ||
         (ctx.implicitKey && value.includes('\n')) ||
         /[ \t]\n|\n[ \t]/.test(value) // single quoted string can't have leading or trailing whitespace around newline
     )
@@ -118,13 +132,17 @@ function singleQuotedString(value, ctx) {
 function quotedString(value, ctx) {
     const { singleQuote } = ctx.options;
     let qs;
-    if (singleQuote === false) qs = doubleQuotedString;
+    if (singleQuote === false)
+        qs = doubleQuotedString;
     else {
         const hasDouble = value.includes('"');
         const hasSingle = value.includes("'");
-        if (hasDouble && !hasSingle) qs = singleQuotedString;
-        else if (hasSingle && !hasDouble) qs = doubleQuotedString;
-        else qs = singleQuote ? singleQuotedString : doubleQuotedString;
+        if (hasDouble && !hasSingle)
+            qs = singleQuotedString;
+        else if (hasSingle && !hasDouble)
+            qs = doubleQuotedString;
+        else
+            qs = singleQuote ? singleQuotedString : doubleQuotedString;
     }
     return qs(value, ctx);
 }
@@ -133,7 +151,8 @@ function quotedString(value, ctx) {
 let blockEndNewlines;
 try {
     blockEndNewlines = new RegExp('(^|(?<!\n))\n+(?!\n|$)', 'g');
-} catch {
+}
+catch {
     blockEndNewlines = /\n+(?!\n|$)/g;
 }
 function blockString({ comment, type, value }, ctx, onComment, onChompKeep) {
@@ -143,37 +162,42 @@ function blockString({ comment, type, value }, ctx, onComment, onChompKeep) {
     if (!blockQuote || /\n[\t ]+$/.test(value)) {
         return quotedString(value, ctx);
     }
-    const indent =
-        ctx.indent || (ctx.forceBlockIndent || containsDocumentMarker(value) ? '  ' : '');
-    const literal =
-        blockQuote === 'literal'
-            ? true
-            : blockQuote === 'folded' || type === Scalar.BLOCK_FOLDED
-              ? false
-              : type === Scalar.BLOCK_LITERAL
+    const indent = ctx.indent ||
+        (ctx.forceBlockIndent || containsDocumentMarker(value) ? '  ' : '');
+    const literal = blockQuote === 'literal'
+        ? true
+        : blockQuote === 'folded' || type === Scalar.BLOCK_FOLDED
+            ? false
+            : type === Scalar.BLOCK_LITERAL
                 ? true
                 : !lineLengthOverLimit(value, lineWidth, indent.length);
-    if (!value) return literal ? '|\n' : '>\n';
+    if (!value)
+        return literal ? '|\n' : '>\n';
     // determine chomping from whitespace at value end
     let chomp;
     let endStart;
     for (endStart = value.length; endStart > 0; --endStart) {
         const ch = value[endStart - 1];
-        if (ch !== '\n' && ch !== '\t' && ch !== ' ') break;
+        if (ch !== '\n' && ch !== '\t' && ch !== ' ')
+            break;
     }
     let end = value.substring(endStart);
     const endNlPos = end.indexOf('\n');
     if (endNlPos === -1) {
         chomp = '-'; // strip
-    } else if (value === end || endNlPos !== end.length - 1) {
+    }
+    else if (value === end || endNlPos !== end.length - 1) {
         chomp = '+'; // keep
-        if (onChompKeep) onChompKeep();
-    } else {
+        if (onChompKeep)
+            onChompKeep();
+    }
+    else {
         chomp = ''; // clip
     }
     if (end) {
         value = value.slice(0, -end.length);
-        if (end[end.length - 1] === '\n') end = end.slice(0, -1);
+        if (end[end.length - 1] === '\n')
+            end = end.slice(0, -1);
         end = end.replace(blockEndNewlines, `$&${indent}`);
     }
     // determine indent indicator from whitespace at value start
@@ -182,9 +206,12 @@ function blockString({ comment, type, value }, ctx, onComment, onChompKeep) {
     let startNlPos = -1;
     for (startEnd = 0; startEnd < value.length; ++startEnd) {
         const ch = value[startEnd];
-        if (ch === ' ') startWithSpace = true;
-        else if (ch === '\n') startNlPos = startEnd;
-        else break;
+        if (ch === ' ')
+            startWithSpace = true;
+        else if (ch === '\n')
+            startNlPos = startEnd;
+        else
+            break;
     }
     let start = value.substring(0, startNlPos < startEnd ? startNlPos + 1 : startEnd);
     if (start) {
@@ -196,7 +223,8 @@ function blockString({ comment, type, value }, ctx, onComment, onChompKeep) {
     let header = (startWithSpace ? indentSize : '') + chomp;
     if (comment) {
         header += ' ' + commentString(comment.replace(/ ?[\r\n]+/g, ' '));
-        if (onComment) onComment();
+        if (onComment)
+            onComment();
     }
     if (!literal) {
         const foldedValue = value
@@ -212,7 +240,8 @@ function blockString({ comment, type, value }, ctx, onComment, onChompKeep) {
             };
         }
         const body = foldFlowLines(`${start}${foldedValue}${end}`, indent, FOLD_BLOCK, foldOptions);
-        if (!literalFallback) return `>${header}\n${indent}${body}`;
+        if (!literalFallback)
+            return `>${header}\n${indent}${body}`;
     }
     value = value.replace(/\n+/g, `$&${indent}`);
     return `|${header}\n${indent}${start}${value}${end}`;
@@ -220,14 +249,11 @@ function blockString({ comment, type, value }, ctx, onComment, onChompKeep) {
 function plainString(item, ctx, onComment, onChompKeep) {
     const { type, value } = item;
     const { actualString, implicitKey, indent, indentStep, inFlow } = ctx;
-    if ((implicitKey && value.includes('\n')) || (inFlow && /[[\]{},]/.test(value))) {
+    if ((implicitKey && value.includes('\n')) ||
+        (inFlow && /[[\]{},]/.test(value))) {
         return quotedString(value, ctx);
     }
-    if (
-        /^[\n\t ,[\]{}#&*!|>'"%@`]|^[?-]$|^[?-][ \t]|[\n:][ \t]|[ \t]\n|[\n\t ]#|[\n\t :]$/.test(
-            value
-        )
-    ) {
+    if (/^[\n\t ,[\]{}#&*!|>'"%@`]|^[?-]$|^[?-][ \t]|[\n:][ \t]|[ \t]\n|[\n\t ]#|[\n\t :]$/.test(value)) {
         // not allowed:
         // - '-' or '?'
         // - start with an indicator character (except [?:-]) or /[?-] /
@@ -238,7 +264,10 @@ function plainString(item, ctx, onComment, onChompKeep) {
             ? quotedString(value, ctx)
             : blockString(item, ctx, onComment, onChompKeep);
     }
-    if (!implicitKey && !inFlow && type !== Scalar.PLAIN && value.includes('\n')) {
+    if (!implicitKey &&
+        !inFlow &&
+        type !== Scalar.PLAIN &&
+        value.includes('\n')) {
         // Where allowed & type not set explicitly, prefer block style for multiline strings
         return blockString(item, ctx, onComment, onChompKeep);
     }
@@ -246,7 +275,8 @@ function plainString(item, ctx, onComment, onChompKeep) {
         if (indent === '') {
             ctx.forceBlockIndent = true;
             return blockString(item, ctx, onComment, onChompKeep);
-        } else if (implicitKey && indent === indentStep) {
+        }
+        else if (implicitKey && indent === indentStep) {
             return quotedString(value, ctx);
         }
     }
@@ -255,19 +285,20 @@ function plainString(item, ctx, onComment, onChompKeep) {
     // booleans get parsed with those types in v1.2 (e.g. '42', 'true' & '0.9e-3'),
     // and others in v1.1.
     if (actualString) {
-        const test = (tag) =>
-            tag.default && tag.tag !== 'tag:yaml.org,2002:str' && tag.test?.test(str);
+        const test = (tag) => tag.default && tag.tag !== 'tag:yaml.org,2002:str' && tag.test?.test(str);
         const { compat, tags } = ctx.doc.schema;
-        if (tags.some(test) || compat?.some(test)) return quotedString(value, ctx);
+        if (tags.some(test) || compat?.some(test))
+            return quotedString(value, ctx);
     }
-    return implicitKey ? str : foldFlowLines(str, indent, FOLD_FLOW, getFoldOptions(ctx, false));
+    return implicitKey
+        ? str
+        : foldFlowLines(str, indent, FOLD_FLOW, getFoldOptions(ctx, false));
 }
 function stringifyString(item, ctx, onComment, onChompKeep) {
     const { implicitKey, inFlow } = ctx;
-    const ss =
-        typeof item.value === 'string'
-            ? item
-            : Object.assign({}, item, { value: String(item.value) });
+    const ss = typeof item.value === 'string'
+        ? item
+        : Object.assign({}, item, { value: String(item.value) });
     let { type } = item;
     if (type !== Scalar.QUOTE_DOUBLE) {
         // force double quotes on control characters & unpaired surrogates
@@ -296,7 +327,8 @@ function stringifyString(item, ctx, onComment, onChompKeep) {
         const { defaultKeyType, defaultStringType } = ctx.options;
         const t = (implicitKey && defaultKeyType) || defaultStringType;
         res = _stringify(t);
-        if (res === null) throw new Error(`Unsupported default string type ${t}`);
+        if (res === null)
+            throw new Error(`Unsupported default string type ${t}`);
     }
     return res;
 }

@@ -7,7 +7,8 @@ const map = {
     nodeClass: YAMLMap,
     tag: 'tag:yaml.org,2002:map',
     resolve(map, onError) {
-        if (!isMap(map)) onError('Expected a mapping for this tag');
+        if (!isMap(map))
+            onError('Expected a mapping for this tag');
         return map;
     },
     createNode: (schema, obj, ctx) => YAMLMap.from(schema, obj, ctx)

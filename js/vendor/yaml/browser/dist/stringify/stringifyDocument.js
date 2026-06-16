@@ -10,13 +10,17 @@ function stringifyDocument(doc, options) {
         if (dir) {
             lines.push(dir);
             hasDirectives = true;
-        } else if (doc.directives.docStart) hasDirectives = true;
+        }
+        else if (doc.directives.docStart)
+            hasDirectives = true;
     }
-    if (hasDirectives) lines.push('---');
+    if (hasDirectives)
+        lines.push('---');
     const ctx = createStringifyContext(doc, options);
     const { commentString } = ctx.options;
     if (doc.commentBefore) {
-        if (lines.length !== 1) lines.unshift('');
+        if (lines.length !== 1)
+            lines.unshift('');
         const cs = commentString(doc.commentBefore);
         lines.unshift(indentComment(cs, ''));
     }
@@ -24,7 +28,8 @@ function stringifyDocument(doc, options) {
     let contentComment = null;
     if (doc.contents) {
         if (isNode(doc.contents)) {
-            if (doc.contents.spaceBefore && hasDirectives) lines.push('');
+            if (doc.contents.spaceBefore && hasDirectives)
+                lines.push('');
             if (doc.contents.commentBefore) {
                 const cs = commentString(doc.contents.commentBefore);
                 lines.push(indentComment(cs, ''));
@@ -35,13 +40,18 @@ function stringifyDocument(doc, options) {
         }
         const onChompKeep = contentComment ? undefined : () => (chompKeep = true);
         let body = stringify(doc.contents, ctx, () => (contentComment = null), onChompKeep);
-        if (contentComment) body += lineComment(body, '', commentString(contentComment));
-        if ((body[0] === '|' || body[0] === '>') && lines[lines.length - 1] === '---') {
+        if (contentComment)
+            body += lineComment(body, '', commentString(contentComment));
+        if ((body[0] === '|' || body[0] === '>') &&
+            lines[lines.length - 1] === '---') {
             // Top-level block scalars with a preceding doc marker ought to use the
             // same line for their header.
             lines[lines.length - 1] = `--- ${body}`;
-        } else lines.push(body);
-    } else {
+        }
+        else
+            lines.push(body);
+    }
+    else {
         lines.push(stringify(doc.contents, ctx));
     }
     if (doc.directives?.docEnd) {
@@ -50,17 +60,22 @@ function stringifyDocument(doc, options) {
             if (cs.includes('\n')) {
                 lines.push('...');
                 lines.push(indentComment(cs, ''));
-            } else {
+            }
+            else {
                 lines.push(`... ${cs}`);
             }
-        } else {
+        }
+        else {
             lines.push('...');
         }
-    } else {
+    }
+    else {
         let dc = doc.comment;
-        if (dc && chompKeep) dc = dc.replace(/^\n+/, '');
+        if (dc && chompKeep)
+            dc = dc.replace(/^\n+/, '');
         if (dc) {
-            if ((!chompKeep || contentComment) && lines[lines.length - 1] !== '') lines.push('');
+            if ((!chompKeep || contentComment) && lines[lines.length - 1] !== '')
+                lines.push('');
             lines.push(indentComment(commentString(dc), ''));
         }
     }

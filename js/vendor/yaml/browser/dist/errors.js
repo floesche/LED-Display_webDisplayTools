@@ -18,8 +18,9 @@ class YAMLWarning extends YAMLError {
     }
 }
 const prettifyError = (src, lc) => (error) => {
-    if (error.pos[0] === -1) return;
-    error.linePos = error.pos.map((pos) => lc.linePos(pos));
+    if (error.pos[0] === -1)
+        return;
+    error.linePos = error.pos.map(pos => lc.linePos(pos));
     const { line, col } = error.linePos[0];
     error.message += ` at line ${line}, column ${col}`;
     let ci = col - 1;
@@ -32,12 +33,14 @@ const prettifyError = (src, lc) => (error) => {
         lineStr = '…' + lineStr.substring(trimStart);
         ci -= trimStart - 1;
     }
-    if (lineStr.length > 80) lineStr = lineStr.substring(0, 79) + '…';
+    if (lineStr.length > 80)
+        lineStr = lineStr.substring(0, 79) + '…';
     // Include previous line in context if pointing at line start
     if (line > 1 && /^ *$/.test(lineStr.substring(0, ci))) {
         // Regexp won't match if start is trimmed
         let prev = src.substring(lc.lineStarts[line - 2], lc.lineStarts[line - 1]);
-        if (prev.length > 80) prev = prev.substring(0, 79) + '…\n';
+        if (prev.length > 80)
+            prev = prev.substring(0, 79) + '…\n';
         lineStr = prev + lineStr;
     }
     if (/[^ ]/.test(lineStr)) {

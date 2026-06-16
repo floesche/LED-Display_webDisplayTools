@@ -8,16 +8,15 @@ class NodeBase {
     }
     /** Create a copy of this node.  */
     clone() {
-        const copy = Object.create(
-            Object.getPrototypeOf(this),
-            Object.getOwnPropertyDescriptors(this)
-        );
-        if (this.range) copy.range = this.range.slice();
+        const copy = Object.create(Object.getPrototypeOf(this), Object.getOwnPropertyDescriptors(this));
+        if (this.range)
+            copy.range = this.range.slice();
         return copy;
     }
     /** A plain JavaScript representation of this node. */
     toJS(doc, { mapAsMap, maxAliasCount, onAnchor, reviver } = {}) {
-        if (!isDocument(doc)) throw new TypeError('A document argument is required');
+        if (!isDocument(doc))
+            throw new TypeError('A document argument is required');
         const ctx = {
             anchors: new Map(),
             doc,
@@ -28,8 +27,11 @@ class NodeBase {
         };
         const res = toJS(this, '', ctx);
         if (typeof onAnchor === 'function')
-            for (const { count, res } of ctx.anchors.values()) onAnchor(res, count);
-        return typeof reviver === 'function' ? applyReviver(reviver, { '': res }, '', res) : res;
+            for (const { count, res } of ctx.anchors.values())
+                onAnchor(res, count);
+        return typeof reviver === 'function'
+            ? applyReviver(reviver, { '': res }, '', res)
+            : res;
     }
 }
 

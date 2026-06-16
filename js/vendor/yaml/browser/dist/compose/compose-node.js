@@ -22,23 +22,27 @@ function composeNode(ctx, token, props, onError) {
         case 'double-quoted-scalar':
         case 'block-scalar':
             node = composeScalar(ctx, token, tag, onError);
-            if (anchor) node.anchor = anchor.source.substring(1);
+            if (anchor)
+                node.anchor = anchor.source.substring(1);
             break;
         case 'block-map':
         case 'block-seq':
         case 'flow-collection':
             try {
                 node = composeCollection(CN, ctx, token, props, onError);
-                if (anchor) node.anchor = anchor.source.substring(1);
-            } catch (error) {
+                if (anchor)
+                    node.anchor = anchor.source.substring(1);
+            }
+            catch (error) {
                 // Almost certainly here due to a stack overflow
                 const message = error instanceof Error ? error.message : String(error);
                 onError(token, 'RESOURCE_EXHAUSTION', message);
             }
             break;
         default: {
-            const message =
-                token.type === 'error' ? token.message : `Unsupported token (type: ${token.type})`;
+            const message = token.type === 'error'
+                ? token.message
+                : `Unsupported token (type: ${token.type})`;
             onError(token, 'UNEXPECTED_TOKEN', message);
             isSrcToken = false;
         }
@@ -46,33 +50,28 @@ function composeNode(ctx, token, props, onError) {
     node ?? (node = composeEmptyNode(ctx, token.offset, undefined, null, props, onError));
     if (anchor && node.anchor === '')
         onError(anchor, 'BAD_ALIAS', 'Anchor cannot be an empty string');
-    if (
-        atKey &&
+    if (atKey &&
         ctx.options.stringKeys &&
         (!isScalar(node) ||
             typeof node.value !== 'string' ||
-            (node.tag && node.tag !== 'tag:yaml.org,2002:str'))
-    ) {
+            (node.tag && node.tag !== 'tag:yaml.org,2002:str'))) {
         const msg = 'With stringKeys, all keys must be strings';
         onError(tag ?? token, 'NON_STRING_KEY', msg);
     }
-    if (spaceBefore) node.spaceBefore = true;
+    if (spaceBefore)
+        node.spaceBefore = true;
     if (comment) {
-        if (token.type === 'scalar' && token.source === '') node.comment = comment;
-        else node.commentBefore = comment;
+        if (token.type === 'scalar' && token.source === '')
+            node.comment = comment;
+        else
+            node.commentBefore = comment;
     }
     // @ts-expect-error Type checking misses meaning of isSrcToken
-    if (ctx.options.keepSourceTokens && isSrcToken) node.srcToken = token;
+    if (ctx.options.keepSourceTokens && isSrcToken)
+        node.srcToken = token;
     return node;
 }
-function composeEmptyNode(
-    ctx,
-    offset,
-    before,
-    pos,
-    { spaceBefore, comment, anchor, tag, end },
-    onError
-) {
+function composeEmptyNode(ctx, offset, before, pos, { spaceBefore, comment, anchor, tag, end }, onError) {
     const token = {
         type: 'scalar',
         offset: emptyScalarPosition(offset, before, pos),
@@ -82,9 +81,11 @@ function composeEmptyNode(
     const node = composeScalar(ctx, token, tag, onError);
     if (anchor) {
         node.anchor = anchor.source.substring(1);
-        if (node.anchor === '') onError(anchor, 'BAD_ALIAS', 'Anchor cannot be an empty string');
+        if (node.anchor === '')
+            onError(anchor, 'BAD_ALIAS', 'Anchor cannot be an empty string');
     }
-    if (spaceBefore) node.spaceBefore = true;
+    if (spaceBefore)
+        node.spaceBefore = true;
     if (comment) {
         node.comment = comment;
         node.range[2] = end;
@@ -93,13 +94,15 @@ function composeEmptyNode(
 }
 function composeAlias({ options }, { offset, source, end }, onError) {
     const alias = new Alias(source.substring(1));
-    if (alias.source === '') onError(offset, 'BAD_ALIAS', 'Alias cannot be an empty string');
+    if (alias.source === '')
+        onError(offset, 'BAD_ALIAS', 'Alias cannot be an empty string');
     if (alias.source.endsWith(':'))
         onError(offset + source.length - 1, 'BAD_ALIAS', 'Alias ending in : is ambiguous', true);
     const valueEnd = offset + source.length;
     const re = resolveEnd(end, valueEnd, options.strict, onError);
     alias.range = [offset, valueEnd, re.offset];
-    if (re.comment) alias.comment = re.comment;
+    if (re.comment)
+        alias.comment = re.comment;
     return alias;
 }
 

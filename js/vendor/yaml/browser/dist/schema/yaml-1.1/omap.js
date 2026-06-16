@@ -19,18 +19,22 @@ class YAMLOMap extends YAMLSeq {
      * but TypeScript won't allow widening the signature of a child method.
      */
     toJSON(_, ctx) {
-        if (!ctx) return super.toJSON(_);
+        if (!ctx)
+            return super.toJSON(_);
         const map = new Map();
-        if (ctx?.onCreate) ctx.onCreate(map);
+        if (ctx?.onCreate)
+            ctx.onCreate(map);
         for (const pair of this.items) {
             let key, value;
             if (isPair(pair)) {
                 key = toJS(pair.key, '', ctx);
                 value = toJS(pair.value, key, ctx);
-            } else {
+            }
+            else {
                 key = toJS(pair, '', ctx);
             }
-            if (map.has(key)) throw new Error('Ordered maps must not include duplicate keys');
+            if (map.has(key))
+                throw new Error('Ordered maps must not include duplicate keys');
             map.set(key, value);
         }
         return map;
@@ -45,7 +49,7 @@ class YAMLOMap extends YAMLSeq {
 YAMLOMap.tag = 'tag:yaml.org,2002:omap';
 const omap = {
     collection: 'seq',
-    identify: (value) => value instanceof Map,
+    identify: value => value instanceof Map,
     nodeClass: YAMLOMap,
     default: false,
     tag: 'tag:yaml.org,2002:omap',
@@ -56,7 +60,8 @@ const omap = {
             if (isScalar(key)) {
                 if (seenKeys.includes(key.value)) {
                     onError(`Ordered maps must not include duplicate keys: ${key.value}`);
-                } else {
+                }
+                else {
                     seenKeys.push(key.value);
                 }
             }
