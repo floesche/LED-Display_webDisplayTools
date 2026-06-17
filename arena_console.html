@@ -604,7 +604,7 @@
                                 class="cmd menu-item"
                                 data-cmd="info"
                                 disabled
-                                title="GET_CONTROLLER_INFO (0xC1) — firmware version + capability bitmap. The canonical round-trip check."
+                                title="GET_CONTROLLER_INFO (0xC2) — firmware version + capability bitmap. The canonical round-trip check."
                             >
                                 Get info
                             </button>
@@ -612,7 +612,7 @@
                                 class="cmd menu-item"
                                 data-cmd="ip"
                                 disabled
-                                title="GET_ETHERNET_IP (0xC0) — DHCP-resolved address (meaningful only with an Ethernet link)"
+                                title="GET_ETHERNET_IP (0xC1) — DHCP-resolved address (meaningful only with an Ethernet link)"
                             >
                                 Get IP
                             </button>
@@ -620,7 +620,7 @@
                                 class="cmd menu-item"
                                 data-cmd="frames"
                                 disabled
-                                title="GET_FRAMES_SENT (0x19) — master-side count of frames pushed to panels"
+                                title="GET_FRAMES_SENT (0x33) — master-side count of frames pushed to panels"
                             >
                                 Get frames sent
                             </button>
@@ -628,7 +628,7 @@
                                 class="cmd menu-item"
                                 data-cmd="resetframes"
                                 disabled
-                                title="RESET_FRAMES_SENT (0x1A) — zero the frames-sent counter"
+                                title="RESET_FRAMES_SENT (0x34) — zero the frames-sent counter"
                             >
                                 Reset frames sent
                             </button>
@@ -653,7 +653,7 @@
                                     data-cmd="setspi"
                                     disabled
                                     style="width: auto"
-                                    title="SET_SPI_CLOCK (0x17) — set the panel SPI master clock (echoes the applied MHz)"
+                                    title="SET_SPI_CLOCK (0xC5) — set the panel SPI master clock (echoes the applied MHz)"
                                 >
                                     Set
                                 </button>
@@ -662,7 +662,7 @@
                                     data-cmd="getspi"
                                     disabled
                                     style="width: auto"
-                                    title="GET_SPI_CLOCK (0x18) — read the current panel SPI master clock"
+                                    title="GET_SPI_CLOCK (0xC6) — read the current panel SPI master clock"
                                 >
                                     Get
                                 </button>
@@ -685,6 +685,15 @@
                                     title="SET_REFRESH_RATE (0x16) — set the panel re-transmit rate (Hz)"
                                 >
                                     Set
+                                </button>
+                                <button
+                                    class="cmd menu-item"
+                                    data-cmd="getrate"
+                                    disabled
+                                    style="width: auto"
+                                    title="GET_REFRESH_RATE (0x17) — read the current panel re-transmit rate (Hz)"
+                                >
+                                    Get
                                 </button>
                             </div>
                             <div class="menu-sep">Firmware-gated (planned)</div>
@@ -1206,6 +1215,10 @@
                 spi: (r) => {
                     const m = Wire.decodeSpiClock(r);
                     return m == null ? null : m + ' MHz';
+                },
+                refreshRate: (r) => {
+                    const hz = Wire.decodeRefreshRate(r);
+                    return hz == null ? null : hz + ' Hz';
                 },
                 frames: (r) => {
                     const c = Wire.decodeFramesSent(r);
@@ -1789,6 +1802,7 @@
                         log('set-refresh-rate (encode rejected): ' + e.message, 'err');
                     }
                 },
+                getrate: () => run('get-refresh-rate', Wire.encodeGetRefreshRate(), DECODE.refreshRate),
                 setframe: () => {
                     const i = parseInt($('sf-idx').value, 10);
                     if (Number.isNaN(i)) {

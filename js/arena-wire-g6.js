@@ -42,14 +42,18 @@ const ArenaWireG6 = (function () {
         ALL_OFF: 0x00,
         TRIAL_PARAMS: 0x08, // selects mode + pattern (Modes 2/3/4)
         SET_REFRESH_RATE: 0x16,
-        SET_SPI_CLOCK: 0x17, // uint16 LE MHz (1..30); echoes applied MHz
-        GET_SPI_CLOCK: 0x18, // returns uint16 LE current MHz
-        GET_FRAMES_SENT: 0x19, // returns uint32 LE frames pushed to panels
-        RESET_FRAMES_SENT: 0x1a, // zeroes the frames-sent counter
+        GET_REFRESH_RATE: 0x17, // returns current refresh rate as uint16 LE Hz
+        SET_SPI_CLOCK: 0xC5, // uint16 LE MHz (1..30); echoes applied MHz
+        GET_SPI_CLOCK: 0xC6, // returns uint16 LE current MHz
+        GET_FRAMES_SENT: 0x33, // returns uint32 LE frames pushed to panels
+        RESET_FRAMES_SENT: 0x34, // zeroes the frames-sent counter
         STOP_DISPLAY: 0x30,
         STREAM_FRAME: 0x32, // host-streamed full frame ("FR"+blocks; see encodeStreamFrame)
-        GET_ETHERNET_IP: 0xC0,
-        GET_CONTROLLER_INFO: 0xC1, // returns {version, capability_bitmap}
+        SET_ETHERNET_IP: 0xC0, // reserved — not yet implemented
+        GET_ETHERNET_IP: 0xC1,
+        GET_CONTROLLER_INFO: 0xC2, // returns {version, capability_bitmap}
+        SET_DIAG_OUTPUT: 0xC3, // [len=2,0xC3,on] mute/unmute DEBUG_SERIAL diagnostics
+        GET_DIAG_OUTPUT: 0xC4, // returns current g_dbg_on state (0/1)
         SET_FRAME_POSITION: 0x70, // Mode 3: host-commanded frame index
         ALL_ON: 0xff
     };
@@ -69,7 +73,7 @@ const ArenaWireG6 = (function () {
         CLOSED_LOOP: 4 // analog-in × gain, computed on the controller
     };
 
-    // Capability bitmap bits in the get-controller-info (0xC1) reply
+    // Capability bitmap bits in the get-controller-info (0xC2) reply
     // (controller_info.py / main.js, g6_03-controller.md § 5).
     const CAPABILITY_BITS = [
         [0, 'g6_mode'],
@@ -243,26 +247,38 @@ const ArenaWireG6 = (function () {
         return frame(OPCODES.SET_REFRESH_RATE, u16le(hz, 'hz')); // 03 16 lo hi
     }
 
-    // set-spi-clock (0x17) — panel SPI master clock in whole MHz (u16 LE); echoes
+    // get-refresh-rate (0x17) — read the current re-transmit rate.
+    function encodeGetRefreshRate() {
+        return frame(OPCODES.GET_REFRESH_RATE); // 01 17
+    }
+
+    // get-refresh-rate / set-refresh-rate reply carries the rate as uint16 LE Hz.
+    function decodeRefreshRate(resp) {
+        const r = asResponse(resp);
+        if (!r || !r.ok || r.payload.length < 2) return null;
+        return r.payload[0] | (r.payload[1] << 8);
+    }
+
+    // set-spi-clock (0xC5) — panel SPI master clock in whole MHz (u16 LE); echoes
     // applied MHz. The firmware clamps to 1..30 MHz, so reject out-of-range here.
     function encodeSetSpiClock(mhz) {
         requireInt(mhz, 'mhz');
         if (mhz < 1 || mhz > 30) {
             throw new RangeError('mhz must be 1..30, got ' + mhz);
         }
-        return frame(OPCODES.SET_SPI_CLOCK, u16le(mhz, 'mhz')); // 03 17 lo hi
+        return frame(OPCODES.SET_SPI_CLOCK, u16le(mhz, 'mhz')); // 03 C5 lo hi
     }
 
     function encodeGetSpiClock() {
-        return frame(OPCODES.GET_SPI_CLOCK); // 01 18
+        return frame(OPCODES.GET_SPI_CLOCK); // 01 C6
     }
 
     function encodeGetFramesSent() {
-        return frame(OPCODES.GET_FRAMES_SENT); // 01 19
+        return frame(OPCODES.GET_FRAMES_SENT); // 01 33
     }
 
     function encodeResetFramesSent() {
-        return frame(OPCODES.RESET_FRAMES_SENT); // 01 1A
+        return frame(OPCODES.RESET_FRAMES_SENT); // 01 34
     }
 
     function encodeGetIp() {
@@ -309,7 +325,7 @@ const ArenaWireG6 = (function () {
     }
 
     /**
-     * get-controller-info (0xC1) reply -> {version, capability, capabilities[]}.
+     * get-controller-info (0xC2) reply -> {version, capability, capabilities[]}.
      * Payload is {version_byte, capability_bitmap}.
      */
     function decodeControllerInfo(resp) {
@@ -323,14 +339,14 @@ const ArenaWireG6 = (function () {
         return { version, capability, capabilities };
     }
 
-    // set/get-spi-clock (0x17/0x18) reply carries the clock as uint16 LE MHz.
+    // set/get-spi-clock (0xC5/0xC6) reply carries the clock as uint16 LE MHz.
     function decodeSpiClock(resp) {
         const r = asResponse(resp);
         if (!r || !r.ok || r.payload.length < 2) return null;
         return r.payload[0] | (r.payload[1] << 8);
     }
 
-    // get-frames-sent (0x19) reply carries the master-sent count as uint32 LE.
+    // get-frames-sent (0x33) reply carries the master-sent count as uint32 LE.
     function decodeFramesSent(resp) {
         const r = asResponse(resp);
         if (!r || !r.ok || r.payload.length < 4) return null;
@@ -338,7 +354,7 @@ const ArenaWireG6 = (function () {
         return (m[0] | (m[1] << 8) | (m[2] << 16) | (m[3] << 24)) >>> 0;
     }
 
-    // get-ip (0xC0) reply carries the dotted-quad address as ASCII bytes.
+    // get-ip (0xC1) reply carries the dotted-quad address as ASCII bytes.
     function decodeIp(resp) {
         const r = asResponse(resp);
         if (!r || !r.ok || r.payload.length === 0) return null;
