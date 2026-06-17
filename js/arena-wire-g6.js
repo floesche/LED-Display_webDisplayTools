@@ -48,8 +48,8 @@ const ArenaWireG6 = (function () {
         RESET_FRAMES_SENT: 0x1a, // zeroes the frames-sent counter
         STOP_DISPLAY: 0x30,
         STREAM_FRAME: 0x32, // host-streamed full frame ("FR"+blocks; see encodeStreamFrame)
-        GET_ETHERNET_IP: 0x66,
-        GET_CONTROLLER_INFO: 0x67, // returns {version, capability_bitmap}
+        GET_ETHERNET_IP: 0xC0,
+        GET_CONTROLLER_INFO: 0xC1, // returns {version, capability_bitmap}
         SET_FRAME_POSITION: 0x70, // Mode 3: host-commanded frame index
         ALL_ON: 0xff
     };
@@ -69,7 +69,7 @@ const ArenaWireG6 = (function () {
         CLOSED_LOOP: 4 // analog-in × gain, computed on the controller
     };
 
-    // Capability bitmap bits in the get-controller-info (0x67) reply
+    // Capability bitmap bits in the get-controller-info (0xC1) reply
     // (controller_info.py / main.js, g6_03-controller.md § 5).
     const CAPABILITY_BITS = [
         [0, 'g6_mode'],
@@ -266,11 +266,11 @@ const ArenaWireG6 = (function () {
     }
 
     function encodeGetIp() {
-        return frame(OPCODES.GET_ETHERNET_IP); // 01 66
+        return frame(OPCODES.GET_ETHERNET_IP); // 01 C0
     }
 
     function encodeGetControllerInfo() {
-        return frame(OPCODES.GET_CONTROLLER_INFO); // 01 67
+        return frame(OPCODES.GET_CONTROLLER_INFO); // 01 C1
     }
 
     // ───────────────────────────── decoders ───────────────────────────────
@@ -309,7 +309,7 @@ const ArenaWireG6 = (function () {
     }
 
     /**
-     * get-controller-info (0x67) reply -> {version, capability, capabilities[]}.
+     * get-controller-info (0xC1) reply -> {version, capability, capabilities[]}.
      * Payload is {version_byte, capability_bitmap}.
      */
     function decodeControllerInfo(resp) {
@@ -338,7 +338,7 @@ const ArenaWireG6 = (function () {
         return (m[0] | (m[1] << 8) | (m[2] << 16) | (m[3] << 24)) >>> 0;
     }
 
-    // get-ip (0x66) reply carries the dotted-quad address as ASCII bytes.
+    // get-ip (0xC0) reply carries the dotted-quad address as ASCII bytes.
     function decodeIp(resp) {
         const r = asResponse(resp);
         if (!r || !r.ok || r.payload.length === 0) return null;

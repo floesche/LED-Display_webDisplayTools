@@ -170,9 +170,9 @@ function setup(opts) {
 }
 
 // Canonical request encoders + matching response frames.
-const REQ_INFO = '01 67';
+const REQ_INFO = '01 C1';
 const REQ_SPI = '01 18';
-const RESP_INFO = Uint8Array.from([0x04, 0x00, 0x67, 0x02, 0x11]); // echo 0x67
+const RESP_INFO = Uint8Array.from([0x04, 0x00, 0xC1, 0x02, 0x11]); // echo 0xC1
 const RESP_SPI = Uint8Array.from([0x04, 0x00, 0x18, 0x14, 0x00]); // echo 0x18
 
 async function main() {
@@ -201,7 +201,7 @@ async function main() {
         checkBytes('request written to port', writer.writes[0], REQ_INFO);
         reader.push(RESP_INFO);
         const frame = await p;
-        checkBytes('resolves with response frame', frame, '04 00 67 02 11');
+        checkBytes('resolves with response frame', frame, '04 00 C1 02 11');
         const info = Wire.decodeControllerInfo(Wire.decodeResponse(frame));
         checkBool('frame decodes (version=2)', info && info.version === 2);
         await link.close();
@@ -228,9 +228,9 @@ async function main() {
         await flush();
         reader.push([0x04, 0x00]); // first half of the frame
         await flush();
-        reader.push([0x67, 0x02, 0x11]); // second half
+        reader.push([0xC1, 0x02, 0x11]); // second half
         const frame = await p;
-        checkBytes('split frame reassembled', frame, '04 00 67 02 11');
+        checkBytes('split frame reassembled', frame, '04 00 C1 02 11');
         await link.close();
     }
 

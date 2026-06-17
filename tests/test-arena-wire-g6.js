@@ -174,14 +174,14 @@ checkThrows('stream wrong size 100 throws', () => Wire.encodeStreamFrame(new Uin
 checkThrows('stream wrong size 4063 throws', () => Wire.encodeStreamFrame(new Uint8Array(4063)));
 
 console.log('\n=== decodeResponse framing ===');
-// get-controller-info reply: [len=4, status=0, echo=0x67, version=2, cap=0x11].
+// get-controller-info reply: [len=4, status=0, echo=0xC1, version=2, cap=0x11].
 // length byte = 4 = status + echo + 2 payload bytes.
-const ciFrame = Uint8Array.from([0x04, 0x00, 0x67, 0x02, 0x11]);
+const ciFrame = Uint8Array.from([0x04, 0x00, 0xC1, 0x02, 0x11]);
 const ci = Wire.decodeResponse(ciFrame);
 checkBool('decodeResponse returns object', !!ci);
 check('  .length', ci.length, 4);
 check('  .status', ci.status, 0);
-check('  .echoCmd', ci.echoCmd, 0x67);
+check('  .echoCmd', ci.echoCmd, 0xC1);
 check('  .ok', ci.ok, true);
 checkBytes('  .payload', ci.payload, '02 11');
 
@@ -195,12 +195,12 @@ checkBool('empty frame -> null', Wire.decodeResponse(new Uint8Array([])) === nul
 checkBool('length<2 -> null', Wire.decodeResponse(Uint8Array.from([0x01, 0x00])) === null);
 checkBool(
     'incomplete frame -> null',
-    Wire.decodeResponse(Uint8Array.from([0x05, 0x00, 0x67, 0x02])) === null,
+    Wire.decodeResponse(Uint8Array.from([0x05, 0x00, 0xC1, 0x02])) === null,
     'claims 5 bytes, only 3 present'
 );
 // Regression: a plain number[] must NOT throw (TypedArray.slice rejects a
 // non-typed-array receiver — decodeResponse normalizes to Uint8Array first).
-const ciArr = Wire.decodeResponse([0x04, 0x00, 0x67, 0x02, 0x11]);
+const ciArr = Wire.decodeResponse([0x04, 0x00, 0xC1, 0x02, 0x11]);
 checkBool('decodeResponse(number[]) does not throw', !!ciArr);
 checkBytes('decodeResponse(number[]) payload', ciArr.payload, '02 11');
 
@@ -218,7 +218,7 @@ checkBool(
 // A non-OK controller-info reply must not be decoded as valid metadata.
 checkBool(
     'decodeControllerInfo rejects status!=0',
-    Wire.decodeControllerInfo(Uint8Array.from([0x04, 0x01, 0x67, 0x02, 0x11])) === null
+    Wire.decodeControllerInfo(Uint8Array.from([0x04, 0x01, 0xC1, 0x02, 0x11])) === null
 );
 
 // SPI clock reply: [len=4, status=0, echo=0x18, 20, 0] -> 20 MHz.
@@ -243,7 +243,7 @@ check(
 
 // get-ip reply: ASCII payload "10.0.0.5".
 const ipAscii = '10.0.0.5';
-const ipBytes = [ipAscii.length + 2, 0x00, 0x66, ...Array.from(ipAscii, (c) => c.charCodeAt(0))];
+const ipBytes = [ipAscii.length + 2, 0x00, 0xC0, ...Array.from(ipAscii, (c) => c.charCodeAt(0))];
 check('decodeIp', Wire.decodeIp(Uint8Array.from(ipBytes)), '10.0.0.5');
 
 console.log(`\n=== Summary ===\n${totalChecks - failures} / ${totalChecks} checks passed`);
