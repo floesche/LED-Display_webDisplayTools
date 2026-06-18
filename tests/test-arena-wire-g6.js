@@ -246,5 +246,27 @@ const ipAscii = '10.0.0.5';
 const ipBytes = [ipAscii.length + 2, 0x00, 0xC1, ...Array.from(ipAscii, (c) => c.charCodeAt(0))];
 check('decodeIp', Wire.decodeIp(Uint8Array.from(ipBytes)), '10.0.0.5');
 
+console.log('\n=== set-pattern-filename (0x83) opcode-first framing ===');
+// Short name: [0x83, idx_lo, idx_hi, name_len, chars...] — NO leading length byte.
+// "a.pat" (5 chars), idx=0 → [83 00 00 05 61 2e 70 61 74]
+checkBytes(
+    'encodeSetPatternFilename idx=0 short',
+    Wire.encodeSetPatternFilename(0, 'a.pat'),
+    '83 00 00 05 61 2e 70 61 74'
+);
+// 50-char name (the failing case): length would have been 0x36 > 0x32 in the old framing.
+// With opcode-first, the first byte is always 0x83 regardless of name length.
+const longName = '0019_right_window_yaw_stepsize0.46875_final_G6.pat'; // 50 chars
+const longFrame = Wire.encodeSetPatternFilename(0, longName);
+check('encodeSetPatternFilename long: first byte is opcode 0x83', longFrame[0], 0x83);
+check('encodeSetPatternFilename long: length byte absent (frame.length = 4+name)', longFrame.length, 54);
+check('encodeSetPatternFilename long: name_len byte = 50', longFrame[3], 50);
+checkThrows('encodeSetPatternFilename 64-char name throws', () =>
+    Wire.encodeSetPatternFilename(0, 'a'.repeat(64))
+);
+checkThrows('encodeSetPatternFilename empty name throws', () =>
+    Wire.encodeSetPatternFilename(0, '')
+);
+
 console.log(`\n=== Summary ===\n${totalChecks - failures} / ${totalChecks} checks passed`);
 process.exit(failures > 0 ? 1 : 0);

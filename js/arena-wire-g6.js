@@ -49,6 +49,11 @@ const ArenaWireG6 = (function () {
         RESET_FRAMES_SENT: 0x34, // zeroes the frames-sent counter
         GET_FILE_COUNT: 0x80, // returns pattern file count on SD as uint16 LE
         GET_PATTERN_FILENAME: 0x82, // [03 82 idx_lo idx_hi] 1-based; returns 1-byte-len + filename
+        SET_PATTERN_FILENAME: 0x83, // [0x83, idx_lo, idx_hi, len, chars…] rename; returns new uint16 LE index
+        GET_PATTERN_FILE: 0x84,     // [03 84 idx_lo idx_hi] 1-based; response: uint64 LE size, then raw bytes
+        SET_PATTERN_FILE: 0x85,     // [0x85, idx_lo, idx_hi, len64 LE, data…] upload file (bulk stream)
+        DELETE_PATTERN_FILE: 0x86,  // [03 86 idx_lo idx_hi] delete 1-based pattern; idx=0 deletes pattern.temp
+        DELETE_ALL_PATTERNS: 0x8F,  // [01 8F] delete all files in /patterns
         STOP_DISPLAY: 0x30,
         STREAM_FRAME: 0x32, // host-streamed full frame ("FR"+blocks; see encodeStreamFrame)
         SET_ETHERNET_IP: 0xC0, // reserved — not yet implemented
@@ -296,6 +301,50 @@ const ArenaWireG6 = (function () {
         return frame(OPCODES.GET_FILE_COUNT); // 01 80
     }
 
+    // set-pattern-filename (0x83) — rename pattern at 1-based idx (0 = pattern.temp).
+    // Returns new 1-based uint16 index after re-sort via decodeSetPatternFilenameResponse.
+    // Uses opcode-first framing (same as 0x85): [0x83, idx_lo, idx_hi, name_len, chars…]
+    // NOT frame() — the standard length-prefixed framing overflows for filenames > 45 chars
+    // because the length byte would equal or exceed STREAM_FRAME_CMD (0x32 = 50).
+    function encodeSetPatternFilename(index, name) {
+        requireInt(index, 'index');
+        if (index < 0 || index > 0xffff) {
+            throw new RangeError('index must be 0..65535, got ' + index);
+        }
+        const nameBytes = [];
+        for (let i = 0; i < name.length; i++) nameBytes.push(name.charCodeAt(i) & 0xff);
+        if (nameBytes.length === 0 || nameBytes.length > 63) {
+            throw new RangeError('filename must be 1..63 chars, got ' + nameBytes.length);
+        }
+        const idx = u16le(index, 'index');
+        return new Uint8Array([OPCODES.SET_PATTERN_FILENAME, ...idx, nameBytes.length, ...nameBytes]);
+    }
+
+    // set-pattern-file (0x85) — upload a .pat file. Opcode-first framing (NOT
+    // the standard frame() helper): [0x85, idx_lo, idx_hi, len_b0..b7, data…]
+    // idx = 0 writes to /patterns/pattern.temp; idx >= 1 overwrites that pattern.
+    function encodeSetPatternFile(index, data) {
+        requireInt(index, 'index');
+        if (index < 0 || index > 0xffff) {
+            throw new RangeError('index must be 0..65535, got ' + index);
+        }
+        const fileData = data instanceof Uint8Array ? data : new Uint8Array(data);
+        const len = fileData.length;
+        // [0x85, idx_lo, idx_hi, len_b0..b7, file_data…]
+        const out = new Uint8Array(11 + len);
+        out[0] = OPCODES.SET_PATTERN_FILE;
+        out[1] = index & 0xff;
+        out[2] = (index >> 8) & 0xff;
+        // uint64 LE length — upper 4 bytes are 0 (files < 4 GB in practice).
+        out[3] = len & 0xff;
+        out[4] = (len >> 8) & 0xff;
+        out[5] = (len >> 16) & 0xff;
+        out[6] = (len >> 24) & 0xff;
+        out[7] = 0; out[8] = 0; out[9] = 0; out[10] = 0;
+        out.set(fileData, 11);
+        return out;
+    }
+
     // get-pattern-filename (0x82) — filename for the 1-based pattern index on SD.
     function encodeGetPatternFilename(index) {
         requireInt(index, 'index');
@@ -303,6 +352,28 @@ const ArenaWireG6 = (function () {
             throw new RangeError('index must be >= 1 (1-based), got ' + index);
         }
         return frame(OPCODES.GET_PATTERN_FILENAME, u16le(index, 'index')); // 03 82 lo hi
+    }
+
+    // get-pattern-file (0x84) — request raw content of the 1-based pattern.
+    // Use link.sendBulkRead() (not link.send()) to receive the streaming response.
+    function encodeGetPatternFile(index) {
+        requireInt(index, 'index');
+        if (index < 1) throw new RangeError('index must be >= 1 (1-based), got ' + index);
+        return frame(OPCODES.GET_PATTERN_FILE, u16le(index, 'index')); // 03 84 lo hi
+    }
+
+    // delete-all-patterns (0x8F) — delete every file in /patterns.
+    function encodeDeleteAllPatterns() {
+        return frame(OPCODES.DELETE_ALL_PATTERNS); // 01 8F
+    }
+
+    // delete-pattern-file (0x86) — delete the pattern at 1-based index.
+    // index=0 deletes /patterns/pattern.temp if it exists.
+    function encodeDeletePatternFile(index) {
+        requireInt(index, 'index');
+        if (index < 0 || index > 0xffff)
+            throw new RangeError('index out of range [0, 65535], got ' + index);
+        return frame(OPCODES.DELETE_PATTERN_FILE, u16le(index, 'index')); // 03 86 lo hi
     }
 
     // ───────────────────────────── decoders ───────────────────────────────
@@ -377,6 +448,13 @@ const ArenaWireG6 = (function () {
         return r.payload[0] | (r.payload[1] << 8);
     }
 
+    // set-pattern-filename (0x83) response: uint16 LE new 1-based index.
+    function decodeSetPatternFilenameResponse(resp) {
+        const r = asResponse(resp);
+        if (!r || !r.ok || r.payload.length < 2) return null;
+        return r.payload[0] | (r.payload[1] << 8);
+    }
+
     // get-pattern-filename (0x82) reply: 1-byte length prefix + ASCII filename chars.
     function decodePatternFilename(resp) {
         const r = asResponse(resp);
@@ -425,6 +503,11 @@ const ArenaWireG6 = (function () {
         getControllerInfo: encodeGetControllerInfo,
         encodeGetFileCount,
         encodeGetPatternFilename,
+        encodeSetPatternFilename,
+        encodeGetPatternFile,
+        encodeSetPatternFile,
+        encodeDeletePatternFile,
+        encodeDeleteAllPatterns,
 
         // Decoders
         decodeResponse,
@@ -433,7 +516,8 @@ const ArenaWireG6 = (function () {
         decodeFramesSent,
         decodeIp,
         decodeFileCount,
-        decodePatternFilename
+        decodePatternFilename,
+        decodeSetPatternFilenameResponse
     };
 })();
 

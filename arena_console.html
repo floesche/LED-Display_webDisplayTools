@@ -390,6 +390,17 @@
                 border-radius: 3px;
                 font-family: 'JetBrains Mono', monospace;
             }
+            .pat-preview-spinner {
+                width: 20px;
+                height: 20px;
+                border: 2px solid var(--border);
+                border-top-color: var(--accent);
+                border-radius: 50%;
+                animation: spin-preview 0.8s linear infinite;
+            }
+            @keyframes spin-preview {
+                to { transform: rotate(360deg); }
+            }
             #tp-pat[readonly] {
                 opacity: 0.55;
                 cursor: not-allowed;
@@ -398,8 +409,8 @@
 
             /* ── white device-memory boxes ────────────────────────────── */
             .mem-grid {
-                display: grid;
-                grid-template-columns: 1fr 1fr;
+                display: flex;
+                flex-direction: column;
                 gap: 8px;
             }
             .mem-box {
@@ -434,15 +445,109 @@
             #sd-count-badge.loaded:hover {
                 color: var(--mem-text);
             }
-            .mem-body {
-                max-height: 92px;
-                overflow-y: auto;
+            #sd-upload-btn {
+                font-size: 14px;
+                line-height: 1;
+                padding: 0 5px;
+                background: none;
+                border: 1px solid var(--mem-dim);
+                border-radius: 3px;
+                color: var(--mem-dim);
+                cursor: pointer;
             }
-            .sd-row {
-                padding: 1px 0;
+            #sd-upload-btn:hover:not(:disabled) {
+                border-color: var(--mem-text);
+                color: var(--mem-text);
+            }
+            #sd-upload-btn:disabled {
+                opacity: 0.35;
+                cursor: default;
+            }
+            #sd-purge-btn {
+                font-size: 9px;
+                line-height: 1;
+                padding: 1px 4px;
+                background: none;
+                border: 1px solid var(--mem-dim);
+                border-radius: 3px;
+                color: var(--mem-dim);
+                cursor: pointer;
+                letter-spacing: 0.5px;
+            }
+            #sd-purge-btn:hover:not(:disabled) {
+                border-color: #e05c5c;
+                color: #e05c5c;
+            }
+            #sd-purge-btn:disabled {
+                opacity: 0.35;
+                cursor: default;
+            }
+            .sd-upload-row {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 4px 0 2px;
+            }
+            .sd-upload-status {
+                font-size: 10px;
+                color: var(--mem-dim);
+            }
+            .sd-table-wrap {
+                max-height: 270px;
+                overflow-y: auto;
+                margin-bottom: 2px;
+            }
+            .sd-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-size: 11px;
+            }
+            .sd-table th {
+                text-align: left;
+                color: var(--mem-dim);
+                font-weight: 600;
+                border-bottom: 1px solid var(--mem-border);
+                padding: 2px 4px;
+                position: sticky;
+                top: 0;
+                background: var(--mem-bg);
+                font-size: 10px;
+            }
+            .sd-table td {
+                padding: 2px 4px;
                 white-space: nowrap;
                 overflow: hidden;
                 text-overflow: ellipsis;
+            }
+            .sd-col-idx {
+                width: 2.5em;
+                color: var(--mem-dim);
+                text-align: right;
+                padding-right: 6px;
+            }
+            .sd-col-del {
+                width: 22px;
+                text-align: center;
+            }
+            .sd-del-btn, .sd-down-btn {
+                background: none;
+                border: none;
+                color: var(--mem-dim);
+                cursor: pointer;
+                font-size: 11px;
+                padding: 0 2px;
+                line-height: 1;
+            }
+            .sd-del-btn:hover:not(:disabled) {
+                color: #e05c5c;
+            }
+            .sd-down-btn:hover:not(:disabled) {
+                color: #4fc3f7;
+            }
+            .sd-del-btn:disabled, .sd-down-btn:disabled {
+                opacity: 0.3;
+                cursor: default;
             }
             .mem-empty {
                 color: #a6b0bc;
@@ -1006,13 +1111,36 @@
                             title="Patterns in the loaded set (assumed on the SD card)"
                         >
                             SD card
+                            <button id="sd-purge-btn" disabled
+                                title="Delete ALL patterns from SD card (DELETE_ALL_PATTERNS 0x8F)">xXx</button>
                             <span
                                 id="sd-count-badge"
                                 title="Pattern files on SD card (GET_FILE_COUNT 0x80). Click to refresh."
                             >—</span>
                         </div>
-                        <div id="sd-list" class="mem-body">
-                            <div class="mem-empty">loading…</div>
+                        <div class="sd-table-wrap">
+                            <table id="sd-table" class="sd-table">
+                                <colgroup>
+                                    <col style="width:2.5em">
+                                    <col>
+                                    <col style="width:42px">
+                                </colgroup>
+                                <thead>
+                                    <tr>
+                                        <th class="sd-col-idx">#</th>
+                                        <th>filename</th>
+                                        <th class="sd-col-del"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sd-tbody">
+                                    <tr><td colspan="3" class="mem-empty">loading…</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="sd-upload-row">
+                            <button id="sd-upload-btn" disabled title="Upload a .pat file to the SD card">+</button>
+                            <span id="sd-upload-status" class="sd-upload-status"></span>
+                            <input type="file" id="pat-file-input" accept=".pat" style="display:none">
                         </div>
                     </div>
                     <div class="mem-box">
@@ -1069,7 +1197,7 @@
                 <div id="log"></div>
             </div>
 
-            <footer id="footer">Arena Console v5 | 2026-06-17 20:00 ET</footer>
+            <footer id="footer">Arena Console v5 | 2026-06-18 12:10 ET</footer>
         </div>
 
         <!-- Paste-a-frame modal -->
@@ -1175,6 +1303,14 @@
                 }
             });
 
+            // Bridge for the ES-module preview code: fetch a pattern file from the
+            // controller via 0x84. Returns a Uint8Array of the raw .pat bytes.
+            window.__fetchSdPatternBytes = async function (sdIdx) {
+                return link.sendBulkRead(Wire.encodeGetPatternFile(sdIdx), {
+                    timeoutMs: 60000
+                });
+            };
+
             const cmdButtons = () => Array.from(document.querySelectorAll('.cmd'));
             function setConnected(on) {
                 $('btn-connect').disabled = on;
@@ -1184,6 +1320,8 @@
                 s.textContent = on ? 'connected' : 'disconnected';
                 $('conn').classList.toggle('on', on);
                 $('dot').classList.toggle('on', on);
+                $('sd-upload-btn').disabled = !on;
+                $('sd-purge-btn').disabled = !on;
                 if (on) {
                     refreshSdCount();
                 } else {
@@ -1795,6 +1933,10 @@
             function resetSdCount() {
                 sdCountBadge.textContent = '—';
                 sdCountBadge.classList.remove('loaded');
+                const tbody = $('sd-tbody');
+                if (tbody) tbody.innerHTML = '<tr><td colspan="3" class="mem-empty">—</td></tr>';
+                if (typeof window.__populateFromSdCard === 'function')
+                    window.__populateFromSdCard([]);
             }
             async function refreshSdCount() {
                 const resp = await run(
@@ -1815,63 +1957,192 @@
                 }
             }
 
-            // Fetch filenames from the controller (0x82) and render them in the SD list.
-            // Shows first 10 files; if count > 10, adds an ellipsis then the last 3
-            // (starting from max(11, count-2) to avoid duplicates).
+            // Fetch all filenames from the controller (0x82) and render as a
+            // scrollable table. Each row has a delete button wired to 0x86.
             async function refreshSdList(count) {
-                const host = $('sd-list');
-                if (!host) return;
+                const tbody = $('sd-tbody');
+                if (!tbody) return;
                 if (count === 0) {
-                    host.innerHTML = '<div class="mem-empty">(no patterns on SD)</div>';
+                    tbody.innerHTML = '<tr><td colspan="3" class="mem-empty">(no patterns on SD)</td></tr>';
                     return;
                 }
 
-                // Indices to fetch (1-based)
-                const indices = [];
-                for (let i = 1; i <= Math.min(10, count); i++) indices.push(i);
-                let ellipsisAfter = -1;
-                if (count > 10) {
-                    ellipsisAfter = indices.length;
-                    const lastStart = Math.max(11, count - 2);
-                    for (let i = lastStart; i <= count; i++) indices.push(i);
-                }
-
-                host.innerHTML = '<div class="mem-empty">fetching…</div>';
+                tbody.innerHTML = '<tr><td colspan="3" class="mem-empty">fetching…</td></tr>';
 
                 // Fetch each filename silently (no console log per file)
                 const names = [];
-                for (const idx of indices) {
+                for (let idx = 1; idx <= count; idx++) {
                     try {
                         const raw = await link.send(Wire.encodeGetPatternFilename(idx));
                         const parsed = Wire.decodeResponse(raw);
-                        names.push(
-                            parsed && parsed.ok ? Wire.decodePatternFilename(parsed) : null
-                        );
+                        names.push(parsed && parsed.ok ? Wire.decodePatternFilename(parsed) : null);
                     } catch (_) {
                         names.push(null);
                     }
                 }
 
-                // Render
-                host.innerHTML = '';
-                for (let i = 0; i < indices.length; i++) {
-                    if (ellipsisAfter >= 0 && i === ellipsisAfter) {
-                        const d = document.createElement('div');
-                        d.className = 'sd-row dim';
-                        d.textContent = '…';
-                        host.appendChild(d);
-                    }
-                    const d = document.createElement('div');
-                    d.className = 'sd-row';
-                    const n = names[i];
-                    d.textContent = indices[i] + (n ? ' · ' + n : ' · (error)');
-                    d.title = n || '';
-                    host.appendChild(d);
+                tbody.innerHTML = '';
+                for (let i = 0; i < count; i++) {
+                    const idx = i + 1;
+                    const name = names[i];
+                    const tr = document.createElement('tr');
+                    tr.dataset.idx = idx;
+                    tr.dataset.name = name || '';
+                    const tdIdx = document.createElement('td');
+                    tdIdx.className = 'sd-col-idx';
+                    tdIdx.textContent = idx;
+                    const tdName = document.createElement('td');
+                    tdName.textContent = name || '(error)';
+                    tdName.title = name || '';
+                    const tdBtns = document.createElement('td');
+                    tdBtns.className = 'sd-col-del';
+                    const dBtn = document.createElement('button');
+                    dBtn.className = 'sd-down-btn';
+                    dBtn.title = 'Download ' + (name || 'pattern ' + idx);
+                    dBtn.textContent = 'D';
+                    const delBtn = document.createElement('button');
+                    delBtn.className = 'sd-del-btn';
+                    delBtn.title = 'Delete pattern ' + idx + (name ? ': ' + name : '');
+                    delBtn.textContent = '×';
+                    tdBtns.appendChild(dBtn);
+                    tdBtns.appendChild(delBtn);
+                    tr.appendChild(tdIdx);
+                    tr.appendChild(tdName);
+                    tr.appendChild(tdBtns);
+                    tbody.appendChild(tr);
+                }
+
+                // Mirror the live SD list into the tp-pat-name picker (when no manifest loaded).
+                if (typeof window.__populateFromSdCard === 'function') {
+                    window.__populateFromSdCard(
+                        names
+                            .map((name, i) => ({ idx: i + 1, name: name || '' }))
+                            .filter((e) => e.name)
+                    );
                 }
             }
 
             sdCountBadge.addEventListener('click', () => {
                 if (link.connected) refreshSdCount();
+            });
+
+            $('sd-purge-btn').addEventListener('click', async () => {
+                if (!link.connected) return;
+                if (!confirm('Delete ALL patterns from SD card? This cannot be undone.')) return;
+                const resp = await run(
+                    'delete-all-patterns',
+                    Wire.encodeDeleteAllPatterns(),
+                    (r) => (r && r.ok ? 'done' : null)
+                );
+                if (resp && resp.ok) await refreshSdCount();
+            });
+
+            $('sd-table').addEventListener('click', async (e) => {
+                if (!link.connected) return;
+                const tr = e.target.closest('tr[data-idx]');
+                if (!tr) return;
+                const idx = parseInt(tr.dataset.idx, 10);
+                if (!Number.isFinite(idx)) return;
+
+                if (e.target.classList.contains('sd-del-btn')) {
+                    const btn = e.target;
+                    if (btn.disabled) return;
+                    btn.disabled = true;
+                    const resp = await run(
+                        'delete-pattern-file ' + idx,
+                        Wire.encodeDeletePatternFile(idx),
+                        (r) => (r && r.ok ? 'deleted' : null)
+                    );
+                    if (resp && resp.ok) {
+                        await refreshSdCount();
+                    } else {
+                        btn.disabled = false;
+                    }
+                    return;
+                }
+
+                if (e.target.classList.contains('sd-down-btn')) {
+                    const btn = e.target;
+                    if (btn.disabled) return;
+                    const name = tr.dataset.name || ('pattern_' + idx + '.pat');
+                    btn.disabled = true;
+                    log('download ' + idx + ' (' + name + ')…', 'dim');
+                    try {
+                        const data = await link.sendBulkRead(
+                            Wire.encodeGetPatternFile(idx),
+                            { timeoutMs: 60000 }
+                        );
+                        log('download complete: ' + data.length + ' bytes → ' + name, 'info');
+                        const blob = new Blob([data], { type: 'application/octet-stream' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = name;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                    } catch (err) {
+                        log('download failed: ' + err.message, 'err');
+                    } finally {
+                        btn.disabled = false;
+                    }
+                }
+            });
+
+            const patFileInput = $('pat-file-input');
+            const sdUploadStatus = $('sd-upload-status');
+
+            $('sd-upload-btn').addEventListener('click', () => {
+                if (!link.connected) return;
+                patFileInput.click();
+            });
+
+            patFileInput.addEventListener('change', async () => {
+                const file = patFileInput.files[0];
+                patFileInput.value = '';
+                if (!file || !link.connected) return;
+
+                const filename = file.name;
+                sdUploadStatus.textContent = 'uploading…';
+                $('sd-upload-btn').disabled = true;
+
+                try {
+                    const data = new Uint8Array(await file.arrayBuffer());
+
+                    // Step 1: upload file to /patterns/pattern.temp (idx=0)
+                    const uploadResp = await run(
+                        'upload ' + filename + ' → pattern.temp',
+                        Wire.encodeSetPatternFile(0, data),
+                        (r) => r && r.ok ? 'ok (' + data.length + ' bytes)' : null,
+                        { timeoutMs: 120000, expectedCmd: Wire.OPCODES.SET_PATTERN_FILE }
+                    );
+                    if (!uploadResp || !uploadResp.ok) {
+                        sdUploadStatus.textContent = 'upload failed';
+                        return;
+                    }
+
+                    // Step 2: rename pattern.temp to the original filename (idx=0).
+                    // Allow up to 10 s — SD rescan after rename can be slow with many files.
+                    const renameResp = await run(
+                        'rename → ' + filename,
+                        Wire.encodeSetPatternFilename(0, filename),
+                        (r) => {
+                            const idx = Wire.decodeSetPatternFilenameResponse(r);
+                            return idx == null ? null : 'new index: ' + idx;
+                        },
+                        { timeoutMs: 10000, expectedCmd: Wire.OPCODES.SET_PATTERN_FILENAME }
+                    );
+                    if (!renameResp || !renameResp.ok) {
+                        sdUploadStatus.textContent = 'rename failed';
+                        return;
+                    }
+
+                    sdUploadStatus.textContent = '';
+                    await refreshSdCount();
+                } catch (e) {
+                    sdUploadStatus.textContent = 'error: ' + e.message;
+                } finally {
+                    if (link.connected) $('sd-upload-btn').disabled = false;
+                }
             });
 
             // ── command dispatch ────────────────────────────────────────────
@@ -2068,6 +2339,8 @@
             let activeManifest = null;
             let byteSource = null; // (sd_name) => Promise<ArrayBuffer>
             let previewCache = {};
+            let sdPreviewCache = {}; // sdIdx → sampled preview frames (cleared on SD refresh)
+            let sdPreviewNonce = 0;  // incremented on each render call to discard stale fetches
 
             const setStatus = (text, cls) => {
                 statusEl.textContent = text;
@@ -2143,22 +2416,30 @@
             }
 
             function renderSdList(m) {
-                const host = $('sd-list');
-                if (!host) return;
+                const tbody = $('sd-tbody');
+                if (!tbody) return;
                 const names = Object.keys((m && m.patterns) || {});
                 if (!names.length) {
-                    host.innerHTML = '<div class="mem-empty">(empty set)</div>';
+                    tbody.innerHTML = '<tr><td colspan="3" class="mem-empty">(empty set)</td></tr>';
                     return;
                 }
                 names.sort((a, b) => (m.patterns[a].index || 0) - (m.patterns[b].index || 0));
-                host.innerHTML = '';
+                tbody.innerHTML = '';
                 for (const n of names) {
                     const p = m.patterns[n];
-                    const d = document.createElement('div');
-                    d.className = 'sd-row';
-                    d.textContent = (p.index != null ? p.index + ' · ' : '') + n;
-                    d.title = n;
-                    host.appendChild(d);
+                    const tr = document.createElement('tr');
+                    const tdIdx = document.createElement('td');
+                    tdIdx.className = 'sd-col-idx';
+                    tdIdx.textContent = p.index != null ? p.index : '';
+                    const tdName = document.createElement('td');
+                    tdName.textContent = n;
+                    tdName.title = n;
+                    const tdDel = document.createElement('td');
+                    tdDel.className = 'sd-col-del';
+                    tr.appendChild(tdIdx);
+                    tr.appendChild(tdName);
+                    tr.appendChild(tdDel);
+                    tbody.appendChild(tr);
                 }
             }
 
@@ -2263,6 +2544,87 @@
                 }
             }
 
+            // Render a preview for an SD card pattern fetched live via 0x84.
+            // Uses the same icon pipeline as renderPreview. Nonce-guarded so fast
+            // dropdown changes discard stale fetches without flicker.
+            async function renderSdPreview(sdIdx) {
+                const nonce = ++sdPreviewNonce;
+                previewHost.innerHTML = '<span class="pat-preview-spinner"></span>';
+                try {
+                    let sampled = sdPreviewCache[sdIdx];
+                    if (!sampled) {
+                        if (typeof window.__fetchSdPatternBytes !== 'function') {
+                            previewHost.innerHTML = '';
+                            return;
+                        }
+                        const bytes = await window.__fetchSdPatternBytes(sdIdx);
+                        if (sdPreviewNonce !== nonce) return; // selection changed while fetching
+                        const arena =
+                            arenaForManifest(activeManifest) || (getConfig('G6_2x10') || {}).arena;
+                        const parsed = PatParser.parsePatFile(bytes.buffer);
+                        sampled = PP.samplePreviewFrames(parsed, arena, {
+                            renderIcon: generatePatternIcon,
+                            iconOpts: {
+                                width: 56,
+                                height: 56,
+                                backgroundColor: '#1a1f26',
+                                innerRadiusRatio: 0.4,
+                                padding: 2,
+                                showGaps: false,
+                                showOutlines: false
+                            }
+                        });
+                        // Attach metadata for the tooltip.
+                        sampled._numFrames = parsed.numFrames || (parsed.frames && parsed.frames.length) || 1;
+                        sampled._gsVal = parsed.gs_val || '?';
+                        sdPreviewCache[sdIdx] = sampled;
+                    }
+                    if (sdPreviewNonce !== nonce) return;
+                    previewHost.innerHTML = '';
+                    if (!sampled.frames.length) return;
+                    const container = document.createElement('div');
+                    container.className = 'pat-preview';
+                    const img = document.createElement('img');
+                    img.src = sampled.frames[sampled.staticIndex];
+                    img.alt = 'pattern ' + sdIdx;
+                    img.title =
+                        'SD index ' +
+                        sdIdx +
+                        ' — ' +
+                        sampled._numFrames +
+                        ' frame' +
+                        (sampled._numFrames === 1 ? '' : 's') +
+                        ' · GS' +
+                        sampled._gsVal +
+                        (sampled.frames.length > 1 ? ' · hover to animate' : '');
+                    container.appendChild(img);
+                    if (sampled._numFrames > 1) {
+                        const b = document.createElement('span');
+                        b.className = 'pat-preview-badge';
+                        b.textContent = sampled._numFrames + 'f';
+                        container.appendChild(b);
+                    }
+                    if (sampled.frames.length > 1) {
+                        let iv = null;
+                        let k = 0;
+                        container.addEventListener('mouseenter', () => {
+                            k = 0;
+                            iv = setInterval(() => {
+                                k = (k + 1) % sampled.frames.length;
+                                img.src = sampled.frames[k];
+                            }, 150);
+                        });
+                        container.addEventListener('mouseleave', () => {
+                            if (iv) { clearInterval(iv); iv = null; }
+                            img.src = sampled.frames[sampled.staticIndex];
+                        });
+                    }
+                    previewHost.appendChild(container);
+                } catch (e) {
+                    if (sdPreviewNonce === nonce) previewHost.innerHTML = '';
+                }
+            }
+
             function metaSpan(meta) {
                 const s = document.createElement('span');
                 s.className = 'dim small';
@@ -2278,7 +2640,50 @@
                 return s;
             }
 
-            nameSel.addEventListener('change', () => applyPick(nameSel.value));
+            // Live SD card name→index map; populated by the classic script via
+            // window.__populateFromSdCard when no manifest is active.
+            let sdNameToIndex = {};
+
+            // Called by the classic script after refreshSdList. Fills the tp-pat-name
+            // dropdown from live controller data only when no manifest is loaded.
+            window.__populateFromSdCard = function(entries) {
+                sdNameToIndex = {};
+                sdPreviewCache = {};   // pattern bytes may have changed on the SD card
+                previewHost.innerHTML = '';
+                nameSel.innerHTML = '';
+                if (!entries.length) {
+                    const o = document.createElement('option');
+                    o.value = '';
+                    o.textContent = '(no patterns)';
+                    nameSel.appendChild(o);
+                    lockPat(false);
+                    return;
+                }
+                for (const e of entries) {
+                    sdNameToIndex[e.name] = e.idx;
+                    const o = document.createElement('option');
+                    o.value = e.name;
+                    o.textContent = e.idx + ' · ' + e.name;
+                    nameSel.appendChild(o);
+                }
+                nameSel.value = entries[0].name;
+                tpPat.value = entries[0].idx;
+                lockPat(false);
+                renderSdPreview(entries[0].idx); // auto-preview first pattern after SD refresh
+            };
+
+            nameSel.addEventListener('change', () => {
+                const name = nameSel.value;
+                const sdIdx = sdNameToIndex[name];
+                if (sdIdx != null) {
+                    // SD card mode: set the pattern index directly and fetch a live preview.
+                    tpPat.value = sdIdx;
+                    renderSdPreview(sdIdx);
+                } else if (activeManifest) {
+                    // Manifest mode: resolve name → index + preview via manifest.
+                    applyPick(name);
+                }
+            });
 
             async function loadBuiltin() {
                 try {
