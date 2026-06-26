@@ -78,6 +78,7 @@ class Picoboot {
     this.epOut = null;
     this.epIn = null;
     this.iface = null;
+    this.inMax = 64; // IN endpoint max packet size; read acks rounded up to this
   }
 
   async open() {
@@ -93,11 +94,25 @@ class Picoboot {
         this.iface = iface.interfaceNumber;
         this.epOut = out.endpointNumber;
         this.epIn = inp.endpointNumber;
+        this.inMax = inp.packetSize || 64;
         break;
       }
     }
     if (this.iface === null) throw new Error("no PICOBOOT interface — is the panel in BOOTSEL mode?");
     await this.dev.claimInterface(this.iface);
+
+    // Reset the PICOBOOT interface before issuing any command. This vendor
+    // INTERFACE_RESET (request 0x41) clears any half-finished command and the
+    // bulk-endpoint data toggles in the bootrom. Without it the bootrom stalls
+    // the very first bulk transfer and WebUSB throws "A transfer error has
+    // occurred". (matches picotool / piersfinlayson/picoflash on connect.)
+    await this.dev.controlTransferOut({
+      requestType: "vendor",
+      recipient: "interface",
+      request: 0x41, // PICOBOOT_INTERFACE_RESET
+      value: 0,
+      index: this.iface,
+    });
   }
 
   async close() {
@@ -119,17 +134,17 @@ class Picoboot {
     return b;
   }
 
-  // Command with no data phase: send packet, then read a ZLP ack on IN.
+  // Command with no data phase: send packet, then read the ZLP ack on IN.
   async _cmd(cmdId, args) {
     await this.dev.transferOut(this.epOut, this._packet(cmdId, 0, args));
-    await this.dev.transferIn(this.epIn, 1); // status / ZLP ack
+    await this.dev.transferIn(this.epIn, this.inMax); // status / ZLP ack
   }
 
   // Command with an OUT data phase: send packet, send data, read ZLP ack on IN.
   async _cmdWrite(cmdId, args, data) {
     await this.dev.transferOut(this.epOut, this._packet(cmdId, data.byteLength, args));
     await this.dev.transferOut(this.epOut, data);
-    await this.dev.transferIn(this.epIn, 1);
+    await this.dev.transferIn(this.epIn, this.inMax);
   }
 
   _args(...u32) {
