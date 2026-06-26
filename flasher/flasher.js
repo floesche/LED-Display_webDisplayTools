@@ -120,14 +120,17 @@ class Picoboot {
     try { await this.dev.close(); } catch {}
   }
 
-  // Build a 32-byte PICOBOOT command packet.
-  _packet(cmdId, transferLen, args) {
+  // Build a 32-byte PICOBOOT command packet. cmdSize is the number of MEANINGFUL
+  // argument bytes for THIS command (NOT the 16-byte args-field width). The
+  // bootrom validates bCmdSize and rejects the command (INVALID_CMD_LENGTH,
+  // surfacing as a bulk stall) if it is wrong — so each command passes its own.
+  _packet(cmdId, cmdSize, transferLen, args) {
     const b = new ArrayBuffer(32);
     const dv = new DataView(b);
     dv.setUint32(0, PICOBOOT_MAGIC, true);
     dv.setUint32(4, token++, true);
     dv.setUint8(8, cmdId);
-    dv.setUint8(9, args ? args.byteLength : 0);
+    dv.setUint8(9, cmdSize);
     dv.setUint16(10, 0, true);
     dv.setUint32(12, transferLen, true);
     if (args) new Uint8Array(b, 16).set(new Uint8Array(args));
@@ -135,14 +138,14 @@ class Picoboot {
   }
 
   // Command with no data phase: send packet, then read the ZLP ack on IN.
-  async _cmd(cmdId, args) {
-    await this.dev.transferOut(this.epOut, this._packet(cmdId, 0, args));
+  async _cmd(cmdId, cmdSize, args) {
+    await this.dev.transferOut(this.epOut, this._packet(cmdId, cmdSize, 0, args));
     await this.dev.transferIn(this.epIn, this.inMax); // status / ZLP ack
   }
 
   // Command with an OUT data phase: send packet, send data, read ZLP ack on IN.
-  async _cmdWrite(cmdId, args, data) {
-    await this.dev.transferOut(this.epOut, this._packet(cmdId, data.byteLength, args));
+  async _cmdWrite(cmdId, cmdSize, args, data) {
+    await this.dev.transferOut(this.epOut, this._packet(cmdId, cmdSize, data.byteLength, args));
     await this.dev.transferOut(this.epOut, data);
     await this.dev.transferIn(this.epIn, this.inMax);
   }
@@ -154,11 +157,30 @@ class Picoboot {
     return b;
   }
 
-  exclusiveAccess() { return this._cmd(CMD.EXCLUSIVE_ACCESS, this._args(1)); } // 1 = EXCLUSIVE
-  exitXip() { return this._cmd(CMD.EXIT_XIP); }
-  flashErase(addr, size) { return this._cmd(CMD.FLASH_ERASE, this._args(addr, size)); }
-  write(addr, data) { return this._cmdWrite(CMD.WRITE, this._args(addr, data.byteLength), data); }
-  reboot() { return this._cmd(CMD.REBOOT2, this._args(0, 100, 0, 0)); } // normal reboot, 100ms delay
+  // cmdSize = meaningful arg bytes per RP2350 bootrom command definition.
+  exclusiveAccess() { return this._cmd(CMD.EXCLUSIVE_ACCESS, 1, this._args(1)); } // 1 = EXCLUSIVE
+  exitXip() { return this._cmd(CMD.EXIT_XIP, 0, null); }
+  flashErase(addr, size) { return this._cmd(CMD.FLASH_ERASE, 8, this._args(addr, size)); }
+  write(addr, data) { return this._cmdWrite(CMD.WRITE, 8, this._args(addr, data.byteLength), data); }
+  reboot() { return this._cmd(CMD.REBOOT2, 16, this._args(0, 100, 0, 0)); } // flags=0, delay=100ms
+
+  // GET_COMMAND_STATUS (vendor control request 0x42): turns an opaque bulk
+  // stall into the bootrom's named error. Returns a string or null.
+  async getStatus() {
+    try {
+      const r = await this.dev.controlTransferIn(
+        { requestType: "vendor", recipient: "interface", request: 0x42, value: 0, index: this.iface },
+        16,
+      );
+      if (r.status !== "ok" || !r.data || r.data.byteLength < 9) return null;
+      const NAMES = ["OK", "UNKNOWN_CMD", "INVALID_CMD_LENGTH", "INVALID_TRANSFER_LENGTH",
+        "INVALID_ADDRESS", "BAD_ALIGNMENT", "INTERLEAVED_WRITE", "REBOOTING", "UNKNOWN_ERROR",
+        "INVALID_STATE", "NOT_PERMITTED", "INVALID_ARG", "BUFFER_TOO_SMALL", "PRECONDITION_NOT_MET",
+        "MODIFIED_DATA", "INVALID_DATA", "NOT_FOUND", "UNSUPPORTED_MODIFICATION"];
+      const code = r.data.getUint32(4, true);
+      return `${NAMES[code] || "code " + code} (last cmd 0x${r.data.getUint8(8).toString(16)})`;
+    } catch { return null; }
+  }
 }
 
 async function flashBlocks(pb, blocks, onProgress) {
@@ -273,8 +295,12 @@ async function onFlashClick() {
 
     await verifyRev(chosenRev);
   } catch (err) {
+    // A bulk stall surfaces as an opaque "transfer error"; ask the bootrom what
+    // actually went wrong (e.g. INVALID_CMD_LENGTH, BAD_ALIGNMENT).
+    let extra = "";
+    if (pb) { const s = await pb.getStatus(); if (s) extra = ` [PICOBOOT: ${s}]`; }
     setStatus(`Failed: ${err.message}`, "status-err");
-    log(`ERROR: ${err.message}`, "status-err");
+    log(`ERROR: ${err.message}${extra}`, "status-err");
     $("flash-btn").disabled = false;
   } finally {
     if (pb) await pb.close();
