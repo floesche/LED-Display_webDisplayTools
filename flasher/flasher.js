@@ -368,6 +368,7 @@ async function onFlashClick() {
     await flashBlocks(pb, blocks, (f) => { prog.value = Math.round(f * 100); });
 
     await verifyBuild(b);
+    openTestModal();   // optional one-stop boot-banner check before the next panel
   } catch (err) {
     // A bulk stall surfaces as an opaque "transfer error"; ask the bootrom what
     // actually went wrong (e.g. INVALID_CMD_LENGTH, BAD_ALIGNMENT).
@@ -384,6 +385,87 @@ async function onFlashClick() {
   }
 }
 
+// --- Optional post-flash test (inline boot-banner readout over Web Serial) ------
+// Opens automatically after a flash: the panel has rebooted into firmware, so we
+// read its USB-serial boot banner (predef / clk_sys / FATAL) — confirms it
+// programmed and boots clean. Auto-attaches to an already-granted panel port (no
+// popup); otherwise one tap grants it. "Done" closes the port and re-arms the
+// flasher for the next panel. (Production firmware is log-only — no LED test here.)
+let testPort = null, testReader = null, testReading = false;
+
+function tlog(text, cls) {
+  const el = $("test-log");
+  const s = document.createElement("span");
+  if (cls) s.className = cls;
+  s.textContent = text;
+  el.appendChild(s);
+  el.scrollTop = el.scrollHeight;
+}
+
+async function openTestModal() {
+  $("test-log").textContent = "";
+  $("test-modal").hidden = false;
+  if (!("serial" in navigator)) {
+    $("test-connect").disabled = true;
+    tlog("Web Serial isn’t available in this browser (Chrome/Edge only).\n", "status-err");
+    return;
+  }
+  $("test-connect").disabled = false;
+  // Try a silent attach to an already-granted, attached panel port (no popup).
+  try {
+    const granted = await navigator.serial.getPorts();
+    const port = granted.find((p) => (p.getInfo?.() || {}).usbVendorId === RP_VID);
+    if (port) await startTest(port);
+  } catch { /* fall back to the Connect button */ }
+}
+
+async function startTest(port) {
+  try {
+    await port.open({ baudRate: 115200 });
+    testPort = port; testReading = true;
+    $("test-connect").disabled = true;
+    tlog("Connected. Tap RUN on the panel to (re)print its boot banner.\n", "status-ok");
+    readTest();
+  } catch (err) {
+    tlog(`Could not open serial port: ${err.message}\n`, "status-err");
+    $("test-connect").disabled = false;
+  }
+}
+
+async function testConnect() {
+  if (!("serial" in navigator)) return;
+  try {
+    const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: RP_VID }] });
+    await startTest(port);
+  } catch { /* chooser cancelled */ }
+}
+
+async function readTest() {
+  const dec = new TextDecoder();
+  try {
+    while (testReading && testPort && testPort.readable) {
+      testReader = testPort.readable.getReader();
+      try {
+        while (true) {
+          const { value, done } = await testReader.read();
+          if (done) break;
+          if (value) tlog(dec.decode(value, { stream: true }));
+        }
+      } finally { testReader.releaseLock(); testReader = null; }
+    }
+  } catch { /* port closed */ }
+}
+
+async function testDone() {
+  testReading = false;
+  try { if (testReader) await testReader.cancel(); } catch { /* ignore */ }
+  try { if (testPort) await testPort.close(); } catch { /* ignore */ }
+  testPort = null;
+  $("test-modal").hidden = true;
+  $("test-connect").disabled = false;
+  $("flash-btn").disabled = !chosenFile;   // re-arm for the next panel
+}
+
 function main() {
   if (!("usb" in navigator)) {
     $("unsupported").style.display = "block";
@@ -392,6 +474,8 @@ function main() {
   }
   $("build-select").addEventListener("change", onBuildChange);
   $("flash-btn").addEventListener("click", onFlashClick);
+  $("test-connect").addEventListener("click", testConnect);
+  $("test-done").addEventListener("click", testDone);
 
   // Live panel detection — no popup once a panel has been granted.
   refreshPanelStatus();

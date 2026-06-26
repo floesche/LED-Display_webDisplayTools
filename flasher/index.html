@@ -162,6 +162,21 @@
   #panel-status.ok { color: var(--accent); font-weight: 600; }
   #panel-status.dim { color: var(--text-dim); }
   #panel-status a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+
+  .modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center;
+           justify-content: center; padding: 1.5rem; background: rgba(0, 0, 0, .65); }
+  .modal[hidden] { display: none; }
+  .modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+                padding: 1.75rem; max-width: 520px; width: 100%; }
+  .modal-card h2 { font-family: 'JetBrains Mono', monospace; color: var(--accent);
+                   font-size: 1.2rem; margin-bottom: .8rem; }
+  .modal-card h2 .muted { color: var(--text-dim); font-weight: 400; font-size: .9rem; }
+  .modal-row { display: flex; gap: .6rem; margin: 1rem 0 .25rem; }
+  .modal-row #test-connect { flex: 1; }
+  .log-mini { font-family: 'JetBrains Mono', monospace; font-size: .76rem; line-height: 1.5;
+              white-space: pre-wrap; word-break: break-word; background: #0a0e13; color: var(--text-dim);
+              border: 1px solid var(--border); border-radius: 6px; padding: .8rem; height: 170px;
+              overflow: auto; margin-top: .6rem; }
 </style>
 </head>
 <body>
@@ -232,6 +247,23 @@
     </p>
   </footer>
 </div>
+
+<!-- Optional post-flash test: opens after a flash to read the panel's boot banner. -->
+<div id="test-modal" class="modal" hidden>
+  <div class="modal-card">
+    <h2>Test the panel? <span class="muted">(optional)</span></h2>
+    <p class="fine">The panel rebooted into firmware. Read its boot banner to confirm it programmed and
+      boots clean — then <kbd>Done</kbd> to flash the next one. <em>(Production firmware is log-only; this
+      won’t light the LEDs — for a visual test, flash a Panel self-test build.)</em></p>
+    <div class="modal-row">
+      <button id="test-connect" class="primary">Connect &amp; read boot log</button>
+      <button id="test-done">Done</button>
+    </div>
+    <p class="fine">Tip: tap <kbd>RUN</kbd> on the panel to (re)print the banner.</p>
+    <div id="test-log" class="log-mini"></div>
+  </div>
+</div>
+
 <script type="module" src="./flasher.js"></script>
 </body>
 </html>
