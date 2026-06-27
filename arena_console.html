@@ -1162,6 +1162,38 @@
                     </div>
                 </section>
 
+                <!-- Panel firmware (in-system programming via the controller over SPI) -->
+                <section class="grp">
+                    <div class="grp-row">
+                        <span class="lbl">firmware</span>
+                        <button id="fw-upload-btn" disabled
+                            title="Upload a panel firmware image to the controller SD as /firmware/panel.bin (SET_FIRMWARE_FILE 0xE0). Use the .bin from Panel-Firmware `pixi run image21`/`image31`.">
+                            Upload .bin
+                        </button>
+                        <button id="fw-info-btn" disabled
+                            title="Read the firmware footer on the controller SD — version, CRC-32, size (GET_FIRMWARE_INFO 0xE3)">
+                            Info
+                        </button>
+                        <span id="fw-status" class="sd-upload-status"></span>
+                        <input type="file" id="fw-file-input" accept=".bin" style="display:none" />
+                    </div>
+                    <div class="grp-row">
+                        <label title="Panel number to reflash — 1-based, matches the panel-map labels">panel
+                            <input id="fw-panel-idx" type="number" min="1" max="20" value="1"
+                                class="mono" style="width:3.5em"
+                                title="Panel number to reflash — 1-based, matches the panel-map labels" />
+                        </label>
+                        <button id="fw-flash-btn" disabled
+                            title="Reflash the selected panel from /firmware/panel.bin over SPI ISP (G6_PROGRAM_PANEL 0xC8). Takes ~20 s; the panel stages to LittleFS, reboots, and the OTA stub installs the image. Do not power off mid-flash.">
+                            Flash panel
+                        </button>
+                        <button id="fw-verify-btn" disabled
+                            title="Verify the selected panel: CRC its running app flash against /firmware/panel.bin (G6_VERIFY_PANEL 0xC9). Confirms a flash actually took. No reboot.">
+                            Verify panel
+                        </button>
+                    </div>
+                </section>
+
                 <!-- Device-memory boxes -->
                 <div class="mem-grid">
                     <div class="mem-box">
@@ -1258,7 +1290,7 @@
                 </div>
                 <div id="log"></div>
             </div>
-            <footer id="footer">Arena Console v5 | 2026-06-22 19:10 ET</footer>
+            <footer id="footer">Arena Console v6 | 2026-06-27 00:37 ET</footer>
         </div>
 
         <!-- Paste-a-frame modal -->
@@ -1391,6 +1423,11 @@
                 $('sd-folder-btn').disabled = !on;
                 $('sd-archive-btn').disabled = !on;
                 $('sd-purge-btn').disabled = !on;
+                $('fw-upload-btn').disabled = !on;
+                $('fw-info-btn').disabled = !on;
+                $('fw-flash-btn').disabled = !on;
+                $('fw-verify-btn').disabled = !on;
+                if (!on) $('fw-status').textContent = '';
                 document.querySelectorAll('.do-cb').forEach((cb) => {
                     cb.disabled = !on;
                     if (!on) cb.checked = false;
@@ -2236,6 +2273,152 @@
                     sdUploadStatus.textContent = 'error: ' + e.message;
                 } finally {
                     if (session.connected) $('sd-upload-btn').disabled = false;
+                }
+            });
+
+            // ── panel firmware: upload / info / flash (SPI ISP) ─────────────
+            const fwFileInput = $('fw-file-input');
+            const fwStatus = $('fw-status');
+
+            // Read and display the firmware footer currently on the controller SD.
+            async function readFirmwareInfo() {
+                const resp = await run(
+                    'get-firmware-info',
+                    Wire.encodeGetFirmwareInfo(),
+                    (r) => {
+                        const fi = Wire.decodeFirmwareInfo(r);
+                        if (!fi) return null;
+                        return (
+                            fi.magic +
+                            ' v=' +
+                            fi.version +
+                            ' size=' +
+                            fi.imageSize +
+                            ' CRC-32=0x' +
+                            fi.imageCrc32.toString(16).padStart(8, '0')
+                        );
+                    },
+                    { timeoutMs: 5000, expectedCmd: Wire.OPCODES.GET_FIRMWARE_INFO }
+                );
+                if (resp && resp.ok) {
+                    const fi = Wire.decodeFirmwareInfo(resp);
+                    if (fi) fwStatus.textContent = 'on SD: ' + fi.version + ' (' + fi.imageSize + ' B)';
+                } else {
+                    fwStatus.textContent = 'no firmware on SD';
+                }
+                return resp;
+            }
+
+            $('fw-info-btn').addEventListener('click', () => {
+                if (session.connected) readFirmwareInfo();
+            });
+
+            $('fw-upload-btn').addEventListener('click', () => {
+                if (!session.connected) return;
+                fwFileInput.click();
+            });
+
+            fwFileInput.addEventListener('change', async () => {
+                const file = fwFileInput.files[0];
+                fwFileInput.value = '';
+                if (!file || !session.connected) return;
+                fwStatus.textContent = 'uploading…';
+                $('fw-upload-btn').disabled = true;
+                try {
+                    const data = new Uint8Array(await file.arrayBuffer());
+                    // set-firmware-file (0xE0): bulk upload → /firmware/panel.bin.
+                    // Reply payload is the uint32 LE CRC-32 of the stored bytes.
+                    const up = await run(
+                        'set-firmware-file ' + file.name + ' (' + data.length + ' B)',
+                        Wire.encodeSetFirmwareFile(data),
+                        (r) => {
+                            const crc = Wire.decodeSetFirmwareFileResponse(r);
+                            return crc == null
+                                ? null
+                                : 'stored, CRC-32 0x' + crc.toString(16).padStart(8, '0');
+                        },
+                        { timeoutMs: 120000, expectedCmd: Wire.OPCODES.SET_FIRMWARE_FILE }
+                    );
+                    if (!up || !up.ok) {
+                        fwStatus.textContent = 'upload failed';
+                        return;
+                    }
+                    fwStatus.textContent = 'uploaded';
+                    await readFirmwareInfo();
+                } catch (e) {
+                    fwStatus.textContent = 'error: ' + (e.message || e);
+                } finally {
+                    if (session.connected) $('fw-upload-btn').disabled = false;
+                }
+            });
+
+            $('fw-flash-btn').addEventListener('click', async () => {
+                if (!session.connected) return;
+                const panel = parseInt($('fw-panel-idx').value, 10); // 1-based panel number
+                if (!Number.isInteger(panel) || panel < 1 || panel > 20) {
+                    log('flash: enter a valid panel number (1–20)', 'err');
+                    return;
+                }
+                if (
+                    !confirm(
+                        'Reflash panel ' +
+                            panel +
+                            ' from /firmware/panel.bin?\n' +
+                            'The panel is reprogrammed over SPI and reboots. Do NOT power off mid-flash.'
+                    )
+                )
+                    return;
+                fwStatus.textContent = 'flashing panel ' + panel + '…';
+                $('fw-flash-btn').disabled = true;
+                try {
+                    // g6-program-panel (0xC8): long-running (panel stages to LittleFS,
+                    // reboots, OTA stub installs — ~20 s), so allow a generous timeout.
+                    const resp = await run(
+                        'g6-program-panel ' + panel,
+                        Wire.encodeG6ProgramPanel(panel),
+                        (r) => {
+                            const v = Wire.decodeProgramPanelResponse(r);
+                            return v ? (v.ok ? 'flashed OK' : 'FAILED: ' + v.message) : null;
+                        },
+                        { timeoutMs: 45000, expectedCmd: Wire.OPCODES.G6_PROGRAM_PANEL }
+                    );
+                    fwStatus.textContent =
+                        resp && resp.ok
+                            ? 'panel ' + panel + ' flashed — click Verify to confirm'
+                            : 'flash failed';
+                } catch (e) {
+                    fwStatus.textContent = 'error: ' + (e.message || e);
+                } finally {
+                    if (session.connected) $('fw-flash-btn').disabled = false;
+                }
+            });
+
+            $('fw-verify-btn').addEventListener('click', async () => {
+                if (!session.connected) return;
+                const panel = parseInt($('fw-panel-idx').value, 10); // 1-based panel number
+                if (!Number.isInteger(panel) || panel < 1 || panel > 20) {
+                    log('verify: enter a valid panel number (1–20)', 'err');
+                    return;
+                }
+                fwStatus.textContent = 'verifying panel ' + panel + '…';
+                $('fw-verify-btn').disabled = true;
+                try {
+                    // g6-verify-panel (0xC9): CRC the running app flash vs the SD footer.
+                    const resp = await run(
+                        'g6-verify-panel ' + panel,
+                        Wire.encodeG6VerifyPanel(panel),
+                        (r) => {
+                            const v = Wire.decodeProgramPanelResponse(r);
+                            return v ? (v.ok ? 'MATCH: ' + v.message : 'MISMATCH: ' + v.message) : null;
+                        },
+                        { timeoutMs: 10000, expectedCmd: Wire.OPCODES.G6_VERIFY_PANEL }
+                    );
+                    fwStatus.textContent =
+                        resp && resp.ok ? 'panel ' + panel + ' verified (match)' : 'verify: no match';
+                } catch (e) {
+                    fwStatus.textContent = 'error: ' + (e.message || e);
+                } finally {
+                    if (session.connected) $('fw-verify-btn').disabled = false;
                 }
             });
 

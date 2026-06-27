@@ -68,6 +68,11 @@ const ArenaWireG6 = (function () {
         SET_DIGITAL_OUT: 0xaa, // [03 AA ch state] DO1 (ch=1, J3/D37) or DO2 (ch=2, J4/D35)
         GET_DIGITAL_OUT: 0xab, // [01 AB] returns current state of DO1 and DO2 as two bytes
         SET_FRAME_POSITION: 0x70, // Mode 3: host-commanded frame index
+        // Panel firmware / ISP (g6_03-controller.md § Panel firmware update).
+        SET_FIRMWARE_FILE: 0xe0, // [0xE0, len64 LE, data…] upload image → /firmware/panel.bin; reply u32 LE CRC-32
+        GET_FIRMWARE_INFO: 0xe3, // [01 E3] reply: 32-byte footer {magic[8], version[16], crc32 LE, size LE}
+        G6_PROGRAM_PANEL: 0xc8, // [02 C8 panel_index] reflash one panel from /firmware/panel.bin via SPI ISP
+        G6_VERIFY_PANEL: 0xc9, // [02 C9 panel_index] CRC the panel's running app flash vs /firmware/panel.bin footer
         ALL_ON: 0xff
     };
 
@@ -363,6 +368,53 @@ const ArenaWireG6 = (function () {
         return out;
     }
 
+    // ─────────────────────── panel firmware / ISP ─────────────────────────
+
+    // set-firmware-file (0xE0) — upload a panel firmware image to the controller
+    // SD as /firmware/panel.bin (the controller holds a single firmware at a
+    // time, so there is NO index). Opcode-first framing like 0x85:
+    //   [0xE0, len_b0..b7 (uint64 LE), file_data…]
+    // Reply payload: uint32 LE CRC-32 of the stored bytes (decodeSetFirmwareFileResponse).
+    function encodeSetFirmwareFile(data) {
+        const fileData = data instanceof Uint8Array ? data : new Uint8Array(data);
+        const len = fileData.length;
+        const out = new Uint8Array(9 + len);
+        out[0] = OPCODES.SET_FIRMWARE_FILE;
+        // uint64 LE length — upper 4 bytes are 0 (firmware images are < 4 GB).
+        out[1] = len & 0xff;
+        out[2] = (len >> 8) & 0xff;
+        out[3] = (len >> 16) & 0xff;
+        out[4] = (len >> 24) & 0xff;
+        out[5] = 0;
+        out[6] = 0;
+        out[7] = 0;
+        out[8] = 0;
+        out.set(fileData, 9);
+        return out;
+    }
+
+    // get-firmware-info (0xE3) — read the 32-byte footer of /firmware/panel.bin.
+    function encodeGetFirmwareInfo() {
+        return frame(OPCODES.GET_FIRMWARE_INFO); // 01 E3
+    }
+
+    // g6-program-panel (0xC8) — reflash one panel from /firmware/panel.bin over
+    // the SPI ISP path. `panelNumber` is 1-based (matches the panel-map labels);
+    // the controller converts to its 0-based arena index. Long-running (stage to
+    // LittleFS + reboot + OTA install), so give the transport a generous timeout.
+    function encodeG6ProgramPanel(panelNumber) {
+        if (panelNumber < 1) throw new RangeError('panelNumber is 1-based (>= 1)');
+        return frame(OPCODES.G6_PROGRAM_PANEL, [u8(panelNumber, 'panelNumber')]); // 02 C8 n
+    }
+
+    // g6-verify-panel (0xC9) — CRC the panel's running app flash against the SD
+    // footer (ISP_ENTER + ISP_VERIFY_CRC). Confirms a g6-program-panel install
+    // actually took; no reboot, no flash write. `panelNumber` is 1-based.
+    function encodeG6VerifyPanel(panelNumber) {
+        if (panelNumber < 1) throw new RangeError('panelNumber is 1-based (>= 1)');
+        return frame(OPCODES.G6_VERIFY_PANEL, [u8(panelNumber, 'panelNumber')]); // 02 C9 n
+    }
+
     // get-pattern-filename (0x82) — filename for the 1-based pattern index on SD.
     function encodeGetPatternFilename(index) {
         requireInt(index, 'index');
@@ -547,6 +599,51 @@ const ArenaWireG6 = (function () {
         return r.payload[0] | (r.payload[1] << 8);
     }
 
+    // set-firmware-file (0xE0) reply: uint32 LE CRC-32 of the stored image.
+    function decodeSetFirmwareFileResponse(resp) {
+        const r = asResponse(resp);
+        if (!r || !r.ok || r.payload.length < 4) return null;
+        const m = r.payload;
+        return (m[0] | (m[1] << 8) | (m[2] << 16) | (m[3] << 24)) >>> 0;
+    }
+
+    // get-firmware-info (0xE3) reply: 32-byte footer
+    //   {magic[8], version[16], image_crc32 (u32 LE), image_size (u32 LE)}.
+    function decodeFirmwareInfo(resp) {
+        const r = asResponse(resp);
+        if (!r || !r.ok || r.payload.length < 32) return null;
+        const p = r.payload;
+        const ascii = (start, end) => {
+            let s = '';
+            for (let i = start; i < end; i++) {
+                const b = p[i];
+                if (b === 0) break;
+                if (b >= 0x20 && b < 0x7f) s += String.fromCharCode(b);
+            }
+            return s;
+        };
+        const u32 = (o) => (p[o] | (p[o + 1] << 8) | (p[o + 2] << 16) | (p[o + 3] << 24)) >>> 0;
+        return {
+            magic: ascii(0, 8),
+            version: ascii(8, 24),
+            imageCrc32: u32(24),
+            imageSize: u32(28)
+        };
+    }
+
+    // g6-program-panel (0xC8) reply: status byte + ASCII detail. `ok` === flash
+    // succeeded; `message` carries the controller's diagnostic / failure step.
+    function decodeProgramPanelResponse(resp) {
+        const r = asResponse(resp);
+        if (!r) return null;
+        let message = '';
+        for (let i = 0; i < r.payload.length; i++) {
+            const b = r.payload[i];
+            if (b >= 0x20 && b < 0x7f) message += String.fromCharCode(b);
+        }
+        return { ok: r.ok, status: r.status, message };
+    }
+
     return {
         // Constants
         OPCODES,
@@ -579,6 +676,10 @@ const ArenaWireG6 = (function () {
         encodeDeletePatternFile,
         encodeDeleteAllPatterns,
         encodeGetSdArchive,
+        encodeSetFirmwareFile,
+        encodeGetFirmwareInfo,
+        encodeG6ProgramPanel,
+        encodeG6VerifyPanel,
         encodeSetAoVoltage,
         encodeGetAoVoltage,
         encodeGetDigitalOut,
@@ -594,7 +695,10 @@ const ArenaWireG6 = (function () {
         decodePatternFilename,
         decodeSetPatternFilenameResponse,
         decodeAoVoltage,
-        decodeDigitalOut
+        decodeDigitalOut,
+        decodeSetFirmwareFileResponse,
+        decodeFirmwareInfo,
+        decodeProgramPanelResponse
     };
 })();
 
