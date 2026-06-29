@@ -95,6 +95,8 @@
   select:hover:not(:disabled) { border-color: var(--accent); }
   select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(0, 230, 118, .2); }
   select:disabled { opacity: .5; cursor: not-allowed; }
+  select optgroup { color: var(--text-dim); font-style: italic; background: var(--surface); }
+  select option { color: var(--text); background: var(--surface); font-style: normal; }
 
   .note { border-radius: 6px; padding: .8rem 1rem; font-size: .85rem; line-height: 1.55; }
   .note.warn { color: var(--warn); background: rgba(255, 152, 0, .1); border: 1px solid rgba(255, 152, 0, .4); }
@@ -151,6 +153,8 @@
 
   .fine { font-size: .78rem; color: var(--text-dim); line-height: 1.5; margin-top: .7rem; }
   .fine.warn { color: var(--warn); }
+  .fine a { color: var(--accent); }
+  .fine strong { color: var(--text); }
   details ol { margin: .4rem 0 .4rem 1.2rem; }
   details li { margin-bottom: .3rem; }
 
@@ -158,6 +162,21 @@
   #panel-status.ok { color: var(--accent); font-weight: 600; }
   #panel-status.dim { color: var(--text-dim); }
   #panel-status a { color: var(--accent); cursor: pointer; text-decoration: underline; }
+
+  .modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center;
+           justify-content: center; padding: 1.5rem; background: rgba(0, 0, 0, .65); }
+  .modal[hidden] { display: none; }
+  .modal-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+                padding: 1.75rem; max-width: 520px; width: 100%; }
+  .modal-card h2 { font-family: 'JetBrains Mono', monospace; color: var(--accent);
+                   font-size: 1.2rem; margin-bottom: .8rem; }
+  .modal-card h2 .muted { color: var(--text-dim); font-weight: 400; font-size: .9rem; }
+  .modal-row { display: flex; gap: .6rem; margin: 1rem 0 .25rem; }
+  .modal-row #test-connect { flex: 1; }
+  .log-mini { font-family: 'JetBrains Mono', monospace; font-size: .76rem; line-height: 1.5;
+              white-space: pre-wrap; word-break: break-word; background: #0a0e13; color: var(--text-dim);
+              border: 1px solid var(--border); border-radius: 6px; padding: .8rem; height: 170px;
+              overflow: auto; margin-top: .6rem; }
 </style>
 </head>
 <body>
@@ -183,7 +202,8 @@
       </select>
       <p id="build-meta">resolving latest…</p>
       <p id="build-note" class="note warn" hidden></p>
-      <p class="fine warn">⚠ Wrong revision (v0.2.1 vs v0.3.1) → non-working panel; re-flash the correct one.</p>
+      <p class="fine">Pick the build that matches your panel’s revision — v0.2.1 and v0.3.1 use different binaries.
+        Flashed a mismatch? No harm — just re-flash the matching build.</p>
       <details>
         <summary>Which revision do I have?</summary>
         <p>Read the rev on the PCB silkscreen / label (<code>v0.2.1</code> vs <code>v0.3.1</code>). A panel
@@ -211,6 +231,10 @@
     <div class="card">
       <h2>Activity log</h2>
       <div id="log"></div>
+      <p class="fine">Programmed a panel? Open the
+        <a href="../panel_monitor.html">Panel Serial Monitor</a> to confirm it boots clean (production
+        firmware is log-only — no LED test over USB). For a visual LED test, flash a
+        <strong>Panel self-test</strong> build above, then re-flash production.</p>
     </div>
   </div>
 
@@ -223,6 +247,25 @@
     </p>
   </footer>
 </div>
+
+<!-- Optional post-flash check: opens after a flash to confirm the panel is alive. -->
+<div id="test-modal" class="modal" hidden>
+  <div class="modal-card">
+    <h2>Check the panel <span class="muted">(optional)</span></h2>
+    <p class="fine">The panel rebooted into firmware. <strong>Connect</strong> to confirm it’s alive — if the
+      port opens, it’s running. A <strong>Panel self-test</strong> build streams its banner + pattern-cycle
+      log here; production firmware is quiet after boot, so an open connection is itself the all-clear.
+      Then <kbd>Done</kbd> to flash the next one.</p>
+    <div class="modal-row">
+      <button id="test-connect" class="primary">Connect to panel</button>
+      <button id="test-done">Done</button>
+    </div>
+    <p class="fine"><strong>Don’t press RESET / RUN</strong> while connected — it drops the USB link. To grab
+      a fresh boot banner, power-cycle the panel (unplug/replug); this reconnects automatically.</p>
+    <div id="test-log" class="log-mini"></div>
+  </div>
+</div>
+
 <script type="module" src="./flasher.js"></script>
 </body>
 </html>

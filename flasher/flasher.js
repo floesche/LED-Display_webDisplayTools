@@ -283,16 +283,34 @@ async function resolveFirmware() {
     );
 }
 
-// Fill the dropdown from the catalog and select the manifest's default build.
+// Section label for a build, so the dropdown groups Production vs testing/debug
+// builds under <optgroup>s (otherwise the self-test builds hide behind the
+// collapsed default). Unknown variants fall back to a generic section.
+const SECTION = { production: 'Production firmware', bcmtest: 'Panel self-test' };
+const sectionOf = (b) => SECTION[b.variant] || 'Other builds';
+
+// Fill the dropdown from the catalog, grouped by section, and select the
+// manifest's default build.
 function populateBuilds() {
     const sel = $('build-select');
     sel.innerHTML = '';
+    const groups = new Map(); // insertion order = catalog order (production first)
     for (const b of firmware.builds) {
-        const o = document.createElement('option');
-        o.value = b.file;
-        o.textContent = b.label || `${b.rev} — ${b.variant}`;
-        if (b.default) o.selected = true;
-        sel.appendChild(o);
+        const s = sectionOf(b);
+        if (!groups.has(s)) groups.set(s, []);
+        groups.get(s).push(b);
+    }
+    for (const [label, items] of groups) {
+        const og = document.createElement('optgroup');
+        og.label = label;
+        for (const b of items) {
+            const o = document.createElement('option');
+            o.value = b.file;
+            o.textContent = b.label || `${b.rev} — ${b.variant}`;
+            if (b.default) o.selected = true;
+            og.appendChild(o);
+        }
+        sel.appendChild(og);
     }
     sel.disabled = firmware.builds.length === 0;
     onBuildChange();
@@ -327,11 +345,11 @@ async function verifyBuild(b) {
         (d) => d.vendorId === RP_VID && want && (d.productName || '').startsWith(want)
     );
     if (match) {
-        setStatus(`Verified: ${match.productName} ✓`, 'status-ok');
+        setStatus(`Verified: ${match.productName} ✓ — ready for the next panel.`, 'status-ok');
         log(`Verified panel reports "${match.productName}".`, 'status-ok');
     } else {
         setStatus(
-            `Flashed ${b.label || b.file}. Confirm the panel boots as expected.`,
+            `Flashed ${b.label || b.file} ✓ — ready for the next panel (confirm it boots).`,
             'status-ok'
         );
         log('Flash complete. (Auto-verify needs a re-grant; confirm the panel visually.)');
@@ -407,7 +425,6 @@ async function onFlashClick() {
                     'Put it in BOOTSEL (hold BOOT, plug in or tap RUN), then retry.',
                 'status-err'
             );
-            $('flash-btn').disabled = false;
             return;
         }
 
@@ -428,6 +445,7 @@ async function onFlashClick() {
         });
 
         await verifyBuild(b);
+        openTestModal(); // optional one-stop boot-banner check before the next panel
     } catch (err) {
         // A bulk stall surfaces as an opaque "transfer error"; ask the bootrom what
         // actually went wrong (e.g. INVALID_CMD_LENGTH, BAD_ALIGNMENT).
@@ -438,10 +456,133 @@ async function onFlashClick() {
         }
         setStatus(`Failed: ${err.message}`, 'status-err');
         log(`ERROR: ${err.message}${extra}`, 'status-err');
-        $('flash-btn').disabled = false;
     } finally {
         if (pb) await pb.close();
+        $('progress').hidden = true;
+        // Re-arm for the next panel — re-flashing the SAME build is the common batch
+        // case, so don't make the operator toggle the dropdown to re-enable the button.
+        $('flash-btn').disabled = !chosenFile;
     }
+}
+
+// --- Optional post-flash check (inline liveness over Web Serial) ----------------
+// Opens automatically after a flash. The panel has rebooted into firmware, so a
+// serial port that OPENS = the panel is alive and running. NOTE: a USB-CDC reset
+// (the RUN button) drops + re-enumerates the device, so we do NOT ask the user to
+// press it — instead we auto-reconnect on connect events, which also recovers the
+// banner for self-test builds (they wait for the host before printing; production
+// prints once at boot, before any host is attached, so its banner isn't capturable
+// over USB). "Done" closes the port and re-arms the flasher for the next panel.
+let testPort = null,
+    testReader = null,
+    testReading = false;
+
+function tlog(text, cls) {
+    const el = $('test-log');
+    const s = document.createElement('span');
+    if (cls) s.className = cls;
+    s.textContent = text;
+    el.appendChild(s);
+    el.scrollTop = el.scrollHeight;
+}
+
+async function openTestModal() {
+    $('test-log').textContent = '';
+    $('test-modal').hidden = false;
+    if (!('serial' in navigator)) {
+        $('test-connect').disabled = true;
+        tlog('Web Serial isn’t available in this browser (Chrome/Edge only).\n', 'status-err');
+        return;
+    }
+    $('test-connect').disabled = false;
+    // Try a silent attach to an already-granted, attached panel port (no popup).
+    try {
+        const granted = await navigator.serial.getPorts();
+        const port = granted.find((p) => (p.getInfo?.() || {}).usbVendorId === RP_VID);
+        if (port) await startTest(port);
+    } catch {
+        /* fall back to the Connect button */
+    }
+}
+
+async function startTest(port) {
+    try {
+        await port.open({ baudRate: 115200 });
+        testPort = port;
+        testReading = true;
+        $('test-connect').disabled = true;
+        tlog('✓ Connected — the panel is running firmware (alive).\n', 'status-ok');
+        tlog(
+            'Self-test builds stream their output below. Production firmware is quiet after boot — the open connection is the all-clear.\n'
+        );
+        readTest();
+    } catch (err) {
+        tlog(`Could not open serial port: ${err.message}\n`, 'status-err');
+        $('test-connect').disabled = false;
+    }
+}
+
+async function testConnect() {
+    if (!('serial' in navigator)) return;
+    try {
+        const port = await navigator.serial.requestPort({ filters: [{ usbVendorId: RP_VID }] });
+        await startTest(port);
+    } catch {
+        /* chooser cancelled */
+    }
+}
+
+async function readTest() {
+    const dec = new TextDecoder();
+    try {
+        while (testReading && testPort && testPort.readable) {
+            testReader = testPort.readable.getReader();
+            try {
+                while (true) {
+                    const { value, done } = await testReader.read();
+                    if (done) break;
+                    if (value) tlog(dec.decode(value, { stream: true }));
+                }
+            } finally {
+                testReader.releaseLock();
+                testReader = null;
+            }
+        }
+    } catch {
+        /* port closed (e.g. reset/power-cycle) — reopened by serial 'connect' */
+    }
+}
+
+// On a reset/power-cycle the port re-enumerates; reopen it and resume reading. For
+// self-test builds (which wait for the host) this recaptures the fresh banner.
+async function reopenTestIfDropped() {
+    if (testReading && testPort && !testPort.readable) {
+        try {
+            await testPort.open({ baudRate: 115200 });
+            tlog('\n— reconnected —\n', 'status-ok');
+            readTest();
+        } catch {
+            /* not ready yet; another connect event will retry */
+        }
+    }
+}
+
+async function testDone() {
+    testReading = false;
+    try {
+        if (testReader) await testReader.cancel();
+    } catch {
+        /* ignore */
+    }
+    try {
+        if (testPort) await testPort.close();
+    } catch {
+        /* ignore */
+    }
+    testPort = null;
+    $('test-modal').hidden = true;
+    $('test-connect').disabled = false;
+    $('flash-btn').disabled = !chosenFile; // re-arm for the next panel
 }
 
 function main() {
@@ -452,12 +593,23 @@ function main() {
     }
     $('build-select').addEventListener('change', onBuildChange);
     $('flash-btn').addEventListener('click', onFlashClick);
+    $('test-connect').addEventListener('click', testConnect);
+    $('test-done').addEventListener('click', testDone);
 
     // Live panel detection — no popup once a panel has been granted.
     refreshPanelStatus();
     setInterval(refreshPanelStatus, 1000);
     navigator.usb.addEventListener('connect', refreshPanelStatus);
     navigator.usb.addEventListener('disconnect', refreshPanelStatus);
+
+    // Keep the test readout alive across a panel reset / power-cycle.
+    if ('serial' in navigator) {
+        navigator.serial.addEventListener('disconnect', () => {
+            if (testReading && testPort)
+                tlog('\n— panel disconnected (reset / power-cycle); waiting…\n', 'status-err');
+        });
+        navigator.serial.addEventListener('connect', reopenTestIfDropped);
+    }
 
     resolveFirmware().catch((e) => {
         $('build-meta').textContent = 'unavailable';
