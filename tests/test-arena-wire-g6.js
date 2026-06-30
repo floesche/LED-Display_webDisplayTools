@@ -176,12 +176,12 @@ checkThrows('stream wrong size 4063 throws', () => Wire.encodeStreamFrame(new Ui
 console.log('\n=== decodeResponse framing ===');
 // get-controller-info reply: [len=4, status=0, echo=0xC2, version=2, cap=0x11].
 // length byte = 4 = status + echo + 2 payload bytes.
-const ciFrame = Uint8Array.from([0x04, 0x00, 0xC2, 0x02, 0x11]);
+const ciFrame = Uint8Array.from([0x04, 0x00, 0xc2, 0x02, 0x11]);
 const ci = Wire.decodeResponse(ciFrame);
 checkBool('decodeResponse returns object', !!ci);
 check('  .length', ci.length, 4);
 check('  .status', ci.status, 0);
-check('  .echoCmd', ci.echoCmd, 0xC2);
+check('  .echoCmd', ci.echoCmd, 0xc2);
 check('  .ok', ci.ok, true);
 checkBytes('  .payload', ci.payload, '02 11');
 
@@ -195,12 +195,12 @@ checkBool('empty frame -> null', Wire.decodeResponse(new Uint8Array([])) === nul
 checkBool('length<2 -> null', Wire.decodeResponse(Uint8Array.from([0x01, 0x00])) === null);
 checkBool(
     'incomplete frame -> null',
-    Wire.decodeResponse(Uint8Array.from([0x05, 0x00, 0xC2, 0x02])) === null,
+    Wire.decodeResponse(Uint8Array.from([0x05, 0x00, 0xc2, 0x02])) === null,
     'claims 5 bytes, only 3 present'
 );
 // Regression: a plain number[] must NOT throw (TypedArray.slice rejects a
 // non-typed-array receiver — decodeResponse normalizes to Uint8Array first).
-const ciArr = Wire.decodeResponse([0x04, 0x00, 0xC2, 0x02, 0x11]);
+const ciArr = Wire.decodeResponse([0x04, 0x00, 0xc2, 0x02, 0x11]);
 checkBool('decodeResponse(number[]) does not throw', !!ciArr);
 checkBytes('decodeResponse(number[]) payload', ciArr.payload, '02 11');
 
@@ -218,14 +218,14 @@ checkBool(
 // A non-OK controller-info reply must not be decoded as valid metadata.
 checkBool(
     'decodeControllerInfo rejects status!=0',
-    Wire.decodeControllerInfo(Uint8Array.from([0x04, 0x01, 0xC2, 0x02, 0x11])) === null
+    Wire.decodeControllerInfo(Uint8Array.from([0x04, 0x01, 0xc2, 0x02, 0x11])) === null
 );
 
 // SPI clock reply: [len=4, status=0, echo=0xC6, 20, 0] -> 20 MHz.
-check('decodeSpiClock', Wire.decodeSpiClock(Uint8Array.from([0x04, 0x00, 0xC6, 0x14, 0x00])), 20);
+check('decodeSpiClock', Wire.decodeSpiClock(Uint8Array.from([0x04, 0x00, 0xc6, 0x14, 0x00])), 20);
 checkBool(
     'decodeSpiClock rejects status!=0',
-    Wire.decodeSpiClock(Uint8Array.from([0x04, 0x01, 0xC6, 0x14, 0x00])) === null
+    Wire.decodeSpiClock(Uint8Array.from([0x04, 0x01, 0xc6, 0x14, 0x00])) === null
 );
 
 // frames-sent reply: u32 LE. 0x12345678 -> 78 56 34 12.
@@ -243,7 +243,7 @@ check(
 
 // get-ip reply: ASCII payload "10.0.0.5".
 const ipAscii = '10.0.0.5';
-const ipBytes = [ipAscii.length + 2, 0x00, 0xC1, ...Array.from(ipAscii, (c) => c.charCodeAt(0))];
+const ipBytes = [ipAscii.length + 2, 0x00, 0xc1, ...Array.from(ipAscii, (c) => c.charCodeAt(0))];
 check('decodeIp', Wire.decodeIp(Uint8Array.from(ipBytes)), '10.0.0.5');
 
 console.log('\n=== set-pattern-filename (0x83) opcode-first framing ===');
@@ -259,7 +259,11 @@ checkBytes(
 const longName = '0019_right_window_yaw_stepsize0.46875_final_G6.pat'; // 50 chars
 const longFrame = Wire.encodeSetPatternFilename(0, longName);
 check('encodeSetPatternFilename long: first byte is opcode 0x83', longFrame[0], 0x83);
-check('encodeSetPatternFilename long: length byte absent (frame.length = 4+name)', longFrame.length, 54);
+check(
+    'encodeSetPatternFilename long: length byte absent (frame.length = 4+name)',
+    longFrame.length,
+    54
+);
 check('encodeSetPatternFilename long: name_len byte = 50', longFrame[3], 50);
 checkThrows('encodeSetPatternFilename 64-char name throws', () =>
     Wire.encodeSetPatternFilename(0, 'a'.repeat(64))
@@ -267,6 +271,85 @@ checkThrows('encodeSetPatternFilename 64-char name throws', () =>
 checkThrows('encodeSetPatternFilename empty name throws', () =>
     Wire.encodeSetPatternFilename(0, '')
 );
+
+console.log('\n=== panel firmware / ISP (0xE0 / 0xE3 / 0xC8) ===');
+
+// get-firmware-info (0xE3): plain [01 E3].
+checkBytes('encodeGetFirmwareInfo', Wire.encodeGetFirmwareInfo(), '01 e3');
+
+// g6-program-panel (0xC8): [02 C8 panel_number], 1-based panel number.
+checkBytes('encodeG6ProgramPanel(1)', Wire.encodeG6ProgramPanel(1), '02 c8 01');
+checkBytes('encodeG6ProgramPanel(20)', Wire.encodeG6ProgramPanel(20), '02 c8 14');
+checkThrows('encodeG6ProgramPanel(0) throws (1-based)', () => Wire.encodeG6ProgramPanel(0));
+checkThrows('encodeG6ProgramPanel(256) throws', () => Wire.encodeG6ProgramPanel(256));
+
+// g6-verify-panel (0xC9): [02 C9 panel_number], 1-based panel number.
+checkBytes('encodeG6VerifyPanel(1)', Wire.encodeG6VerifyPanel(1), '02 c9 01');
+checkBytes('encodeG6VerifyPanel(20)', Wire.encodeG6VerifyPanel(20), '02 c9 14');
+checkThrows('encodeG6VerifyPanel(0) throws (1-based)', () => Wire.encodeG6VerifyPanel(0));
+checkThrows('encodeG6VerifyPanel(256) throws', () => Wire.encodeG6VerifyPanel(256));
+
+// set-firmware-file (0xE0): opcode-first, NO index, uint64 LE length then data.
+// data [01 02 03 04] → [e0, 04 00 00 00 00 00 00 00, 01 02 03 04].
+checkBytes(
+    'encodeSetFirmwareFile([1,2,3,4])',
+    Wire.encodeSetFirmwareFile(Uint8Array.from([1, 2, 3, 4])),
+    'e0 04 00 00 00 00 00 00 00 01 02 03 04'
+);
+check(
+    'encodeSetFirmwareFile total length = 9 + data',
+    Wire.encodeSetFirmwareFile(new Uint8Array(100)).length,
+    109
+);
+
+// set-firmware-file reply: uint32 LE CRC-32 (0x12345678 → 78 56 34 12).
+check(
+    'decodeSetFirmwareFileResponse',
+    Wire.decodeSetFirmwareFileResponse(Uint8Array.from([0x06, 0x00, 0xe0, 0x78, 0x56, 0x34, 0x12])),
+    0x12345678
+);
+checkBool(
+    'decodeSetFirmwareFileResponse rejects status!=0',
+    Wire.decodeSetFirmwareFileResponse(Uint8Array.from([0x05, 0x01, 0xe0, 0, 0, 0, 0])) === null
+);
+
+// get-firmware-info reply: 32-byte footer {magic[8], version[16], crc32 LE, size LE}.
+const footer = new Uint8Array(32);
+footer.set(
+    Array.from('G6PANFW\0', (c) => c.charCodeAt(0)),
+    0
+);
+footer.set(
+    Array.from('1a2b3c4d', (c) => c.charCodeAt(0)),
+    8
+); // version, NUL-padded
+footer.set([0x21, 0x12, 0x23, 0x21], 24); // crc32 = 0x21231221 LE
+footer.set([0x00, 0x67, 0x01, 0x00], 28); // size = 91904 (0x00016700) LE
+const fwInfoFrame = Uint8Array.from([2 + 32, 0x00, 0xe3, ...footer]);
+const fwInfo = Wire.decodeFirmwareInfo(fwInfoFrame);
+checkBool('decodeFirmwareInfo returns object', !!fwInfo);
+check('decodeFirmwareInfo magic', fwInfo && fwInfo.magic, 'G6PANFW');
+check('decodeFirmwareInfo version', fwInfo && fwInfo.version, '1a2b3c4d');
+check('decodeFirmwareInfo imageCrc32', fwInfo && fwInfo.imageCrc32, 0x21231221);
+check('decodeFirmwareInfo imageSize', fwInfo && fwInfo.imageSize, 91904);
+checkBool(
+    'decodeFirmwareInfo short payload -> null',
+    Wire.decodeFirmwareInfo(Uint8Array.from([0x03, 0x00, 0xe3, 0x00])) === null
+);
+
+// g6-program-panel reply: status + ASCII detail.
+const okFlash = Wire.decodeProgramPanelResponse(Uint8Array.from([0x02, 0x00, 0xc8]));
+checkBool('decodeProgramPanelResponse success ok=true', okFlash && okFlash.ok === true);
+const failAscii = 'ISP_ENTER failed';
+const failFrame = [
+    failAscii.length + 2,
+    0x01,
+    0xc8,
+    ...Array.from(failAscii, (c) => c.charCodeAt(0))
+];
+const failFlash = Wire.decodeProgramPanelResponse(Uint8Array.from(failFrame));
+checkBool('decodeProgramPanelResponse failure ok=false', failFlash && failFlash.ok === false);
+check('decodeProgramPanelResponse failure message', failFlash && failFlash.message, failAscii);
 
 console.log(`\n=== Summary ===\n${totalChecks - failures} / ${totalChecks} checks passed`);
 process.exit(failures > 0 ? 1 : 0);
