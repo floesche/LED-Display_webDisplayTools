@@ -1309,6 +1309,28 @@
             z-index: 100;
         }
         .modal-backdrop.open { display: flex; }
+        /* Transient clamp/notice toast (bottom-center). */
+        #miniToast {
+            position: fixed;
+            bottom: 1.2rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(1rem);
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--accent);
+            border-radius: 6px;
+            padding: 0.5rem 0.9rem;
+            font-size: 0.82rem;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.18s ease, transform 0.18s ease;
+            z-index: 200;
+        }
+        #miniToast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
         .modal {
             background: var(--surface);
             border: 1px solid var(--border);
@@ -1539,7 +1561,7 @@
     <!-- Footer -->
     <div class="app-footer">
         <a href="https://github.com/reiserlab/webDisplayTools" target="_blank">Reiser Lab</a> |
-        v3 Experiment Designer v0.36 | <span id="footerTimestamp">2026-06-17 10:46 ET</span>
+        v3 Experiment Designer v0.37 | <span id="footerTimestamp">2026-07-01 00:57 ET</span>
     </div>
 
     <!-- Error modal -->
@@ -1623,6 +1645,8 @@
             listV3PluginNames,
             getV3CommandParams,
             isKnownControllerCommand,
+            isG6OnlyCommand,
+            clampToSchema,
             BUILTIN_PLUGINS,
             createPluginEntry,
             mapRigPluginToBuiltin,
@@ -1692,6 +1716,17 @@
         // current AND its arena resolved. null → the builder is blocked.
         function rigArenaConfig() {
             return rigIsCurrent() && loadedRig.arenaConfig ? loadedRig.arenaConfig : null;
+        }
+        // Resolved arena generation ('G6','G4.1','G4','G3') when an in-session rig is
+        // current and its arena is a known config; null when unknown (no in-session
+        // rig loaded, or a path/unknown arena). Used to gate G6-only controller
+        // commands: we hide them ONLY when the generation is known AND non-G6 — an
+        // unknown generation still shows them (the export warning + runner skip are
+        // the backstops), so the common "rig is just a path" case isn't over-hidden.
+        function rigGeneration() {
+            const name = rigArenaConfig();
+            const cfg = name ? getConfig(name) : null;
+            return cfg && cfg.arena ? cfg.arena.generation : null;
         }
 
         // Built-in rigs offered in the Settings → Rig dropdown, from configs/rigs/index.json
@@ -2128,6 +2163,23 @@
         $('errorModal').addEventListener('click', (e) => {
             if (e.target.id === 'errorModal') $('errorModal').classList.remove('open');
         });
+
+        // Lightweight transient toast (bottom-center) for non-blocking notices
+        // like "value clamped". Lives on <body> so it survives the inspector
+        // re-render that follows a docSet.
+        let _toastTimer = null;
+        function showToast(msg) {
+            let t = $('miniToast');
+            if (!t) {
+                t = document.createElement('div');
+                t.id = 'miniToast';
+                document.body.appendChild(t);
+            }
+            t.textContent = msg;
+            t.classList.add('show');
+            if (_toastTimer) clearTimeout(_toastTimer);
+            _toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+        }
 
         /**
          * confirmModal({title, body, list, confirmLabel, cancelLabel}) -> Promise<boolean>
@@ -4190,6 +4242,21 @@
             'plugin_name': 'string'
         };
 
+        // Hover tooltip for a numeric field: names the allowable range + integer
+        // constraint from the schema so the user knows the limits before typing.
+        function numFieldTooltip(label, schema) {
+            const base = (schema && schema.label) || label;
+            if (!schema) return 'Edit ' + label;
+            const bits = [];
+            const hasMin = typeof schema.min === 'number';
+            const hasMax = typeof schema.max === 'number';
+            if (hasMin && hasMax) bits.push('allowed ' + schema.min + '–' + schema.max);
+            else if (hasMin) bits.push('min ' + schema.min);
+            else if (hasMax) bits.push('max ' + schema.max);
+            if (schema.integer) bits.push('integer');
+            return bits.length ? base + ' — ' + bits.join(', ') : 'Edit ' + base;
+        }
+
         // Render a single editable scalar field. If the underlying YAML node is
         // an Alias, show a read-only badge instead of an input. Otherwise, an
         // input that calls docSet() on commit.
@@ -4289,10 +4356,21 @@
             const input = el('input', {
                 type: inputType,
                 class: 'field-edit ' + (typeHint === 'number' ? 'num' : 'str'),
-                value: typeof value === 'string' ? value : String(value),
-                title: 'Edit ' + label
+                value: typeof value === 'string' ? value : String(value)
             });
-            if (typeHint === 'number') input.step = 'any';
+            // Numeric range hints from the schema: enforce with native min/max/step,
+            // surface the allowed range in the hover tooltip, and clamp on commit so
+            // out-of-range values can't be entered. numSchema is null for freeform
+            // number fields (no schema) → behaves as before (NaN guard only).
+            const numSchema = schema && schema.type === 'number' ? schema : null;
+            if (typeHint === 'number') {
+                input.step = numSchema && numSchema.integer ? '1' : (numSchema && numSchema.step) || 'any';
+                if (numSchema && typeof numSchema.min === 'number') input.min = String(numSchema.min);
+                if (numSchema && typeof numSchema.max === 'number') input.max = String(numSchema.max);
+                input.title = numFieldTooltip(label, numSchema);
+            } else {
+                input.title = 'Edit ' + label;
+            }
 
             // Snapshot on commit-with-actual-change. Captures the pre-edit
             // state so a single Ctrl+Z reverts the whole field visit. Browser
@@ -4312,7 +4390,14 @@
                         input.value = String(value);
                         return;
                     }
-                    coerced = n;
+                    // Clamp/round to the schema's range so illegal values can't be
+                    // committed; tell the user what was corrected.
+                    const c = clampToSchema(n, numSchema);
+                    coerced = c.value;
+                    if (c.changed) {
+                        input.value = String(coerced);
+                        showToast((numSchema && numSchema.label ? numSchema.label : label) + ': ' + c.reason);
+                    }
                 }
                 if (coerced === value) return;
                 pushUndo();
@@ -5818,7 +5903,11 @@
 
             // Controller commands
             const ctrlGroup = el('optgroup', { label: 'Controller' });
+            const ctrlGen = rigGeneration();
             for (const [name, def] of Object.entries(CONTROLLER_COMMANDS)) {
+                // Hide G6-only commands only when the arena generation is KNOWN and
+                // non-G6. Unknown generation still offers them (see rigGeneration()).
+                if (isG6OnlyCommand(name) && ctrlGen && ctrlGen !== 'G6') continue;
                 ctrlGroup.appendChild(el('option', { value: 'controller:' + name }, name));
             }
             select.appendChild(ctrlGroup);
@@ -5966,6 +6055,17 @@
                         class: 'raw-badge',
                         title: 'Unsupported controller command on G6 — preserved on export, but the arena runner will skip it with an error. (e.g. setColorDepth maps to SWITCH_GRAYSCALE 0x06, which was dropped on G6 — color depth is set in the .pat/SD header, not at runtime.)'
                     }, '⚠ unsupported'));
+                } else if (cmd.command_name && isG6OnlyCommand(cmd.command_name)) {
+                    // G6-only command on a KNOWN non-G6 arena: preserved on export,
+                    // but the runner will skip it. Only badged when the generation
+                    // is resolved and non-G6 (unknown generation shows no badge).
+                    const g6Gen = rigGeneration();
+                    if (g6Gen && g6Gen !== 'G6') {
+                        head.appendChild(el('span', {
+                            class: 'raw-badge',
+                            title: 'G6-only command on a ' + g6Gen + ' arena — drives hardware on the G6 controller board (BNC AO/DO). Preserved on export, but the arena runner will skip it.'
+                        }, '⚠ G6-only'));
+                    }
                 }
             }
             card.appendChild(head);
@@ -5998,7 +6098,7 @@
             card.appendChild(actions);
 
             const detailKeys = {
-                controller: ['command_name', 'pattern', 'pattern_ID', 'duration', 'mode', 'frame_index', 'frame_rate', 'gain', 'posX'],
+                controller: ['command_name', 'pattern', 'pattern_ID', 'duration', 'mode', 'frame_index', 'frame_rate', 'gain', 'posX', 'mv', 'channel', 'state'],
                 wait: ['duration'],
                 plugin: []
             }[cmd.type] || [];
@@ -6009,7 +6109,9 @@
             const paramsSchema =
                 cmd.type === 'controller'
                     ? getV3CommandParams(experiment, 'controller', null, cmd.command_name)
-                    : null;
+                    : cmd.type === 'wait'
+                      ? { duration: { type: 'number', min: 0, step: 0.1, label: 'Duration (s)' } }
+                      : null;
 
             for (const k of detailKeys) {
                 if (cmd[k] === undefined) continue;
@@ -6290,7 +6392,7 @@
                 banner.style.display = 'none';
                 return;
             }
-            const { warnings, totalCount } = collectExportWarnings(experiment);
+            const { warnings, totalCount } = collectExportWarnings(experiment, rigGeneration());
             if (totalCount === 0) {
                 banner.style.display = 'none';
                 return;
