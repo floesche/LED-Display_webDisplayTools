@@ -580,6 +580,7 @@
             <label>fps <input id="cFps" type="number" min="1" max="120" value="30" style="width:48px" title="multi-frame .pat playback rate"></label>
             <button class="pill" data-cmd="cloadfile" title="Load .bin or .pat and host-stream (js/bin-classifier.js)">Load .bin/.pat…</button>
             <input id="cFileInput" type="file" accept=".bin,.pat" style="display:none">
+            <span class="thumb" id="cStreamThumb" title="Streamed-frame preview"></span>
           </div>
         </div>
       </details>
@@ -1131,16 +1132,16 @@
         },
         crawclear: () => { logEl().innerHTML = ''; },
         crawcopy: async () => { try { await navigator.clipboard.writeText(logEl().innerText); } catch (e) {} },
-        // depth toggles
-        cgs16: (e) => segPick(e, 'cGs16', 'cGs2'),
-        cgs2: (e) => segPick(e, 'cGs2', 'cGs16'),
+        // depth toggles (also set the module-block stream depth)
+        cgs16: (e) => { segPick(e, 'cGs16', 'cGs2'); if (Studio.setStreamGs) Studio.setStreamGs(16); if ($('cLevel')) $('cLevel').parentElement.style.opacity = '1'; },
+        cgs2: (e) => { segPick(e, 'cGs2', 'cGs16'); if (Studio.setStreamGs) Studio.setStreamGs(2); },
         // pattern-set folder load (picker logic lives in the module block)
         cloadset: () => $('cPatFolder').click(),
-        // heavier features — port pending (avoid shipping half-working paths)
-        cstreamff: () => notPorted('stream full-field'),
-        cstreampm: () => notPorted('stream panel-map'),
-        cstreamor: () => notPorted('stream orientation'),
-        cstreamck: () => notPorted('stream checker'),
+        // stream test figures (builders live in the module block)
+        cstreamff: () => Studio.doStream && Studio.doStream('fullfield'),
+        cstreampm: () => Studio.doStream && Studio.doStream('panelmap'),
+        cstreamor: () => Studio.doStream && Studio.doStream('orientation'),
+        cstreamck: () => Studio.doStream && Studio.doStream('checker'),
         cloadfile: () => notPorted('.bin/.pat load'),
         cfwpick: () => notPorted('firmware flash'),
         cfwinfo: () => notPorted('firmware info'),
@@ -1164,8 +1165,11 @@
         const cmd = btn.dataset.cmd;
         if (handlers[cmd]) { e.preventDefault(); handlers[cmd](e); }
     });
-    // level slider readout
+    // expose the console trace logger so the module block (stream) can write here
+    Studio.clog = clog;
+    // level slider readout + duty → module-block stream state
     $('cLevel').addEventListener('input', () => { $('cLevelVal').textContent = $('cLevel').value + '/15'; });
+    $('cDuty').addEventListener('input', () => { if (Studio.setStreamDuty) Studio.setStreamDuty(Number($('cDuty').value)); });
 
     // console dropdown menus (Controller ▾ / Debug ▾) — open/close + click-away
     document.querySelectorAll('.cmenu[data-cmenu] > .cmenu-btn').forEach((btn) => {
@@ -1475,6 +1479,114 @@ function wirePatPicker() {
         } catch (e) { cPatStatus('load failed: ' + (e.message || e)); }
     });
 }
+
+// ---- stream frame (host-streamed test figures) — ported from arena_console ----
+const Wire = window.ArenaWireG6;
+let streamGs = 16;   // 16 (GS16) | 2 (GS2)
+let streamDuty = 128; // per-LED duty byte (0–255) written into each panel block
+// 3×5 pixel font (rows top→bottom; bit2 = left column).
+const FONT = {
+    0: [7, 5, 5, 5, 7], 1: [2, 6, 2, 2, 7], 2: [7, 1, 7, 4, 7], 3: [7, 1, 7, 1, 7], 4: [5, 5, 7, 1, 1],
+    5: [7, 4, 7, 1, 7], 6: [7, 4, 7, 5, 7], 7: [7, 1, 2, 2, 2], 8: [7, 5, 7, 5, 7], 9: [7, 5, 7, 1, 7],
+    R: [6, 5, 6, 5, 5], L: [4, 4, 4, 4, 7], U: [5, 5, 5, 5, 7], D: [6, 5, 5, 5, 6]
+};
+function activeArenaGeom() {
+    const cfg = Studio.consoleArena && Studio.consoleArena.arenaConfig;
+    const arena = cfg ? arenaForConfig(cfg) : null;
+    const rc = (arena && arena.num_rows) || 2;
+    const cc = (arena && arena.num_cols) || 10;
+    return { rowCount: rc, colCount: cc, pixelRows: rc * 20, pixelCols: cc * 20 };
+}
+function newGrid() { const a = activeArenaGeom(); return new Uint8Array(a.pixelRows * a.pixelCols); }
+function setPx(grid, a, row, col, val) { if (row < 0 || row >= a.pixelRows || col < 0 || col >= a.pixelCols) return; grid[row * a.pixelCols + col] = val; }
+function drawGlyph(grid, a, ch, colLeft, rowBottom, val, scale) {
+    scale = scale || 1;
+    const g = FONT[ch];
+    if (!g) return;
+    for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) if ((g[r] >> (2 - c)) & 1)
+        for (let dy = 0; dy < scale; dy++) for (let dx = 0; dx < scale; dx++)
+            setPx(grid, a, rowBottom + (4 - r) * scale + dy, colLeft + c * scale + dx, val);
+}
+function genUniform(level) { const grid = newGrid(); grid.fill(streamGs === 2 ? 1 : level); return grid; }
+function genPanelMap() {
+    const a = activeArenaGeom(); const grid = newGrid(); const val = streamGs === 2 ? 1 : 12; const scale = 2;
+    const charW = 3 * scale, gap = scale;
+    for (let pr = 0; pr < a.rowCount; pr++) for (let pc = 0; pc < a.colCount; pc++) {
+        const s = String(pr * a.colCount + pc + 1);
+        const totalW = s.length * charW + (s.length - 1) * gap;
+        const colStart = pc * 20 + Math.floor((20 - totalW) / 2);
+        const rowBottom = pr * 20 + Math.floor((20 - 5 * scale) / 2);
+        for (let i = 0; i < s.length; i++) drawGlyph(grid, a, s[i], colStart + i * (charW + gap), rowBottom, val, scale);
+    }
+    return grid;
+}
+function genOrient() {
+    const a = activeArenaGeom(); const grid = newGrid(); const val = streamGs === 2 ? 1 : 15; const s = 2;
+    const cw = 3 * s, gh = 5 * s;
+    const midCol = Math.floor(a.pixelCols / 2 - cw / 2), midRow = Math.floor(a.pixelRows / 2 - gh / 2);
+    drawGlyph(grid, a, 'U', midCol, a.pixelRows - gh - 1, val, s);
+    drawGlyph(grid, a, 'D', midCol, 1, val, s);
+    drawGlyph(grid, a, 'L', 1, midRow, val, s);
+    drawGlyph(grid, a, 'R', a.pixelCols - cw - 1, midRow, val, s);
+    return grid;
+}
+function genChecker() {
+    const a = activeArenaGeom(); const grid = newGrid(); const val = streamGs === 2 ? 1 : 15;
+    for (let pr = 0; pr < a.rowCount; pr++) for (let pc = 0; pc < a.colCount; pc++) if ((pr + pc) % 2 === 0)
+        for (let y = 0; y < 20; y++) for (let x = 0; x < 20; x++) setPx(grid, a, pr * 20 + y, pc * 20 + x, val);
+    return grid;
+}
+function buildStreamFrame(grid, gs) {
+    const a = activeArenaGeom();
+    const patData = {
+        generation: 'G6', gs_val: gs, numFrames: 1, rowCount: a.rowCount, colCount: a.colCount,
+        pixelRows: a.pixelRows, pixelCols: a.pixelCols, frames: [grid], stretchValues: [streamDuty]
+    };
+    const patArrayBuffer = window.PatEncoder.encode(patData);
+    const buf = new Uint8Array(patArrayBuffer);
+    const len = Wire.STREAM_FRAME_BYTES[gs === 2 ? 'GS2' : 'GS16'];
+    const payload = buf.subarray(window.PatEncoder.G6_HEADER_SIZE, window.PatEncoder.G6_HEADER_SIZE + len);
+    return { bytes: Wire.encodeStreamFrame(payload), patArrayBuffer };
+}
+function streamable() { const a = activeArenaGeom(); return a.rowCount * a.colCount === 20; } // FW accepts 20-panel frames only
+function renderStreamThumb(patArrayBuffer) {
+    const host = $('cStreamThumb');
+    if (!host || !PP) return;
+    host.innerHTML = '';
+    try {
+        const parsed = PatParser.parsePatFile(patArrayBuffer);
+        const sampled = PP.samplePreviewFrames(parsed, arenaForConfig((Studio.consoleArena && Studio.consoleArena.arenaConfig) || 'G6_2x10'), {
+            renderIcon: generatePatternIcon,
+            iconOpts: { width: 48, height: 48, backgroundColor: '#141a20', innerRadiusRatio: 0.4, padding: 2, showGaps: false, showOutlines: false }
+        });
+        if (sampled.frames && sampled.frames.length) {
+            const img = document.createElement('img');
+            img.src = sampled.frames[sampled.staticIndex || 0];
+            host.appendChild(img);
+        }
+    } catch (e) { /* preview best-effort */ }
+}
+Studio.setStreamGs = (gs) => { streamGs = gs; };
+Studio.setStreamDuty = (d) => { streamDuty = d; };
+Studio.doStream = async function (kind) {
+    const clog = Studio.clog || Studio.rawLog;
+    if (!Studio.session || !Studio.session.connected) { clog('connect first', 'err'); return; }
+    if (!streamable()) { clog('stream: needs a 20-panel arena (e.g. G6_2x10) — set it in the arena picker', 'err'); return; }
+    const level = Number(($('cLevel') || {}).value || 15);
+    let grid;
+    if (kind === 'fullfield') grid = genUniform(level);
+    else if (kind === 'panelmap') grid = genPanelMap();
+    else if (kind === 'orientation') grid = genOrient();
+    else if (kind === 'checker') grid = genChecker();
+    else return;
+    let built;
+    try { built = buildStreamFrame(grid, streamGs); } catch (e) { clog('stream build failed: ' + (e.message || e), 'err'); return; }
+    renderStreamThumb(built.patArrayBuffer);
+    try {
+        await Studio.session.send(built.bytes, { expectedCmd: Wire.OPCODES.STREAM_FRAME, timeoutMs: 1500 });
+        clog('› STREAM_FRAME 0x32 · ' + kind + ' (' + (streamGs === 2 ? 'GS2' : 'GS16') + ')', 'tx');
+    } catch (e) { clog('stream send failed: ' + (e.message || e), 'err'); }
+};
 
 // ---- pattern-id resolution (active set by name; pattern_ID fallback) ----
 function resolvePatternIdForCmd(cmd) {
