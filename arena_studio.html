@@ -277,6 +277,14 @@
   .console-view .clog{background:#0a0e12;border:1px solid var(--border);border-radius:5px;padding:8px;overflow:auto;font-size:11px;color:#9fe8c0;white-space:pre-wrap;font-family:var(--mono);height:120px}
   .console-view .clog .l-tx{color:#7fd0ff}.console-view .clog .l-rx{color:#9fe8c0}.console-view .clog .l-err{color:var(--danger)}.console-view .clog .l-info{color:var(--dim)}
   .console-view fieldset:disabled{opacity:.55}
+  /* raw+log group grows to fill the page height the other groups leave free
+     (fieldset flex needs Chrome ≥83 — Web Serial needs ≥89, so always true).
+     flex-grow 1 / shrink 0: when content overflows, .console-view scrolls and
+     the log keeps its min-height instead of collapsing. */
+  #consoleFields{flex:1 0 auto;display:flex;flex-direction:column;min-width:0}
+  #cLogGroup{flex:1 1 auto;display:flex;flex-direction:column;min-height:170px;margin-bottom:0}
+  #cLogGroup .crow{flex:0 0 auto}
+  #cLogGroup .clog{flex:1 1 auto;height:auto;min-height:110px}
 
   .pmodal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:200}
   .pmodal[hidden]{display:none}
@@ -2215,17 +2223,18 @@
         </div>
       </details>
 
-      <details class="cgroup wide">
-        <summary class="gh">raw + log <span class="op">· hex bytes → controller</span><span class="sum" id="cRawSum">idle</span></summary>
-        <div class="cbody">
-          <div class="crow"><span class="lbl">raw</span><input id="cRawHex" type="text" placeholder="hex bytes, e.g. 01 C2" style="min-width:200px">
-            <button class="pill" data-cmd="crawsend">Send</button>
-            <span class="spacer"></span>
-            <button class="pill" data-cmd="crawclear">Clear</button>
-            <button class="pill" data-cmd="crawcopy">Copy</button></div>
-          <div class="clog" id="cLog"><span class="l-info">connect to drive the arena directly.</span></div>
-        </div>
-      </details>
+    </div>
+
+    <!-- raw + log — always open (exempt from Expand/Collapse all) and grows to
+         fill whatever page height the groups above leave free. -->
+    <div class="cgroup" id="cLogGroup">
+      <div class="gh">raw + log <span class="op">· hex bytes → controller · every console send/reply lands here</span></div>
+      <div class="crow"><span class="lbl">raw</span><input id="cRawHex" type="text" placeholder="hex bytes, e.g. 01 C2" style="min-width:200px" title="Raw hex bytes to send verbatim (e.g. 01 C2)">
+        <button class="pill" data-cmd="crawsend" title="Send the raw hex bytes to the controller">Send</button>
+        <span class="spacer"></span>
+        <button class="pill" data-cmd="crawclear" title="Clear the console log">Clear</button>
+        <button class="pill" data-cmd="crawcopy" title="Copy the console log to the clipboard">Copy</button></div>
+      <div class="clog" id="cLog"><span class="l-info">connect to drive the arena directly.</span></div>
     </div>
     </fieldset>
   </div>
@@ -2250,7 +2259,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.2 | 2026-07-02 01:06 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
+<footer id="footer">Arena Studio v0.2 | 2026-07-02 01:17 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -2616,7 +2625,15 @@
         try {
             const resp = await session.send(bytes, opts);
             const d = Wire.decodeResponse(resp);
-            clog('‹ ' + label + (d ? ' · status ' + d.status : '') + (d && d.ok ? ' ok' : ''), d && d.ok ? 'rx' : 'err');
+            let line = '‹ ' + label + (d ? ' · status ' + d.status + (d.ok ? ' ok' : '') : '');
+            // On an error status the firmware puts a human-readable reason in the
+            // payload (e.g. "Stop display before writing to SD") — surface it, the
+            // bare status number sent one bench session to the logs empty-handed.
+            if (d && !d.ok && d.payload && d.payload.length) {
+                const msg = new TextDecoder().decode(d.payload).replace(/\0+$/, '').trim();
+                if (msg) line += '  «' + msg + '»';
+            }
+            clog(line, d && d.ok ? 'rx' : 'err');
             return resp;
         } catch (e) {
             clog('‹ ' + label + ' failed: ' + e.message, 'err');
@@ -3003,11 +3020,19 @@
     })();
 
     // enable/disable the whole console surface on connection state
+    let sdListedThisConnection = false;
     function syncEnabled() {
         const on = !!(session && session.connected);
         $('consoleFields').disabled = !on;
         $('consoleHint').textContent = on ? 'live — drives the arena directly' : 'connect to enable';
         if (!on && $('cFtApply')) $('cFtApply').disabled = true;
+        // Auto-list the SD once per connection (parity with the standalone
+        // console) so the device-memory table + count are populated on arrival.
+        if (on && !sdListedThisConnection) {
+            sdListedThisConnection = true;
+            sdRefresh();
+        }
+        if (!on) sdListedThisConnection = false;
     }
     if (session) session.on('state', syncEnabled);
     syncEnabled();
