@@ -2308,7 +2308,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.2 | 2026-07-02 13:11 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
+<footer id="footer">Arena Studio v0.2 | 2026-07-02 13:44 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -2835,7 +2835,8 @@
             if (!confirm('Reflash panel ' + panel + ' from /firmware/panel.bin?\nThe panel is reprogrammed over SPI and reboots. Do NOT power off mid-flash.')) return;
             await quiesceDisplay(); // 0xC8 requires the display stopped
             $('cFwName').textContent = 'flashing panel ' + panel + '…';
-            const r = await send(Wire.encodeG6ProgramPanel(panel), 'G6_PROGRAM_PANEL 0xC8 · panel ' + panel, { timeoutMs: 45000, expectedCmd: Wire.OPCODES.G6_PROGRAM_PANEL });
+            // 240 s: stage ~540 pages over SPI + LittleFS commit + reboot (handoff §4.3)
+            const r = await send(Wire.encodeG6ProgramPanel(panel), 'G6_PROGRAM_PANEL 0xC8 · panel ' + panel, { timeoutMs: 240000, expectedCmd: Wire.OPCODES.G6_PROGRAM_PANEL });
             const v = r && Wire.decodeProgramPanelResponse(r);
             $('cFwName').textContent = v ? (v.ok ? 'panel ' + panel + ' flashed — Verify to confirm' : 'FAILED: ' + v.message) : 'flash failed';
         }),
@@ -2964,6 +2965,10 @@
         if (pm != null) { $('cPanelMode').value = String(pm); got.push('panel mode ' + (Wire.PANEL_DISPLAY_MODE_NAMES[pm] || pm)); }
         const mv = Wire.decodeAoVoltage(await q(Wire.encodeGetAoVoltage()));
         if (mv != null) { $('cAoMv').value = String(mv); $('cIoSum').textContent = 'A0 ' + mv + ' mV'; got.push('A0 ' + mv + ' mV'); }
+        // Persistent SD firmware state — "the arena is loaded with <release>"
+        // (handoff §5); the footer version field carries the release tag.
+        const fi = Wire.decodeFirmwareInfo(await q(Wire.encodeGetFirmwareInfo()));
+        if (fi && fi.version) { $('cFwName').textContent = 'on SD: ' + fi.version; got.push('SD fw «' + fi.version + '»'); }
         if (got.length) clog('init from controller: ' + got.join(' · '), 'info');
     }
     function downloadBlob(bytes, name, mime) {
@@ -3071,20 +3076,18 @@
         sdRefresh();
     });
     // firmware upload (0xE0)
-    // ---- panel-firmware chooser: official catalog + local .bin --------------
-    // "Official" images merge two sources (mirrors the flasher's catalog):
-    //   1. Footered ISP .bins committed under flasher/firmware/ on THIS site
-    //      (same-origin, offline-safe) — built by the panel repo's
-    //      panel/tools/make_isp_image.py from the panel-isp production builds.
-    //   2. Any *.bin artifacts in the firmware repo's published Pages
-    //      manifest.json — refreshed every time the modal opens, so images
-    //      published later appear here with no Studio change. (Today that
-    //      catalog is UF2-only; the filter simply yields nothing.)
+    // ---- panel-firmware chooser: official catalogs + local .bin -------------
+    // "Official" ISP images come from TWO schema-identical manifests (see
+    // docs/development/arena-studio-isp-firmware-push-handoff.md):
+    //   1. The firmware repo's PUBLISHED Pages manifest.json — refreshed every
+    //      time the modal opens; production entries carry isp_file/isp_sha256
+    //      once a panel-fw-v* release is tagged (fetch from Pages, NEVER from
+    //      Release assets — those send no CORS headers).
+    //   2. flasher/firmware/manifest-dev.json on THIS site (same-origin,
+    //      offline-safe) — dev/pre-release footered images committed alongside
+    //      (incl. the ISP-progress builds that draw a bar + smiley on-panel).
     const FW_PAGES_BASE = 'https://reiserlab.github.io/LED-Display_G6_Firmware_Panel';
-    const FW_LOCAL_BINS = [
-        { label: 'v0.3.1 ISP Production', file: 'flasher/firmware/g6-panel-v0.3.1-isp.bin', note: 'build dd7d3f9a · this site', isDefault: true },
-        { label: 'v0.2.1 ISP Production', file: 'flasher/firmware/g6-panel-v0.2.1-isp.bin', note: 'build dd7d3f9a · this site' }
-    ];
+    const FW_DEV_MANIFEST = 'flasher/firmware/manifest-dev.json';
     // 32-byte ISP footer: {magic "G6PANFW\0", version[16] ASCII, crc32 LE, size LE}.
     function parseIspFooter(data) {
         if (!data || data.length < 32) return null;
@@ -3096,22 +3099,47 @@
         const dv = new DataView(f.buffer, f.byteOffset);
         return { version, crc32: dv.getUint32(24, true), imageSize: dv.getUint32(28, true) };
     }
+    // CRC-32 (zlib/IEEE) — the 0xE0 reply echoes the CRC of the bytes the SD
+    // actually stored; comparing against a local CRC catches corrupt writes
+    // BEFORE a panel gets flashed from them (handoff doc §4.1).
+    const CRC32_TABLE = (() => {
+        const t = new Uint32Array(256);
+        for (let n = 0; n < 256; n++) {
+            let c = n;
+            for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+            t[n] = c >>> 0;
+        }
+        return t;
+    })();
+    function crc32(bytes) {
+        let c = 0xffffffff;
+        for (let i = 0; i < bytes.length; i++) c = CRC32_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+        return (c ^ 0xffffffff) >>> 0;
+    }
     // The ONE upload path (official fetch + local file both land here):
-    // footer check → quiesce → 0xE0 bulk → CRC echo → 0xE3 info refresh.
+    // footer check → quiesce → 0xE0 bulk → stored-CRC verify → 0xE3 info refresh.
     async function uploadFirmwareBytes(name, data) {
         if (!connected()) { clog('connect first', 'err'); return; }
         const footer = parseIspFooter(data);
         if (!footer &&
-            !confirm(name + ' has no valid G6PANFW footer — flash/verify will not work.\n' +
-                'Upload it to the SD anyway?')) return;
-        if (footer) clog(name + ': ISP image ' + footer.imageSize + ' B · build «' + footer.version + '»', 'info');
+            !confirm(name + ' has no valid G6PANFW footer — the controller will reject it ' +
+                '("bad footer magic").\nUpload it to the SD anyway?')) return;
+        if (footer) clog(name + ': ISP image ' + footer.imageSize + ' B · version «' + footer.version + '»', 'info');
         await quiesceDisplay(); // 0xE0 requires the display stopped
         $('cFwName').textContent = 'uploading ' + name + '…';
         try {
             const up = await send(Wire.encodeSetFirmwareFile(data), 'SET_FIRMWARE_FILE 0xE0 · ' + name, { timeoutMs: 120000, expectedCmd: Wire.OPCODES.SET_FIRMWARE_FILE });
-            const crc = up && Wire.decodeSetFirmwareFileResponse(up);
-            $('cFwName').textContent = crc != null ? 'uploaded (CRC-32 0x' + crc.toString(16).padStart(8, '0') + ')' : 'upload failed';
-            if (crc != null) readFirmwareInfo();
+            const stored = up && Wire.decodeSetFirmwareFileResponse(up);
+            if (stored == null) { $('cFwName').textContent = 'upload failed'; return; }
+            const local = crc32(data);
+            if (stored !== local) {
+                $('cFwName').textContent = 'SD write CRC MISMATCH — re-upload';
+                clog('stored CRC 0x' + stored.toString(16) + ' ≠ local 0x' + local.toString(16) +
+                    ' — the SD write is corrupt; do NOT flash from it', 'err');
+                return;
+            }
+            $('cFwName').textContent = 'uploaded ✓ CRC match (0x' + stored.toString(16).padStart(8, '0') + ')';
+            readFirmwareInfo();
         } catch (e) { $('cFwName').textContent = 'error: ' + e.message; }
     }
     $('cFwInput').addEventListener('change', async () => {
@@ -3161,36 +3189,59 @@
         row.appendChild(use); row.appendChild(label); row.appendChild(note);
         return row;
     }
+    // Map one manifest's artifacts into chooser rows. Both manifests share the
+    // release schema: production entries carry isp_file/isp_sha256 (footered
+    // <slug>-isp.bin next to the manifest; the footer's version field is the
+    // release tag). Legacy fallback: an artifact whose `file` is itself a .bin.
+    function manifestEntries(man, base, sourceNote) {
+        return ((man && man.artifacts) || [])
+            .filter((a) => a.isp_file || /\.bin$/i.test(a.file || ''))
+            .map((a) => ({
+                label: a.label || a.isp_file || a.file,
+                file: base + '/' + (a.isp_file || a.file),
+                sha256: a.isp_file ? a.isp_sha256 : a.sha256,
+                isDefault: !!a.default,
+                note: sourceNote + (a.rev ? ' · ' + a.rev : '')
+            }));
+    }
+    async function fetchManifest(url) {
+        const res = await fetch(url, { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+    }
     async function openFwModal() {
         const list = $('fwModalList');
         list.innerHTML = '';
-        FW_LOCAL_BINS.forEach((e) => list.appendChild(fwRow(e)));
-        fwModalStatus('checking the published catalog…');
+        fwModalStatus('fetching catalogs…');
         $('fwModal').hidden = false;
+        const notes = [];
+        // Published releases first (the real thing) …
         try {
-            const res = await fetch(FW_PAGES_BASE + '/manifest.json', { cache: 'no-store' });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
-            const man = await res.json();
-            // Release schema: production entries carry isp_file/isp_sha256 (the
-            // footered <slug>-isp.bin published alongside the manifest — the
-            // footer's version field is the release tag). Legacy fallback: any
-            // artifact whose `file` is itself a .bin.
-            const bins = (man.artifacts || []).filter((a) => a.isp_file || /\.bin$/i.test(a.file || ''));
-            for (const a of bins) {
-                const rel = a.isp_file || a.file;
-                list.appendChild(fwRow({
-                    label: (a.label || rel) + (a.isp_file ? ' (ISP)' : ''),
-                    file: FW_PAGES_BASE + '/' + rel,
-                    sha256: a.isp_file ? a.isp_sha256 : a.sha256,
-                    note: 'published · ' + (man.version || '') + (a.rev ? ' · ' + a.rev : '')
-                }));
-            }
-            fwModalStatus(bins.length
-                ? 'catalog: ' + bins.length + ' published ISP image(s) · release ' + (man.version || '?')
-                : 'published catalog has no ISP images yet — using this site\'s copies');
+            const man = await fetchManifest(FW_PAGES_BASE + '/manifest.json');
+            const entries = manifestEntries(man, FW_PAGES_BASE, 'published');
+            entries.forEach((e) => list.appendChild(fwRow(e)));
+            notes.push(entries.length
+                ? entries.length + ' published (' + (man.version || '?') + ')'
+                : 'no published ISP images yet (tag a panel-fw-v* release)');
         } catch (e) {
-            fwModalStatus('published catalog unreachable (' + (e.message || e) + ') — using this site\'s copies');
+            notes.push('published catalog unreachable');
         }
+        // … then this site's committed dev images (offline-safe fallback).
+        try {
+            const man = await fetchManifest(FW_DEV_MANIFEST);
+            const entries = manifestEntries(man, 'flasher/firmware', 'dev · this site');
+            entries.forEach((e) => list.appendChild(fwRow(e)));
+            notes.push(entries.length + ' dev');
+        } catch (e) {
+            notes.push('dev manifest unavailable');
+        }
+        if (!list.children.length) {
+            const d = document.createElement('div');
+            d.className = 'dim';
+            d.textContent = 'No official images reachable — use Load local .bin…';
+            list.appendChild(d);
+        }
+        fwModalStatus(notes.join(' · '));
     }
     $('fwModalClose').addEventListener('click', closeFwModal);
     $('fwModalCancel').addEventListener('click', closeFwModal);
@@ -4035,7 +4086,7 @@ Studio.ispBatchRun = async function () {
                 }
                 const r = await ispSend(
                     'g6-program-panel ' + panel + (attempt === 2 ? ' (retry)' : ''),
-                    Wire.encodeG6ProgramPanel(panel), Wire.OPCODES.G6_PROGRAM_PANEL, 45000);
+                    Wire.encodeG6ProgramPanel(panel), Wire.OPCODES.G6_PROGRAM_PANEL, 240000);
                 if (r.ok) { flashed = true; lastMsg = r.message; }
                 else lastMsg = r.message || (r.timeout ? 'timeout' : 'error');
             }

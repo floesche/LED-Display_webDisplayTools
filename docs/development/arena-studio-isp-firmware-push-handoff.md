@@ -101,5 +101,5 @@ timeout, always verify after program.
 | Release pipeline publishes ISP bins | firmware repo **PR #17** (open) |
 | Merged production firmware (two-PIO+ISP) | firmware repo **PR #15** (open; fleet already runs it) |
 | Progress-bar/smiley firmware | branch `isp-progress-display` (23d66af; USB-validated, arena ISP demo pending) |
-| Dev artifacts + this doc | this branch |
-| Arena Studio fetch/push UI | **← your job** |
+| Dev artifacts + this doc | merged (webDisplayTools PR #134) |
+| Arena Studio fetch/push UI | ✅ **shipped 2026-07-02** — `arena_studio.html` Console → panel-firmware tile → Choose… modal: consumes BOTH manifests (published Pages + `manifest-dev.json`, refreshed per open), verifies `isp_sha256` post-fetch, validates the G6PANFW footer, checks the 0xE0 stored-CRC against a local crc32 before any flash, 240 s program timeouts, on-SD footer version shown at connect. Single + batch (retry-once, per-panel report, blink progress map) included. |
