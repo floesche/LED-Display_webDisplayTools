@@ -2039,8 +2039,9 @@
       <span style="font-family:var(--head);text-transform:uppercase;letter-spacing:.6px;font-size:11px">⛭ Console — bench surface</span>
       <span class="ic" title="The Console drives the arena directly over the live connection, independent of the loaded protocol. Connect (top bar) to enable it. Uncommon queries/settings live in the Controller ▾ / Debug ▾ menus.">i</span>
       <span class="dim" id="consoleHint">connect to enable</span>
-      <label class="dim" style="font-size:11px;display:flex;align-items:center;gap:5px" title="Arena/rig for bench work — sets the geometry for stream frames + FicTrac. Defaults to the loaded protocol's rig; override here for standalone bench use.">arena
-        <select id="cArena" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 6px;font-family:var(--mono);font-size:11px"></select>
+      <label class="dim" style="font-size:11px;display:flex;align-items:center;gap:5px" title="Arena/rig for bench work — sets the geometry for stream frames, the ISP progress map, and FicTrac. Follows the loaded protocol's rig; LOCKED against accidental change (see #135 — one shared selection across views is planned).">arena
+        <select id="cArena" disabled style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 6px;font-family:var(--mono);font-size:11px"></select>
+        <button class="pill" id="cArenaLock" style="padding:2px 7px;font-size:11px" title="Arena selection is locked — click to unlock (changing it alters what geometry gets streamed to the hardware)">🔒</button>
       </label>
       <span class="ca-acts">
         <button class="pill" id="cExpandAll">Expand all</button>
@@ -2308,7 +2309,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.2 | 2026-07-02 13:44 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
+<footer id="footer">Arena Studio v0.2 | 2026-07-02 13:57 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -3493,6 +3494,18 @@ async function populateArenaSelect() {
         const opt = sel.selectedOptions[0];
         Studio.consoleArena = opt ? { name: opt.value, arenaConfig: opt.dataset.arena } : null;
         updateIspShowUI(); // the batch progress map needs a 20-panel layout
+    });
+    // Locked by default — changing the bench arena is a deliberate, rare act
+    // (it silently changes stream/ISP geometry). Programmatic follow of the
+    // loaded protocol's rig (selectConsoleArena) still works while locked.
+    // One shared cross-view selection is #135.
+    const lockBtn = $('cArenaLock');
+    if (lockBtn) lockBtn.addEventListener('click', () => {
+        sel.disabled = !sel.disabled;
+        lockBtn.textContent = sel.disabled ? '🔒' : '🔓';
+        lockBtn.title = sel.disabled
+            ? 'Arena selection is locked — click to unlock (changing it alters what geometry gets streamed to the hardware)'
+            : 'Arena selection UNLOCKED — pick the bench arena, then click to re-lock';
     });
     if (rigIndex && rigIndex[0]) Studio.consoleArena = { name: rigIndex[0].name, arenaConfig: rigIndex[0].arena };
     updateIspShowUI();
