@@ -451,6 +451,9 @@
       <span style="font-family:var(--head);text-transform:uppercase;letter-spacing:.6px;font-size:11px">⛭ Console — bench surface</span>
       <span class="ic" title="The Console drives the arena directly over the live connection, independent of the loaded protocol. Connect (top bar) to enable it. Uncommon queries/settings live in the Controller ▾ / Debug ▾ menus.">i</span>
       <span class="dim" id="consoleHint">connect to enable</span>
+      <label class="dim" style="font-size:11px;display:flex;align-items:center;gap:5px" title="Arena/rig for bench work — sets the geometry for stream frames + FicTrac. Defaults to the loaded protocol's rig; override here for standalone bench use.">arena
+        <select id="cArena" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 6px;font-family:var(--mono);font-size:11px"></select>
+      </label>
       <span class="ca-acts">
         <button class="pill" id="cExpandAll">Expand all</button>
         <button class="pill" id="cCollapseAll">Collapse all</button>
@@ -535,11 +538,12 @@
         <summary class="gh">frame stepper <span class="op">· mode 3 · 0x70</span><span class="sum" id="cStepSum">frame – / –</span></summary>
         <div class="cbody">
           <div class="crow"><span class="lbl">frame</span>
+            <button class="pill" data-cmd="cframeload" title="Load the 'pat idx' pattern in Mode 3 (TRIAL_PARAMS mode 3, rate 0) so frame jumps + FicTrac closed-loop apply">Load (mode 3)</button>
             <button class="pill" data-cmd="cframeprev">◀</button>
             <input id="cFrame" type="number" value="0" style="width:56px">
             <button class="pill" data-cmd="cframego">Go</button>
             <button class="pill" data-cmd="cframenext">▶</button>
-            <span class="dim">SET_FRAME_POSITION 0x70</span>
+            <span class="dim" id="cStepState">not loaded · 0x70</span>
           </div>
         </div>
       </details>
@@ -599,6 +603,23 @@
             <button class="pill" data-cmd="cfwinfo" title="GET_FIRMWARE_INFO 0xE3">Info</button>
             <button class="pill danger" data-cmd="cfwflash" title="Upload (0xE0) + program (0xC8)">Flash</button>
             <button class="pill" data-cmd="cfwverify" title="Verify (0xC9)">Verify</button></div>
+        </div>
+      </details>
+
+      <details class="cgroup" id="cFtGroup">
+        <summary class="gh">fictrac bridge <span class="op">· closed-loop Mode 3 (#131)</span><span class="sum" id="cFtSum">ws · idle</span></summary>
+        <div class="cbody">
+          <div class="crow"><span class="lbl">bridge</span>
+            <input id="cFtUrl" type="text" value="ws://localhost:8765" style="min-width:170px" title="WebSocket URL of the local FicTrac bridge (fictrac-bridge/bridge.py)">
+            <button class="pill" data-cmd="cftconn" id="cFtConnBtn">Connect</button>
+            <span class="dim" id="cFtStatus">disconnected</span>
+            <span class="dim" id="cFtStat"></span></div>
+          <div class="crow" style="margin-bottom:0"><span class="lbl">closed-loop</span>
+            <label title="Apply each FicTrac heading → SET_FRAME_POSITION (needs a Mode-3 pattern loaded in the stepper)"><input type="checkbox" id="cFtApply" disabled> activate</label>
+            <label>port <input id="cFtPort" type="number" min="1" max="65535" value="60000" style="width:72px" title="UDP/TCP port the bridge listens on for FicTrac"></label>
+            <label>gain <input id="cFtGain" type="number" step="0.1" value="1.8" style="width:64px" title="heading degrees per frame index (1.8 = 360°/200)"></label>
+            <span id="cFtPresets" class="seg2"></span>
+            <label title="Log FicTrac frames + arena commands to a JSONL file"><input type="checkbox" id="cFtLog"> log</label></div>
         </div>
       </details>
 
@@ -946,6 +967,9 @@
     const Wire = window.ArenaWireG6;
     const session = Studio.session;
 
+    const consoleState = { stepperLoaded: false, frameCount: null };
+    Studio.consoleState = consoleState;
+
     const logEl = () => $('cLog');
     function clog(text, cls) {
         const box = logEl();
@@ -1012,9 +1036,29 @@
                 : 'no reply';
         },
         // frame stepper (0x70)
+        cframeload: async () => {
+            const pat = num('cPat');
+            await send(Wire.encodeTrialParams({ mode: 3, patternId: pat, frameRate: 0, gain: 0, initPos: 0 }), 'load Mode 3 · pat ' + pat);
+            // pull frame count so the stepper + FicTrac clamp know the range
+            try {
+                const r = await session.send(Wire.encodeGetPatternInfo(pat));
+                const info = Wire.decodePatternInfo(r);
+                consoleState.frameCount = info && Number.isFinite(info.frames) ? info.frames : null;
+            } catch (e) { consoleState.frameCount = null; }
+            consoleState.stepperLoaded = true;
+            $('cStepState').textContent = 'loaded pat ' + pat + (consoleState.frameCount ? ' · ' + consoleState.frameCount + ' fr' : '') + ' · 0x70';
+            $('cFtApply').disabled = !(session && session.connected);
+        },
         cframego: () => send(Wire.encodeSetFramePosition(num('cFrame')), 'SET_FRAME_POSITION 0x70 → ' + num('cFrame')),
         cframeprev: () => { const v = Math.max(0, num('cFrame') - 1); $('cFrame').value = v; send(Wire.encodeSetFramePosition(v), 'SET_FRAME_POSITION 0x70 → ' + v); },
         cframenext: () => { const v = num('cFrame') + 1; $('cFrame').value = v; send(Wire.encodeSetFramePosition(v), 'SET_FRAME_POSITION 0x70 → ' + v); },
+        // FicTrac bridge connect/disconnect (WebSocket to fictrac-bridge/bridge.py)
+        cftconn: () => {
+            const bridge = session && session.bridge;
+            if (!bridge) { clog('FicTrac bridge client unavailable', 'err'); return; }
+            if (bridge.connected) { bridge.disconnect(); }
+            else { ftSendConfig(); bridge.connect(($('cFtUrl').value || 'ws://localhost:8765').trim()); }
+        },
         // SD list
         csdlist: async () => {
             const resp = await send(Wire.encodeGetFileCount(), 'GET_FILE_COUNT 0x80');
@@ -1129,11 +1173,62 @@
     $('cExpandAll').addEventListener('click', () => document.querySelectorAll('.console-view details.cgroup').forEach((d) => (d.open = true)));
     $('cCollapseAll').addEventListener('click', () => document.querySelectorAll('.console-view details.cgroup').forEach((d) => (d.open = false)));
 
+    // ---- FicTrac bridge wiring (mirrors arena_console; uses the shared session bridge) ----
+    function ftSendConfig() {
+        const bridge = session && session.bridge;
+        if (!bridge) return;
+        const cfg = {};
+        const port = parseInt($('cFtPort').value, 10);
+        const gain = parseFloat($('cFtGain').value);
+        if (Number.isFinite(port)) cfg.fictrac_port = port;
+        if (Number.isFinite(gain)) cfg.gain = gain;
+        if (consoleState.frameCount) cfg.frames = consoleState.frameCount;
+        bridge.setConfig(cfg);
+    }
+    (function initFictrac() {
+        const bridge = session && session.bridge;
+        const group = $('cFtGroup');
+        if (!bridge) { if (group) group.style.opacity = '.5'; return; }
+        // closed-loop apply gate: a Mode-3 pattern must be loaded + connected.
+        bridge.setCanApply(() => consoleState.stepperLoaded && session.connected);
+        bridge.setClampFrame((i) => {
+            const n = consoleState.frameCount;
+            if (!n) return i;
+            return ((i % n) + n) % n;
+        });
+        // gain presets (forward / reverse)
+        const presets = $('cFtPresets');
+        [['1.8', 1.8], ['−1.8', -1.8]].forEach(([label, val]) => {
+            const b = document.createElement('button');
+            b.textContent = label;
+            b.addEventListener('click', () => { $('cFtGain').value = val; if (bridge.connected) ftSendConfig(); });
+            presets.appendChild(b);
+        });
+        bridge.on('status', (text, kind) => {
+            $('cFtStatus').textContent = text;
+            const on = bridge.connected;
+            $('cFtConnBtn').textContent = on ? 'Disconnect' : 'Connect';
+            $('cFtApply').disabled = !(on && consoleState.stepperLoaded && session.connected);
+            $('cFtSum').textContent = 'ws · ' + (on ? 'connected' : 'idle');
+            if (!on) { $('cFtApply').checked = false; bridge.setApply(false); }
+            clog('fictrac: ' + text, kind === 'err' ? 'err' : 'info');
+        });
+        bridge.on('stats', (s) => {
+            $('cFtStat').textContent = s ? 'rx ' + s.recv + ' · applied ' + s.applied + ' · drop ' + s.drop + ' · ~' + Math.round(s.rateHz) + ' Hz' : '';
+        });
+        bridge.on('blocked', () => { $('cFtStat').textContent = 'blocked (load a Mode-3 pattern first)'; });
+        $('cFtApply').addEventListener('change', (e) => bridge.setApply(e.target.checked));
+        $('cFtLog').addEventListener('change', (e) => bridge.setLogging(e.target.checked));
+        $('cFtGain').addEventListener('change', () => { if (bridge.connected) ftSendConfig(); });
+        $('cFtPort').addEventListener('change', () => { if (bridge.connected) ftSendConfig(); });
+    })();
+
     // enable/disable the whole console surface on connection state
     function syncEnabled() {
         const on = !!(session && session.connected);
         $('consoleFields').disabled = !on;
         $('consoleHint').textContent = on ? 'live — drives the arena directly' : 'connect to enable';
+        if (!on && $('cFtApply')) $('cFtApply').disabled = true;
     }
     if (session) session.on('state', syncEnabled);
     syncEnabled();
@@ -1176,6 +1271,32 @@ function rigInfoForPath(rigPath) {
     const base = String(rigPath).split('/').pop();
     const hit = (rigIndex || []).find((r) => String(r.path).split('/').pop() === base);
     return hit ? { name: hit.name, arenaConfig: hit.arena } : { name: base.replace(/\.ya?ml$/i, ''), arenaConfig: null };
+}
+// Console arena/rig selector — bench geometry, independent of a loaded protocol.
+async function populateArenaSelect() {
+    await ensureRigIndex();
+    const sel = $('cArena');
+    if (!sel) return;
+    sel.innerHTML = '';
+    (rigIndex || []).forEach((r) => {
+        const o = document.createElement('option');
+        o.value = r.name;
+        o.textContent = r.label || r.name;
+        o.dataset.arena = r.arena || '';
+        sel.appendChild(o);
+    });
+    sel.addEventListener('change', () => {
+        const opt = sel.selectedOptions[0];
+        Studio.consoleArena = opt ? { name: opt.value, arenaConfig: opt.dataset.arena } : null;
+    });
+    if (rigIndex && rigIndex[0]) Studio.consoleArena = { name: rigIndex[0].name, arenaConfig: rigIndex[0].arena };
+}
+// Point the console arena selector at a rig name (called when a protocol loads).
+function selectConsoleArena(rigName) {
+    const sel = $('cArena');
+    if (!sel || !rigName) return;
+    const opt = Array.from(sel.options).find((o) => o.value === rigName);
+    if (opt) { sel.value = rigName; Studio.consoleArena = { name: opt.value, arenaConfig: opt.dataset.arena }; }
 }
 
 // ---- metadata controlled vocabularies ----
@@ -1282,6 +1403,7 @@ Studio.loadProtocol = async function (text, filename, source) {
     $('pvRig').textContent = rig.name || '—';
     $('pvFw').textContent = Studio.firmware || '(connect)';
     renderSequence(exp);
+    if (rig.name) selectConsoleArena(rig.name);
     Studio.refreshState();
     Studio.setMode('run');
     return true;
@@ -1653,6 +1775,7 @@ Studio.onModeChange = (m) => {
 // ---- URL state (#107) on load ----
 async function initFromUrl() {
     await populateMetaDatalists();
+    await populateArenaSelect();
     let allowedKeys = [];
     let protoIndex = [];
     try {
