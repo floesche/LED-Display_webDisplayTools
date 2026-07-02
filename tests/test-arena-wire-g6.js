@@ -233,6 +233,20 @@ checkBool(
     Wire.decodeControllerInfo(Uint8Array.from([0x04, 0x01, 0xc2, 0x02, 0x11])) === null
 );
 
+// Optional trailing MAC (6 bytes) — physical-setup identity from the Teensy
+// unique ID. Old firmware (2-byte payload) → mac null; extended reply → parsed.
+checkBool(
+    'decodeControllerInfo mac null on old fw',
+    Wire.decodeControllerInfo(Uint8Array.from([0x04, 0x00, 0xc2, 0x02, 0x11])).mac === null
+);
+check(
+    'decodeControllerInfo mac parsed',
+    Wire.decodeControllerInfo(
+        Uint8Array.from([0x0a, 0x00, 0xc2, 0x02, 0x11, 0x04, 0xe9, 0xe5, 0xab, 0xcd, 0x12])
+    ).mac,
+    '04:E9:E5:AB:CD:12'
+);
+
 // SPI clock reply: [len=4, status=0, echo=0xC6, 20, 0] -> 20 MHz.
 check('decodeSpiClock', Wire.decodeSpiClock(Uint8Array.from([0x04, 0x00, 0xc6, 0x14, 0x00])), 20);
 checkBool(

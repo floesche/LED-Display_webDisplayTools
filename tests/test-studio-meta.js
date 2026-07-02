@@ -56,7 +56,7 @@ const meta = M.buildMeta({
     runId: 'abc123',
     panel: { experimenter: '  mreiser ', genotype: 'Canton-S', notes: ' fly 7 ' },
     doc: { filename: 'looming_v3.yaml', sha256: 'deadbeef' },
-    session: { firmware: 'v1' },
+    session: { firmware: 'v1', controllerId: '04:E9:E5:AB:CD:12' },
     rig: { name: 'cshl_g6_2x10', arenaConfig: 'G6_2x10' },
     toolVersion: 'Arena Studio v0.1'
 });
@@ -69,12 +69,14 @@ check('protocol_sha256', meta.protocol_sha256, 'deadbeef');
 check('arena_config from rig', meta.arena_config, 'G6_2x10');
 check('rig name', meta.rig, 'cshl_g6_2x10');
 check('firmware from session', meta.firmware, 'v1');
+check('controller_id from session', meta.controller_id, '04:E9:E5:AB:CD:12');
 check('tool_version', meta.tool_version, 'Arena Studio v0.1');
 
 const bare = M.buildMeta({});
 check('missing filename → untitled', bare.protocol_filename, 'untitled.yaml');
 check('missing sha → null', bare.protocol_sha256, null);
 check('missing fw → null', bare.firmware, null);
+check('missing controller_id → null', bare.controller_id, null);
 check('missing experimenter → empty string', bare.experimenter, '');
 
 // ── canMutate ────────────────────────────────────────────────────────────────

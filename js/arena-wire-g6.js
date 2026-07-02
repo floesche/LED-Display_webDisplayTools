@@ -575,7 +575,17 @@ const ArenaWireG6 = (function () {
         const capabilities = CAPABILITY_BITS.filter(([bit]) => capability & (1 << bit)).map(
             ([, name]) => name
         );
-        return { version, capability, capabilities };
+        // Optional trailing MAC (6 bytes) — the controller's Ethernet MAC is
+        // derived from the Teensy's burned-in unique ID, so it identifies the
+        // physical setup. Older firmware sends only {version, capability};
+        // mac is null then (tolerant extension, see firmware issue).
+        let mac = null;
+        if (r.payload.length >= 8) {
+            mac = Array.from(r.payload.slice(2, 8))
+                .map((b) => b.toString(16).padStart(2, '0').toUpperCase())
+                .join(':');
+        }
+        return { version, capability, capabilities, mac };
     }
 
     // set/get-spi-clock (0xC5/0xC6) reply carries the clock as uint16 LE MHz.

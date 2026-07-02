@@ -41,7 +41,7 @@
      * @param {object} a
      * @param {object} a.panel   {experimenter, genotype, notes} from the side panel
      * @param {object} a.doc     {filename, sha256}  loaded/edited protocol
-     * @param {object} a.session {firmware}          from GET_CONTROLLER_INFO 0xC2 only
+     * @param {object} a.session {firmware, controllerId} from GET_CONTROLLER_INFO 0xC2 only
      * @param {object} a.rig     {name, arenaConfig} from the loaded rig YAML (NOT the controller)
      * @param {string} a.toolVersion  e.g. 'Arena Studio v0.1'
      * @param {string} a.runId
@@ -63,6 +63,10 @@
             arena_config: rig.arenaConfig || null,
             rig: rig.name || null,
             firmware: session.firmware || null,
+            // Physical-setup identity: the controller's Ethernet MAC, derived
+            // from the Teensy's burned-in unique ID. null until the firmware
+            // ships it in the 0xC2 reply (tolerant decode on the web side).
+            controller_id: session.controllerId || null,
             tool_version: o.toolVersion || null
         };
     }

@@ -1836,6 +1836,7 @@
           <div>sha256: <span class="sha" id="pvSha">—</span></div>
           <div>arena: <b id="pvArena">—</b> · rig: <b id="pvRig">—</b></div>
           <div>firmware: <b id="pvFw">—</b></div>
+          <div>controller: <b id="pvCtl" title="Physical-setup identity — the controller's Ethernet MAC, derived from the Teensy's burned-in unique ID. Recorded in the run log as controller_id.">—</b></div>
           <div>run_id: <b id="pvRunId">— (assigned at run start)</b></div>
         </div>
       </div>
@@ -2309,7 +2310,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.2 | 2026-07-02 13:57 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
+<footer id="footer">Arena Studio v0.2 | 2026-07-02 17:14 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -2523,7 +2524,14 @@
                 const info = Wire.decodeControllerInfo(resp);
                 if (info) {
                     Studio.firmware = 'v' + info.version;
-                    rawLine('‹ controller info: fw v' + info.version + ' · caps [' + info.capabilities.join(', ') + ']', 'info');
+                    // Physical-setup identity (Teensy unique ID → Ethernet MAC);
+                    // null until the firmware appends it to the 0xC2 reply.
+                    Studio.controllerId = info.mac || null;
+                    rawLine('‹ controller info: fw v' + info.version +
+                        ' · caps [' + info.capabilities.join(', ') + ']' +
+                        (info.mac ? ' · id ' + info.mac : ''), 'info');
+                    const ctl = $('pvCtl');
+                    if (ctl) ctl.textContent = Studio.controllerId || '— (needs fw with MAC in 0xC2)';
                 }
             } catch (e) { /* older fw / no reply — fine */ }
             refreshState();
@@ -2613,6 +2621,12 @@
             rawLine(m, cls);
         });
         Studio.session.on('error', (e) => rawLine('error: ' + (e && e.message ? e.message : e), 'err'));
+        // FicTrac bridge lifecycle into the unified run log — a run that expects
+        // the bridge must not fail SILENTLY when it's absent (bench finding).
+        if (Studio.session.bridge) {
+            Studio.session.bridge.on('log', (m, kind) => rawLine('bridge: ' + m, kind === 'err' ? 'err' : 'info'));
+            Studio.session.bridge.on('status', (text, kind) => rawLine('bridge: ' + text, kind === 'err' ? 'err' : 'info'));
+        }
         Studio.session.on('disconnect', (info) => {
             if (info && info.involuntary && Studio.activeRunLog && !Studio.activeRunLog.summary) {
                 Adapter.finishDisconnected(Studio.activeRunLog, { aborted: true, steps: 0, errors: 0, skipped: 0 });
@@ -2875,7 +2889,14 @@
         info: async () => {
             const resp = await send(Wire.encodeGetControllerInfo(), 'GET_CONTROLLER_INFO 0xC2');
             const info = resp && Wire.decodeControllerInfo(resp);
-            if (info) { Studio.firmware = 'v' + info.version; Studio.refreshState(); clog('  fw v' + info.version + ' · caps [' + info.capabilities.join(', ') + ']', 'info'); }
+            if (info) {
+                Studio.firmware = 'v' + info.version;
+                Studio.controllerId = info.mac || Studio.controllerId || null;
+                if ($('pvCtl')) $('pvCtl').textContent = Studio.controllerId || '— (needs fw with MAC in 0xC2)';
+                Studio.refreshState();
+                clog('  fw v' + info.version + ' · caps [' + info.capabilities.join(', ') + ']' +
+                    (info.mac ? ' · id ' + info.mac : ' · (no MAC in reply — older fw)'), 'info');
+            }
         },
         ip: async () => { const r = await send(Wire.encodeGetIp(), 'GET_ETHERNET_IP 0xC1'); const ip = r && Wire.decodeIp && Wire.decodeIp(r); if (ip) clog('  ip ' + ip, 'info'); },
         frames: async () => { const r = await send(Wire.encodeGetFramesSent(), 'GET_FRAMES_SENT 0x33'); const n = r && Wire.decodeFramesSent(r); if (n != null) clog('  frames sent ' + n, 'info'); },
@@ -4500,7 +4521,7 @@ function startRunLog(isExperiment) {
         runId,
         panel: { experimenter: $('mExp').value, genotype: $('mGeno').value, notes: $('mNotes').value },
         doc: { filename: doc.filename, sha256: doc.sha256 },
-        session: { firmware: Studio.firmware },
+        session: { firmware: Studio.firmware, controllerId: Studio.controllerId },
         rig: doc.rig,
         toolVersion: Studio.TOOL_VERSION
     });
@@ -4522,6 +4543,36 @@ async function runSteps(steps, conditionsByName, exp) {
     // A pending console auto-stop firing mid-run would kill the sequence.
     if (Studio.clearConsoleAutoStop) Studio.clearConsoleAutoStop();
     const ftNames = fictracPluginNames(exp);
+    // FicTrac auto-connect (ported from the standalone designer — it got lost
+    // in the embed): when the experiment declares a fictrac plugin, connect
+    // the bridge BEFORE the run so fictrac.connect/startClosedLoop commands
+    // and the default-on JSONL logging actually do something. The runner's
+    // fictracConnect op calls bridge.connect() with NO url, so the url must be
+    // primed here (console field, default ws://localhost:8765); port/gain come
+    // from the protocol's plugin config.
+    const bridge = Studio.session && Studio.session.bridge;
+    if (ftNames.length && bridge) {
+        const plug = (exp.plugins || []).find((p) => p && ftNames.includes(p.name));
+        const pcfg = (plug && plug.config) || {};
+        const cfg = {};
+        if (Number.isFinite(Number(pcfg.fictrac_port))) cfg.fictrac_port = Number(pcfg.fictrac_port);
+        if (Number.isFinite(Number(pcfg.gain))) cfg.gain = Number(pcfg.gain);
+        if (Object.keys(cfg).length) bridge.setConfig(cfg);
+        bridge.setLogging(true); // default-on: no experiment untracked
+        if ($('cFtLog')) $('cFtLog').checked = true; // keep the console toggle honest
+        if (!bridge.connected) {
+            const url = ((($('cFtUrl') || {}).value) || 'ws://localhost:8765').trim();
+            try { bridge.connect(url); } catch (_) { /* status surfaces below */ }
+            for (let i = 0; i < 20 && !bridge.connected; i++) {
+                await new Promise((r) => setTimeout(r, 25));
+            }
+        }
+        Studio.rawLog(bridge.connected
+            ? 'fictrac bridge: connected · logging to JSONL'
+            : '⚠ fictrac bridge NOT connected (' + ((($('cFtUrl') || {}).value) || 'ws://localhost:8765') +
+              ') — closed-loop + logging INACTIVE. Start it (`pixi run bridge`) and re-run.',
+            bridge.connected ? 'info' : 'err');
+    }
     try {
         // NOTE: do NOT pass onProgress — the session broadcasts 'runstatus' which
         // Studio.onRunStatus (subscribed once) consumes, so the log/highlight stay
