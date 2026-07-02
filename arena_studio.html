@@ -2120,10 +2120,10 @@
         <div class="cbody">
           <div class="crow"><span class="lbl">frame</span>
             <button class="pill" data-cmd="cframeload" title="Load the 'pat idx' pattern in Mode 3 (TRIAL_PARAMS mode 3, rate 0) so frame jumps + FicTrac closed-loop apply">Load (mode 3)</button>
-            <button class="pill" data-cmd="cframeprev">◀</button>
-            <input id="cFrame" type="number" value="0" style="width:56px">
-            <button class="pill" data-cmd="cframego">Go</button>
-            <button class="pill" data-cmd="cframenext">▶</button>
+            <button class="pill" data-cmd="cframeprev" title="Previous frame — wraps to the last frame below 0">◀</button>
+            <input id="cFrame" type="number" value="0" style="width:56px" title="0-based frame index (SET_FRAME_POSITION 0x70)">
+            <button class="pill" data-cmd="cframego" title="Jump to this frame">Go</button>
+            <button class="pill" data-cmd="cframenext" title="Next frame — wraps to 0 past the last frame">▶</button>
             <span class="dim" id="cStepState">not loaded · 0x70</span>
           </div>
         </div>
@@ -2160,8 +2160,9 @@
         <div class="cbody">
           <div class="crow"><span class="lbl">depth</span>
             <span class="seg2"><button id="cGs16" class="on" data-cmd="cgs16">GS16</button><button id="cGs2" data-cmd="cgs2">GS2</button></span>
-            <label>level <input id="cLevel" type="range" min="0" max="15" value="15" style="width:90px"> <span class="dim" id="cLevelVal">15/15</span></label>
-            <label>duty <input id="cDuty" type="range" min="0" max="255" value="128" style="width:90px"></label></div>
+            <label>level <input id="cLevel" type="range" min="0" max="15" value="15" style="width:90px" title="GS16 brightness level (0–15) for the full-field figure"> <span class="dim" id="cLevelVal">15/15</span></label>
+            <label>duty <input id="cDuty" type="range" min="0" max="255" value="128" style="width:90px" title="Per-LED duty/stretch byte (0–255) written into each streamed panel block">
+            <input id="cDutyNum" type="number" min="0" max="255" step="1" value="128" style="width:56px" title="Duty 0–255 — type a value directly (clamped) or use the slider"></label></div>
           <div class="crow"><span class="lbl">send</span>
             <button class="pill" data-cmd="cstreamff">Full-field</button>
             <button class="pill" data-cmd="cstreampm">Panel map</button>
@@ -2259,7 +2260,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.2 | 2026-07-02 07:37 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
+<footer id="footer">Arena Studio v0.2 | 2026-07-02 07:40 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -2719,8 +2720,22 @@
             $('cFtApply').disabled = !(session && session.connected);
         },
         cframego: () => send(Wire.encodeSetFramePosition(num('cFrame')), 'SET_FRAME_POSITION 0x70 → ' + num('cFrame')),
-        cframeprev: () => { const v = Math.max(0, num('cFrame') - 1); $('cFrame').value = v; send(Wire.encodeSetFramePosition(v), 'SET_FRAME_POSITION 0x70 → ' + v); },
-        cframenext: () => { const v = num('cFrame') + 1; $('cFrame').value = v; send(Wire.encodeSetFramePosition(v), 'SET_FRAME_POSITION 0x70 → ' + v); },
+        // ◀/▶ wrap at the ends when the frame count is known (0-based frames, so
+        // max = frameCount-1). Unknown count (no Load yet): clamp at 0 / free-run up.
+        cframeprev: () => {
+            const n = consoleState.frameCount;
+            let v = num('cFrame') - 1;
+            if (v < 0) v = n ? n - 1 : 0;
+            $('cFrame').value = v;
+            send(Wire.encodeSetFramePosition(v), 'SET_FRAME_POSITION 0x70 → ' + v);
+        },
+        cframenext: () => {
+            const n = consoleState.frameCount;
+            let v = num('cFrame') + 1;
+            if (n && v >= n) v = 0;
+            $('cFrame').value = v;
+            send(Wire.encodeSetFramePosition(v), 'SET_FRAME_POSITION 0x70 → ' + v);
+        },
         // FicTrac bridge connect/disconnect (WebSocket to fictrac-bridge/bridge.py)
         cftconn: () => {
             const bridge = session && session.bridge;
@@ -3025,9 +3040,22 @@
     });
     // expose the console trace logger so the module block (stream) can write here
     Studio.clog = clog;
-    // level slider readout + duty → module-block stream state
+    // level slider readout + duty → module-block stream state. The duty slider
+    // and its number box stay in lockstep; typed values clamp to 0–255.
     $('cLevel').addEventListener('input', () => { $('cLevelVal').textContent = $('cLevel').value + '/15'; });
-    $('cDuty').addEventListener('input', () => { if (Studio.setStreamDuty) Studio.setStreamDuty(Number($('cDuty').value)); });
+    function applyDuty(v) {
+        // A number input holding garbage reports '' (and Number('') === 0), so
+        // treat empty as "keep the current value", not as zero.
+        const raw = String(v).trim();
+        let n = raw === '' ? NaN : Math.round(Number(raw));
+        if (!Number.isFinite(n)) n = Number($('cDuty').value);
+        n = Math.min(255, Math.max(0, n));
+        $('cDuty').value = n;
+        $('cDutyNum').value = n;
+        if (Studio.setStreamDuty) Studio.setStreamDuty(n);
+    }
+    $('cDuty').addEventListener('input', () => applyDuty($('cDuty').value));
+    $('cDutyNum').addEventListener('change', () => applyDuty($('cDutyNum').value));
 
     // console dropdown menus (Controller ▾ / Debug ▾) — open/close + click-away
     document.querySelectorAll('.cmenu[data-cmenu] > .cmenu-btn').forEach((btn) => {
