@@ -1142,7 +1142,7 @@
         cstreampm: () => Studio.doStream && Studio.doStream('panelmap'),
         cstreamor: () => Studio.doStream && Studio.doStream('orientation'),
         cstreamck: () => Studio.doStream && Studio.doStream('checker'),
-        cloadfile: () => notPorted('.bin/.pat load'),
+        cloadfile: () => { if (Studio.filePlaying && Studio.filePlaying()) Studio.stopFilePlay('user'); else $('cFileInput').click(); },
         cfwpick: () => notPorted('firmware flash'),
         cfwinfo: () => notPorted('firmware info'),
         cfwflash: () => notPorted('firmware flash'),
@@ -1587,6 +1587,67 @@ Studio.doStream = async function (kind) {
         clog('› STREAM_FRAME 0x32 · ' + kind + ' (' + (streamGs === 2 ? 'GS2' : 'GS16') + ')', 'tx');
     } catch (e) { clog('stream send failed: ' + (e.message || e), 'err'); }
 };
+
+// ---- .bin/.pat host-stream (via js/bin-classifier.js) ----
+const Bin = window.BinClassifier;
+const filePlay = { frames: [], idx: 0, timer: null, name: '' };
+Studio.filePlaying = () => filePlay.timer != null;
+Studio.stopFilePlay = function (reason) {
+    const clog = Studio.clog || Studio.rawLog;
+    const was = filePlay.timer != null;
+    if (filePlay.timer != null) { clearTimeout(filePlay.timer); filePlay.timer = null; }
+    filePlay.frames = [];
+    const b = document.querySelector('[data-cmd="cloadfile"]');
+    if (b) b.textContent = 'Load .bin/.pat…';
+    if (was && reason !== 'silent') clog('file playback stopped' + (reason ? ' (' + reason + ')' : ''), 'info');
+};
+async function playFileFrames() {
+    const clog = Studio.clog || Studio.rawLog;
+    if (!Studio.filePlaying()) return;
+    const i = filePlay.idx % filePlay.frames.length;
+    filePlay.idx = i + 1;
+    try {
+        await Studio.session.send(filePlay.frames[i], { expectedCmd: Wire.OPCODES.STREAM_FRAME, timeoutMs: 1500 });
+    } catch (e) { clog('file playback: ' + (e.message || e) + ' — stopping', 'err'); Studio.stopFilePlay('error'); return; }
+    if (!Studio.filePlaying()) return;
+    const fps = Math.max(1, Math.min(120, parseInt(($('cFps') || {}).value, 10) || 30));
+    filePlay.timer = setTimeout(playFileFrames, 1000 / fps);
+}
+Studio.loadStreamFile = async function (file) {
+    const clog = Studio.clog || Studio.rawLog;
+    Studio.stopFilePlay('silent');
+    if (!Studio.session || !Studio.session.connected) { clog('connect first', 'err'); return; }
+    if (!streamable()) { clog('stream: needs a 20-panel arena (e.g. G6_2x10)', 'err'); return; }
+    if (!Bin) { clog('bin-classifier unavailable', 'err'); return; }
+    let buf;
+    try { buf = new Uint8Array(await file.arrayBuffer()); } catch (e) { clog('file read failed: ' + (e.message || e), 'err'); return; }
+    if (Bin.isPat(buf)) {
+        const { gs16, numPanels, bodies } = Bin.patFrameBodies(buf);
+        if (numPanels !== Bin.NUM_PANELS || !bodies.length) { clog(file.name + ': .pat has ' + numPanels + ' panels — firmware streams 20-panel frames only', 'err'); return; }
+        renderStreamThumb(buf.buffer);
+        if (bodies.length === 1) {
+            clog(file.name + ': .pat 1 frame ' + (gs16 ? 'GS16' : 'GS2') + ' — streaming', 'tx');
+            try { await Studio.session.send(Wire.encodeStreamFrame(bodies[0]), { expectedCmd: Wire.OPCODES.STREAM_FRAME, timeoutMs: 1500 }); } catch (e) { clog('stream failed: ' + e.message, 'err'); }
+            return;
+        }
+        filePlay.frames = bodies.map((b) => Wire.encodeStreamFrame(b));
+        filePlay.idx = 0; filePlay.name = file.name;
+        const fps = Math.max(1, Math.min(120, parseInt(($('cFps') || {}).value, 10) || 30));
+        clog(file.name + ': .pat ' + bodies.length + ' frames ' + (gs16 ? 'GS16' : 'GS2') + ' — playing at ' + fps + ' fps (click to stop)', 'info');
+        const b = document.querySelector('[data-cmd="cloadfile"]');
+        if (b) b.textContent = 'Stop file ■';
+        filePlay.timer = setTimeout(playFileFrames, 0);
+        return;
+    }
+    const res = Bin.classifyBin(buf, streamDuty);
+    if (!res) { clog(file.name + ': unrecognized size ' + buf.length + ' B (expected raw/blocks/frame/G6PT .pat)', 'err'); return; }
+    clog(file.name + ': ' + buf.length + ' B → ' + (res.gs16 ? 'GS16' : 'GS2') + ' stream frame', 'tx');
+    try { await Studio.session.send(Wire.encodeStreamFrame(res.body), { expectedCmd: Wire.OPCODES.STREAM_FRAME, timeoutMs: 1500 }); } catch (e) { clog('stream failed: ' + e.message, 'err'); }
+};
+(function wireFileInput() {
+    const fi = $('cFileInput');
+    if (fi) fi.addEventListener('change', () => { const f = fi.files[0]; fi.value = ''; if (f) Studio.loadStreamFile(f); });
+})();
 
 // ---- pattern-id resolution (active set by name; pattern_ID fallback) ----
 function resolvePatternIdForCmd(cmd) {
