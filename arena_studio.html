@@ -265,8 +265,15 @@
   .console-view .seg2{display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden}
   .console-view .seg2 button{background:transparent;border:0;color:var(--dim);padding:4px 11px;font-size:11px}
   .console-view .seg2 button.on{background:var(--accent);color:#06210f;font-weight:700}
-  .console-view .memb{font-size:11px;color:var(--dim);line-height:1.5;max-height:80px;overflow:auto}
+  .console-view .memb{font-size:11px;color:var(--dim);line-height:1.5}
   .console-view .memb[hidden]{display:none}
+  .console-view .sdtable{width:100%;border-collapse:collapse;font-size:11px;max-height:180px;display:block;overflow:auto}
+  .console-view .sdtable td{padding:2px 6px;border-bottom:1px solid var(--border);color:var(--text)}
+  .console-view .sdtable td:first-child{color:var(--dim);width:34px}
+  .console-view .sdtable td:last-child{width:66px;text-align:right}
+  .console-view .sd-down,.console-view .sd-del{background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:4px;padding:1px 7px;font-size:11px;margin-left:4px}
+  .console-view .sd-down:hover{border-color:var(--accent);color:var(--accent)}
+  .console-view .sd-del:hover{border-color:var(--danger);color:var(--danger)}
   .console-view .clog{background:#0a0e12;border:1px solid var(--border);border-radius:5px;padding:8px;overflow:auto;font-size:11px;color:#9fe8c0;white-space:pre-wrap;font-family:var(--mono);height:120px}
   .console-view .clog .l-tx{color:#7fd0ff}.console-view .clog .l-rx{color:#9fe8c0}.console-view .clog .l-err{color:var(--danger)}.console-view .clog .l-info{color:var(--dim)}
   .console-view fieldset:disabled{opacity:.55}
@@ -556,12 +563,29 @@
         </div>
       </details>
 
-      <details class="cgroup">
-        <summary class="gh">device memory <span class="op">· SD · 0x80/0x82/0x84</span><span class="sum" id="cSdSum">SD —</span></summary>
+      <details class="cgroup wide">
+        <summary class="gh">device memory <span class="op">· SD 0x80/0x82/0x84/0x86/0x8D · PS-RAM</span><span class="sum" id="cSdSum">SD —</span></summary>
         <div class="cbody">
-          <div class="crow"><button class="pill" data-cmd="csdlist" title="GET_FILE_COUNT 0x80 + names">List SD patterns</button>
-            <span class="dim" id="cSdCount">—</span></div>
-          <div class="memb" id="cSdList"></div>
+          <div class="crow">
+            <span class="seg2"><button class="on" data-cmd="cmemsd">SD card</button><button data-cmd="cmempsram">PS-RAM</button></span>
+            <span class="dim" id="cSdCount">—</span><span class="spacer"></span>
+            <span class="dim" id="cSdUpStatus"></span>
+          </div>
+          <div class="memb" data-mem="sd">
+            <div class="crow" style="margin-bottom:6px">
+              <button class="pill" data-cmd="csdlist" title="GET_FILE_COUNT 0x80 + names">Refresh</button>
+              <button class="pill" data-cmd="csdupload" title="Upload a .pat (SET_PATTERN_FILE 0x8D + rename 0x83)">Upload .pat…</button>
+              <button class="pill" data-cmd="csdfolder" title="Upload every .pat in a folder">Upload folder…</button>
+              <button class="pill" data-cmd="csdarchive" title="Download the whole SD as a ZIP (GET_SD_ARCHIVE 0x8A)">↙ ZIP</button>
+              <button class="pill danger" data-cmd="csdpurge" title="Delete ALL patterns (DELETE_ALL_PATTERNS 0x8F)">Purge all</button>
+              <input id="cSdFile" type="file" accept=".pat" style="display:none">
+              <input id="cSdFolder2" type="file" webkitdirectory directory style="display:none">
+            </div>
+            <table class="sdtable"><tbody id="cSdBody"><tr><td colspan="3" class="dim">Connect + Refresh to list SD patterns.</td></tr></tbody></table>
+          </div>
+          <div class="memb" data-mem="psram" hidden>
+            <div class="crow" style="margin-bottom:0"><button class="pill" data-cmd="cpsram" title="PS-RAM staging status (placeholder — controller report pending)">Read PS-RAM</button><span class="dim" id="cPsramInfo">— reported by controller (placeholder)</span></div>
+          </div>
         </div>
       </details>
 
@@ -1068,24 +1092,49 @@
             if (bridge.connected) { bridge.disconnect(); }
             else { ftSendConfig(); bridge.connect(($('cFtUrl').value || 'ws://localhost:8765').trim()); }
         },
-        // SD list
-        csdlist: async () => {
-            const resp = await send(Wire.encodeGetFileCount(), 'GET_FILE_COUNT 0x80');
-            const count = resp && Wire.decodeFileCount(resp);
-            $('cSdCount').textContent = count != null ? count + ' patterns' : '—';
-            $('cSdSum').textContent = 'SD (' + (count || 0) + ')';
-            const list = $('cSdList');
-            list.innerHTML = '';
-            if (!count) return;
-            for (let i = 1; i <= Math.min(count, 64); i++) {
-                try {
-                    const r = await session.send(Wire.encodeGetPatternFilename(i));
-                    const name = Wire.decodePatternFilename(r);
-                    const div = document.createElement('div');
-                    div.textContent = i + ' · ' + (name || '?');
-                    list.appendChild(div);
-                } catch (e) { /* skip */ }
-            }
+        // SD card memory
+        csdlist: () => sdRefresh(),
+        cmemsd: (e) => memView(e, 'sd'),
+        cmempsram: (e) => memView(e, 'psram'),
+        cpsram: () => clog('PS-RAM: no controller report command yet (placeholder)', 'info'),
+        csdupload: () => $('cSdFile').click(),
+        csdfolder: () => $('cSdFolder2').click(),
+        csdarchive: async () => {
+            if (!connected()) return;
+            $('cSdUpStatus').textContent = 'downloading ZIP…';
+            try {
+                const zip = await session.sendBulkRead(Wire.encodeGetSdArchive(), { timeoutMs: 300000 });
+                downloadBlob(zip, 'sd_card.zip', 'application/zip');
+                $('cSdUpStatus').textContent = 'downloaded ' + (zip.length / 1024).toFixed(1) + ' KB';
+            } catch (e) { $('cSdUpStatus').textContent = 'archive failed: ' + e.message; clog('archive failed: ' + e.message, 'err'); }
+        },
+        csdpurge: () => guardDestructive(async () => {
+            if (!connected()) return;
+            if (!confirm('Delete ALL patterns from the SD card? This cannot be undone.')) return;
+            const r = await send(Wire.encodeDeleteAllPatterns(), 'DELETE_ALL_PATTERNS 0x8F', { timeoutMs: 30000 });
+            if (r && Wire.decodeResponse(r) && Wire.decodeResponse(r).ok) sdRefresh();
+        }),
+        // panel firmware
+        cfwpick: () => $('cFwInput').click(),
+        cfwinfo: () => readFirmwareInfo(),
+        cfwflash: () => guardDestructive(async () => {
+            if (!connected()) return;
+            const panel = num('cFwAddr');
+            if (!Number.isInteger(panel) || panel < 1 || panel > 20) { clog('flash: enter a valid panel number (1–20)', 'err'); return; }
+            if (!confirm('Reflash panel ' + panel + ' from /firmware/panel.bin?\nThe panel is reprogrammed over SPI and reboots. Do NOT power off mid-flash.')) return;
+            $('cFwName').textContent = 'flashing panel ' + panel + '…';
+            const r = await send(Wire.encodeG6ProgramPanel(panel), 'G6_PROGRAM_PANEL 0xC8 · panel ' + panel, { timeoutMs: 45000, expectedCmd: Wire.OPCODES.G6_PROGRAM_PANEL });
+            const v = r && Wire.decodeProgramPanelResponse(r);
+            $('cFwName').textContent = v ? (v.ok ? 'panel ' + panel + ' flashed — Verify to confirm' : 'FAILED: ' + v.message) : 'flash failed';
+        }),
+        cfwverify: async () => {
+            if (!connected()) return;
+            const panel = num('cFwAddr');
+            if (!Number.isInteger(panel) || panel < 1 || panel > 20) { clog('verify: enter a valid panel number (1–20)', 'err'); return; }
+            $('cFwName').textContent = 'verifying panel ' + panel + '…';
+            const r = await send(Wire.encodeG6VerifyPanel(panel), 'G6_VERIFY_PANEL 0xC9 · panel ' + panel, { timeoutMs: 10000, expectedCmd: Wire.OPCODES.G6_VERIFY_PANEL });
+            const v = r && Wire.decodeProgramPanelResponse(r);
+            $('cFwName').textContent = v ? (v.ok ? 'panel ' + panel + ' verified (match)' : 'MISMATCH: ' + v.message) : 'verify: no match';
         },
         // hardware I/O
         caoset: () => send(Wire.encodeSetAoVoltage(num('cAoMv')), 'SET_AO_VOLTAGE 0xA0 ' + num('cAoMv') + ' mV'),
@@ -1142,11 +1191,7 @@
         cstreampm: () => Studio.doStream && Studio.doStream('panelmap'),
         cstreamor: () => Studio.doStream && Studio.doStream('orientation'),
         cstreamck: () => Studio.doStream && Studio.doStream('checker'),
-        cloadfile: () => { if (Studio.filePlaying && Studio.filePlaying()) Studio.stopFilePlay('user'); else $('cFileInput').click(); },
-        cfwpick: () => notPorted('firmware flash'),
-        cfwinfo: () => notPorted('firmware info'),
-        cfwflash: () => notPorted('firmware flash'),
-        cfwverify: () => notPorted('firmware verify')
+        cloadfile: () => { if (Studio.filePlaying && Studio.filePlaying()) Studio.stopFilePlay('user'); else $('cFileInput').click(); }
     };
 
     function notPorted(what) {
@@ -1157,6 +1202,115 @@
         $(offId).classList.remove('on');
         if (e && e.target && $('cLevelVal')) $('cLevelVal').textContent = $('cLevel').value + '/15';
     }
+
+    // ---- SD card + firmware helpers (hardware ops; bench-verified) ----
+    function connected() { return !!(session && session.connected); }
+    function downloadBlob(bytes, name, mime) {
+        const blob = new Blob([bytes], { type: mime || 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+    function memView(e, which) {
+        document.querySelectorAll('.console-view .seg2 [data-cmd^="cmem"]').forEach((b) => b.classList.remove('on'));
+        if (e && e.target) e.target.classList.add('on');
+        document.querySelectorAll('.console-view .memb[data-mem]').forEach((m) => { m.hidden = m.dataset.mem !== which; });
+    }
+    async function sdRefresh() {
+        if (!connected()) { clog('connect first', 'err'); return; }
+        const tbody = $('cSdBody');
+        tbody.innerHTML = '<tr><td colspan="3" class="dim">fetching…</td></tr>';
+        const resp = await send(Wire.encodeGetFileCount(), 'GET_FILE_COUNT 0x80', { timeoutMs: 2000 });
+        const count = resp ? Wire.decodeFileCount(resp) : null;
+        $('cSdCount').textContent = count != null ? count + ' patterns' : '—';
+        $('cSdSum').textContent = 'SD (' + (count || 0) + ')';
+        if (!count) { tbody.innerHTML = '<tr><td colspan="3" class="dim">(no patterns on SD)</td></tr>'; return; }
+        const names = [];
+        for (let i = 1; i <= count; i++) {
+            try { const raw = await session.send(Wire.encodeGetPatternFilename(i), { timeoutMs: 2000 }); const p = Wire.decodeResponse(raw); names.push(p && p.ok ? Wire.decodePatternFilename(p) : null); }
+            catch (_) { names.push(null); }
+        }
+        tbody.innerHTML = '';
+        for (let i = 0; i < count; i++) {
+            const idx = i + 1, name = names[i];
+            const tr = document.createElement('tr');
+            tr.dataset.idx = idx; tr.dataset.name = name || '';
+            tr.innerHTML = '<td>' + idx + '</td><td title="' + (name || '') + '">' + (name || '(error)') + '</td>' +
+                '<td><button class="sd-down" title="Download (0x84)">D</button><button class="sd-del" title="Delete (0x86)">×</button></td>';
+            tbody.appendChild(tr);
+        }
+    }
+    async function readFirmwareInfo() {
+        if (!connected()) return;
+        const r = await send(Wire.encodeGetFirmwareInfo(), 'GET_FIRMWARE_INFO 0xE3', { timeoutMs: 5000, expectedCmd: Wire.OPCODES.GET_FIRMWARE_INFO });
+        const fi = r && Wire.decodeFirmwareInfo(r);
+        $('cFwName').textContent = fi ? 'on SD: ' + fi.version + ' (' + fi.imageSize + ' B)' : 'no firmware on SD';
+    }
+    // SD table row actions (download 0x84 / delete 0x86)
+    $('cSdBody').addEventListener('click', async (e) => {
+        if (!connected()) return;
+        const tr = e.target.closest('tr[data-idx]'); if (!tr) return;
+        const idx = parseInt(tr.dataset.idx, 10); if (!Number.isFinite(idx)) return;
+        if (e.target.classList.contains('sd-del')) {
+            e.target.disabled = true;
+            const r = await send(Wire.encodeDeletePatternFile(idx), 'DELETE_PATTERN_FILE 0x86 · ' + idx);
+            if (r && Wire.decodeResponse(r).ok) sdRefresh(); else e.target.disabled = false;
+        } else if (e.target.classList.contains('sd-down')) {
+            e.target.disabled = true;
+            const name = tr.dataset.name || 'pattern_' + idx + '.pat';
+            clog('download ' + idx + ' (' + name + ')…', 'info');
+            try { const data = await session.sendBulkRead(Wire.encodeGetPatternFile(idx), { timeoutMs: 60000 }); downloadBlob(data, name); clog('downloaded ' + data.length + ' B → ' + name, 'info'); }
+            catch (err) { clog('download failed: ' + err.message, 'err'); }
+            finally { e.target.disabled = false; }
+        }
+    });
+    // SD single-file upload (0x8D + rename 0x83)
+    $('cSdFile').addEventListener('change', async () => {
+        const f = $('cSdFile').files[0]; $('cSdFile').value = '';
+        if (!f || !connected()) return;
+        $('cSdUpStatus').textContent = 'uploading…';
+        try {
+            const data = new Uint8Array(await f.arrayBuffer());
+            const up = await send(Wire.encodeSetPatternFile(0, data), 'SET_PATTERN_FILE 0x8D · ' + f.name, { timeoutMs: 120000, expectedCmd: Wire.OPCODES.SET_PATTERN_FILE });
+            if (!(up && Wire.decodeResponse(up).ok)) { $('cSdUpStatus').textContent = 'upload failed'; return; }
+            const rn = await send(Wire.encodeSetPatternFilename(0, f.name), 'rename → ' + f.name, { timeoutMs: 10000, expectedCmd: Wire.OPCODES.SET_PATTERN_FILENAME });
+            if (rn == null || Wire.decodeSetPatternFilenameResponse(rn) == null) { $('cSdUpStatus').textContent = 'rename failed'; return; }
+            $('cSdUpStatus').textContent = ''; sdRefresh();
+        } catch (e) { $('cSdUpStatus').textContent = 'error: ' + e.message; }
+    });
+    // SD folder (batch) upload
+    $('cSdFolder2').addEventListener('change', async () => {
+        const files = Array.from($('cSdFolder2').files || []).filter((f) => /\.pat$/i.test(f.name));
+        $('cSdFolder2').value = '';
+        if (!files.length || !connected()) return;
+        let done = 0, failed = 0;
+        for (const f of files) {
+            $('cSdUpStatus').textContent = 'uploading ' + (done + failed + 1) + '/' + files.length + '…';
+            try {
+                const data = new Uint8Array(await f.arrayBuffer());
+                const up = await session.send(Wire.encodeSetPatternFile(0, data), { timeoutMs: 120000, expectedCmd: Wire.OPCODES.SET_PATTERN_FILE });
+                if (!(Wire.decodeResponse(up) || {}).ok) { failed++; continue; }
+                const rn = await session.send(Wire.encodeSetPatternFilename(0, f.name), { timeoutMs: 10000, expectedCmd: Wire.OPCODES.SET_PATTERN_FILENAME });
+                if (Wire.decodeSetPatternFilenameResponse(rn) == null) { failed++; continue; }
+                done++;
+            } catch (e) { failed++; }
+        }
+        $('cSdUpStatus').textContent = done + '/' + files.length + ' uploaded' + (failed ? ', ' + failed + ' failed' : '');
+        sdRefresh();
+    });
+    // firmware upload (0xE0)
+    $('cFwInput').addEventListener('change', async () => {
+        const f = $('cFwInput').files[0]; $('cFwInput').value = '';
+        if (!f || !connected()) return;
+        $('cFwName').textContent = 'uploading ' + f.name + '…';
+        try {
+            const data = new Uint8Array(await f.arrayBuffer());
+            const up = await send(Wire.encodeSetFirmwareFile(data), 'SET_FIRMWARE_FILE 0xE0 · ' + f.name, { timeoutMs: 120000, expectedCmd: Wire.OPCODES.SET_FIRMWARE_FILE });
+            const crc = up && Wire.decodeSetFirmwareFileResponse(up);
+            $('cFwName').textContent = crc != null ? 'uploaded (CRC-32 0x' + crc.toString(16).padStart(8, '0') + ')' : 'upload failed';
+            if (crc != null) readFirmwareInfo();
+        } catch (e) { $('cFwName').textContent = 'error: ' + e.message; }
+    });
 
     // delegated click dispatch
     $('consoleView').addEventListener('click', (e) => {
