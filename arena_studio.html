@@ -2310,7 +2310,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.2 | 2026-07-02 17:14 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
+<footer id="footer">Arena Studio v0.2 | 2026-07-02 17:19 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -4560,18 +4560,27 @@ async function runSteps(steps, conditionsByName, exp) {
         if (Object.keys(cfg).length) bridge.setConfig(cfg);
         bridge.setLogging(true); // default-on: no experiment untracked
         if ($('cFtLog')) $('cFtLog').checked = true; // keep the console toggle honest
+        const ftUrl = ((($('cFtUrl') || {}).value) || 'ws://localhost:8765').trim();
         if (!bridge.connected) {
-            const url = ((($('cFtUrl') || {}).value) || 'ws://localhost:8765').trim();
-            try { bridge.connect(url); } catch (_) { /* status surfaces below */ }
+            try { bridge.connect(ftUrl); } catch (_) { /* status surfaces below */ }
             for (let i = 0; i < 20 && !bridge.connected; i++) {
                 await new Promise((r) => setTimeout(r, 25));
             }
         }
-        Studio.rawLog(bridge.connected
-            ? 'fictrac bridge: connected · logging to JSONL'
-            : '⚠ fictrac bridge NOT connected (' + ((($('cFtUrl') || {}).value) || 'ws://localhost:8765') +
-              ') — closed-loop + logging INACTIVE. Start it (`pixi run bridge`) and re-run.',
-            bridge.connected ? 'info' : 'err');
+        const ftMsg = bridge.connected
+            ? 'fictrac bridge connected (' + ftUrl + ') · logging to JSONL'
+            : 'fictrac bridge NOT connected (' + ftUrl +
+              ') — closed-loop + JSONL logging INACTIVE. Start it (`pixi run bridge`) and re-run.';
+        Studio.rawLog((bridge.connected ? '' : '⚠ ') + ftMsg, bridge.connected ? 'info' : 'err');
+        // Also into the RECORDED transcript — a saved runlog.txt must be
+        // self-documenting about whether the bridge was live (bench finding:
+        // the pre-fix log showed fictracApply firing into nothing, silently).
+        if (Studio.activeRunLog) {
+            Studio.activeRunLog.event('log', {
+                level: bridge.connected ? 'INFO' : 'WARN',
+                message: ftMsg
+            });
+        }
     }
     try {
         // NOTE: do NOT pass onProgress — the session broadcasts 'runstatus' which
