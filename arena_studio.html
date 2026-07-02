@@ -278,6 +278,11 @@
   .console-view .clog .l-tx{color:#7fd0ff}.console-view .clog .l-rx{color:#9fe8c0}.console-view .clog .l-err{color:var(--danger)}.console-view .clog .l-info{color:var(--dim)}
   .console-view fieldset:disabled{opacity:.55}
 
+  .pmodal{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:200}
+  .pmodal[hidden]{display:none}
+  .pmodal-box{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:520px;max-width:92vw;padding:16px 18px}
+  .pmodal-h{display:flex;align-items:center;justify-content:space-between;font-family:var(--head);font-size:14px}
+  .pmodal-box code{color:var(--accent);font-size:11px}
   footer{flex:0 0 auto;padding:3px 14px;font-size:10px;color:var(--dim);background:var(--surface);border-top:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .banner{background:rgba(227,160,8,.12);border:1px solid var(--warn);color:var(--warn);border-radius:8px;padding:8px 12px;margin:10px 20px;font-size:12px;display:none}
   .banner.show{display:block}
@@ -602,6 +607,7 @@
             <button class="pill" data-cmd="cstreamor">Orientation</button>
             <button class="pill" data-cmd="cstreamck">Checker</button>
             <label>fps <input id="cFps" type="number" min="1" max="120" value="30" style="width:48px" title="multi-frame .pat playback rate"></label>
+            <button class="pill" data-cmd="cpaste" title="Paste a frame (JSON or integer grid) and stream it">Paste…</button>
             <button class="pill" data-cmd="cloadfile" title="Load .bin or .pat and host-stream (js/bin-classifier.js)">Load .bin/.pat…</button>
             <input id="cFileInput" type="file" accept=".bin,.pat" style="display:none">
             <span class="thumb" id="cStreamThumb" title="Streamed-frame preview"></span>
@@ -672,7 +678,26 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.1 | 2026-07-01 21:59 ET · Run + unified run-log + metadata side panel · Edit/Console porting in progress</footer>
+<!-- paste-frame modal (Console) -->
+<div class="pmodal" id="pasteModal" hidden>
+  <div class="pmodal-box">
+    <div class="pmodal-h"><span>Paste a frame to stream</span><button class="pill" id="pasteClose">✕</button></div>
+    <div class="dim" style="font-size:11px;margin:6px 0">Active arena <b id="pasteDims">40×200</b> · JSON <code>{gs,rows,cols,data}</code> or an integer grid (row 0 = bottom). GS16 values 0–15, GS2 values 0–1.</div>
+    <textarea id="pasteText" spellcheck="false" style="width:100%;height:150px;background:#0a0e12;color:#cfe6ff;border:1px solid var(--border);border-radius:5px;padding:8px;font-family:var(--mono);font-size:12px;resize:vertical"></textarea>
+    <div style="display:flex;align-items:center;gap:9px;margin-top:8px">
+      <button class="pill" id="pasteValidate">Validate</button>
+      <span class="dim" id="pasteMsg" style="font-size:11px"></span>
+      <span class="spacer" style="flex:1"></span>
+      <span class="thumb" id="pastePreview" style="width:34px;height:34px;border:1px solid var(--border);border-radius:5px;overflow:hidden;display:inline-block"></span>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+      <button class="pill" id="pasteCancel">Cancel</button>
+      <button class="pill" id="pasteStream" disabled>Stream frame</button>
+    </div>
+  </div>
+</div>
+
+<footer id="footer">Arena Studio v0.1 | 2026-07-01 21:59 ET · Run + unified run-log + metadata side panel · full Console (bench) · interim YAML Edit</footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -1191,6 +1216,7 @@
         cstreampm: () => Studio.doStream && Studio.doStream('panelmap'),
         cstreamor: () => Studio.doStream && Studio.doStream('orientation'),
         cstreamck: () => Studio.doStream && Studio.doStream('checker'),
+        cpaste: () => Studio.openPasteModal && Studio.openPasteModal(),
         cloadfile: () => { if (Studio.filePlaying && Studio.filePlaying()) Studio.stopFilePlay('user'); else $('cFileInput').click(); }
     };
 
@@ -1703,8 +1729,8 @@ function buildStreamFrame(grid, gs) {
     return { bytes: Wire.encodeStreamFrame(payload), patArrayBuffer };
 }
 function streamable() { const a = activeArenaGeom(); return a.rowCount * a.colCount === 20; } // FW accepts 20-panel frames only
-function renderStreamThumb(patArrayBuffer) {
-    const host = $('cStreamThumb');
+function renderStreamThumb(patArrayBuffer, hostId) {
+    const host = $(hostId || 'cStreamThumb');
     if (!host || !PP) return;
     host.innerHTML = '';
     try {
@@ -1722,10 +1748,22 @@ function renderStreamThumb(patArrayBuffer) {
 }
 Studio.setStreamGs = (gs) => { streamGs = gs; };
 Studio.setStreamDuty = (d) => { streamDuty = d; };
-Studio.doStream = async function (kind) {
+// Stream one already-built pixel grid (shared by the figures + paste-frame).
+async function streamGrid(grid, gs, label) {
     const clog = Studio.clog || Studio.rawLog;
-    if (!Studio.session || !Studio.session.connected) { clog('connect first', 'err'); return; }
-    if (!streamable()) { clog('stream: needs a 20-panel arena (e.g. G6_2x10) — set it in the arena picker', 'err'); return; }
+    if (!Studio.session || !Studio.session.connected) { clog('connect first', 'err'); return false; }
+    if (!streamable()) { clog('stream: needs a 20-panel arena (e.g. G6_2x10) — set it in the arena picker', 'err'); return false; }
+    let built;
+    try { built = buildStreamFrame(grid, gs); } catch (e) { clog('stream build failed: ' + (e.message || e), 'err'); return false; }
+    renderStreamThumb(built.patArrayBuffer);
+    try {
+        await Studio.session.send(built.bytes, { expectedCmd: Wire.OPCODES.STREAM_FRAME, timeoutMs: 1500 });
+        clog('› STREAM_FRAME 0x32 · ' + label + ' (' + (gs === 2 ? 'GS2' : 'GS16') + ')', 'tx');
+        return true;
+    } catch (e) { clog('stream send failed: ' + (e.message || e), 'err'); return false; }
+}
+Studio.streamGrid = streamGrid;
+Studio.doStream = async function (kind) {
     const level = Number(($('cLevel') || {}).value || 15);
     let grid;
     if (kind === 'fullfield') grid = genUniform(level);
@@ -1733,14 +1771,73 @@ Studio.doStream = async function (kind) {
     else if (kind === 'orientation') grid = genOrient();
     else if (kind === 'checker') grid = genChecker();
     else return;
-    let built;
-    try { built = buildStreamFrame(grid, streamGs); } catch (e) { clog('stream build failed: ' + (e.message || e), 'err'); return; }
-    renderStreamThumb(built.patArrayBuffer);
-    try {
-        await Studio.session.send(built.bytes, { expectedCmd: Wire.OPCODES.STREAM_FRAME, timeoutMs: 1500 });
-        clog('› STREAM_FRAME 0x32 · ' + kind + ' (' + (streamGs === 2 ? 'GS2' : 'GS16') + ')', 'tx');
-    } catch (e) { clog('stream send failed: ' + (e.message || e), 'err'); }
+    await streamGrid(grid, streamGs, kind);
 };
+
+// ---- paste-frame: parse JSON {gs,rows,cols,data} or an integer grid (row 0 = bottom) ----
+function parsePasteText(text) {
+    text = (text || '').trim();
+    if (!text) throw new Error('empty input');
+    const a = activeArenaGeom();
+    let gs = streamGs, rows, cols, flat;
+    if (text[0] === '{' || text[0] === '[') {
+        const o = JSON.parse(text);
+        if (Array.isArray(o)) { rows = o.length; cols = Array.isArray(o[0]) ? o[0].length : o.length; flat = [].concat(...o); }
+        else {
+            if (o.gs === 2 || o.gs === 16) gs = o.gs;
+            const data = o.data;
+            if (Array.isArray(data) && Array.isArray(data[0])) { rows = data.length; cols = data[0].length; flat = [].concat(...data); }
+            else { rows = o.rows; cols = o.cols; flat = data; }
+            if (rows == null || cols == null) throw new Error('JSON needs rows + cols (or a 2-D data array)');
+        }
+    } else {
+        const matrix = text.split(/[\r\n]+/).filter((l) => l.trim().length).map((l) => l.trim().split(/[\s,]+/).map(Number));
+        rows = matrix.length; cols = matrix[0].length;
+        if (matrix.some((r) => r.length !== cols)) throw new Error('ragged grid: rows have unequal column counts');
+        flat = [].concat(...matrix);
+        if (flat.some((v) => v > 1)) gs = 16;
+    }
+    if (!Array.isArray(flat)) throw new Error('no pixel data found');
+    if (flat.some((v) => !Number.isFinite(v))) throw new Error('non-numeric value in data');
+    if (rows !== a.pixelRows || cols !== a.pixelCols) throw new Error('dimensions ' + rows + '×' + cols + ' ≠ active arena ' + a.pixelRows + '×' + a.pixelCols);
+    if (flat.length !== rows * cols) throw new Error('expected ' + rows * cols + ' values, got ' + flat.length);
+    const max = gs === 2 ? 1 : 15;
+    if (flat.some((v) => v < 0 || v > max)) throw new Error('values must be 0..' + max + ' for GS' + gs);
+    return { grid: Uint8Array.from(flat, (v) => v | 0), gs, rows, cols };
+}
+let pasteParsed = null;
+Studio.openPasteModal = function () {
+    const a = activeArenaGeom();
+    $('pasteDims').textContent = a.pixelRows + '×' + a.pixelCols;
+    $('pasteMsg').textContent = ''; $('pasteStream').disabled = true; $('pastePreview').innerHTML = '';
+    pasteParsed = null;
+    $('pasteModal').hidden = false;
+    $('pasteText').focus();
+};
+function closePaste() { $('pasteModal').hidden = true; }
+(function wirePaste() {
+    if ($('pasteClose')) $('pasteClose').addEventListener('click', closePaste);
+    if ($('pasteCancel')) $('pasteCancel').addEventListener('click', closePaste);
+    if ($('pasteValidate')) $('pasteValidate').addEventListener('click', () => {
+        try {
+            pasteParsed = parsePasteText($('pasteText').value);
+            const built = buildStreamFrame(pasteParsed.grid, pasteParsed.gs);
+            renderStreamThumb(built.patArrayBuffer, 'pastePreview');
+            $('pasteMsg').textContent = 'OK · GS' + pasteParsed.gs + ' ' + pasteParsed.rows + '×' + pasteParsed.cols;
+            $('pasteMsg').style.color = 'var(--accent)';
+            $('pasteStream').disabled = !(Studio.session && Studio.session.connected && streamable());
+        } catch (e) {
+            pasteParsed = null; $('pasteStream').disabled = true; $('pastePreview').innerHTML = '';
+            $('pasteMsg').textContent = 'Error: ' + (e.message || e); $('pasteMsg').style.color = 'var(--danger)';
+        }
+    });
+    if ($('pasteStream')) $('pasteStream').addEventListener('click', async () => {
+        if (!pasteParsed) return;
+        Studio.setStreamGs(pasteParsed.gs);
+        await streamGrid(pasteParsed.grid, pasteParsed.gs, 'pasted frame');
+        closePaste();
+    });
+})();
 
 // ---- .bin/.pat host-stream (via js/bin-classifier.js) ----
 const Bin = window.BinClassifier;
