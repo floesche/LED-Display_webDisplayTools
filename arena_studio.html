@@ -277,6 +277,18 @@
   .console-view .clog{background:#0a0e12;border:1px solid var(--border);border-radius:5px;padding:8px;overflow:auto;font-size:11px;color:#9fe8c0;white-space:pre-wrap;font-family:var(--mono);height:120px}
   .console-view .clog .l-tx{color:#7fd0ff}.console-view .clog .l-rx{color:#9fe8c0}.console-view .clog .l-err{color:var(--danger)}.console-view .clog .l-info{color:var(--dim)}
   .console-view fieldset:disabled{opacity:.55}
+  /* batch ISP programmer report (inside the panel-firmware group) */
+  .console-view .isp-report-wrap{max-height:200px;overflow-y:auto;margin-top:6px}
+  .console-view .isp-report{width:100%;border-collapse:collapse;table-layout:fixed;font-size:11px}
+  .console-view .isp-report th{text-align:left;color:var(--dim);font-weight:600;border-bottom:1px solid var(--border);padding:2px 4px;position:sticky;top:0;background:var(--surface);font-size:10px}
+  .console-view .isp-report td{padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .console-view .isp-report td.ir-idx{width:3em;color:var(--dim);text-align:right;padding-right:6px}
+  .console-view .isp-report td.ir-detail{color:var(--dim)}
+  .console-view .ir-pending{color:var(--dim)}
+  .console-view .ir-active{color:#7fd0ff}
+  .console-view .ir-ok{color:var(--accent)}
+  .console-view .ir-warn{color:var(--warn)}
+  .console-view .ir-fail{color:var(--danger)}
   /* raw+log group grows to fill the page height the other groups leave free
      (fieldset flex needs Chrome ≥83 — Web Serial needs ≥89, so always true).
      flex-grow 1 / shrink 0: when content overflows, .console-view scrolls and
@@ -2192,18 +2204,33 @@
         </div>
       </details>
 
-      <details class="cgroup">
-        <summary class="gh">panel firmware <span class="op">· 0xE0/0xC8/0xC9/0xE3</span><span class="sum">flash · verify</span></summary>
+      <details class="cgroup wide">
+        <summary class="gh">panel firmware <span class="op">· 0xE0 upload · 0xC8 flash · 0xC9 verify · 0xE3 info</span><span class="sum" id="cFwSum">flash · verify · batch</span></summary>
         <div class="cbody">
           <div class="crow"><span class="lbl">.bin</span>
-            <button class="pill" data-cmd="cfwpick" title="Pick a panel firmware .bin">Choose…</button>
+            <button class="pill" data-cmd="cfwpick" title="Upload a panel firmware .bin to the controller SD (/firmware/panel.bin, 0xE0)">Choose…</button>
             <span class="dim" id="cFwName">no file</span>
-            <input id="cFwInput" type="file" accept=".bin" style="display:none"></div>
-          <div class="crow" style="margin-bottom:0"><span class="lbl">panel</span>
-            <input id="cFwAddr" type="number" min="1" value="1" style="width:56px" title="panel address">
-            <button class="pill" data-cmd="cfwinfo" title="GET_FIRMWARE_INFO 0xE3">Info</button>
-            <button class="pill danger" data-cmd="cfwflash" title="Upload (0xE0) + program (0xC8)">Flash</button>
-            <button class="pill" data-cmd="cfwverify" title="Verify (0xC9)">Verify</button></div>
+            <input id="cFwInput" type="file" accept=".bin" style="display:none">
+            <button class="pill" data-cmd="cfwinfo" title="GET_FIRMWARE_INFO 0xE3 — version footer of the image on the SD">Info</button></div>
+          <div class="crow"><span class="lbl">single</span>
+            <input id="cFwAddr" type="number" min="1" value="1" style="width:56px" title="panel address (1-based)">
+            <button class="pill danger" data-cmd="cfwflash" title="Program one panel from /firmware/panel.bin over SPI ISP (0xC8) — ~20 s, do NOT power off">Flash</button>
+            <button class="pill" data-cmd="cfwverify" title="CRC the panel's running app flash vs the SD footer (0xC9)">Verify</button></div>
+          <div class="crow" style="border-top:1px dashed var(--border);padding-top:9px;margin-bottom:0"><span class="lbl">batch</span>
+            <input id="cIspRange" type="text" value="1-20" style="width:86px" title="Panels to program: a range/list like 1-20 or 1,3,5-8">
+            <label title="Verify each panel's CRC (0xC9) right after flashing; the report marks verified vs flashed-only"><input type="checkbox" id="cIspVerify" checked> verify each</label>
+            <label id="cIspShowWrap" title="Blink a progress map on the arena between panels (done bright · pending dim · failed checker); the final map stays lit. The display must be stopped DURING each flash (firmware), so it blinks rather than persists. 20-panel arenas only."><input type="checkbox" id="cIspShow" checked> show on arena</label>
+            <button class="pill danger" data-cmd="cispbatch" id="cIspBtn" title="Flash /firmware/panel.bin to every panel in the set over SPI ISP (0xC8), retrying once on failure. ~20 s/panel — do NOT power off.">⚡ Program set</button>
+            <button class="pill" data-cmd="cispstop" id="cIspStopBtn" disabled title="Stop the batch after the current panel finishes">Stop</button>
+            <button class="pill" data-cmd="cispcopy" id="cIspCopyBtn" style="display:none" title="Copy the batch report as plain text">Copy report</button>
+            <span class="dim" id="cIspStatus"></span></div>
+          <div class="isp-report-wrap" id="cIspReportWrap" style="display:none">
+            <table class="isp-report">
+              <colgroup><col style="width:3em"><col style="width:7em"><col></colgroup>
+              <thead><tr><th class="ir-idx">#</th><th>result</th><th>detail</th></tr></thead>
+              <tbody id="cIspReport"></tbody>
+            </table>
+          </div>
         </div>
       </details>
 
@@ -2260,7 +2287,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.2 | 2026-07-02 07:40 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
+<footer id="footer">Arena Studio v0.2 | 2026-07-02 08:07 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -2679,6 +2706,14 @@
             clog('quiesce (stop display) failed: ' + (e.message || e), 'err');
         }
     }
+    Studio.quiesceDisplay = quiesceDisplay; // batch ISP engine (module block) reuses it
+    function ispBusy() {
+        if (Studio.ispBatchRunning && Studio.ispBatchRunning()) {
+            clog('a batch program is running — Stop it first', 'err');
+            return true;
+        }
+        return false;
+    }
 
     const num = (id) => Number($(id).value);
 
@@ -2767,10 +2802,13 @@
             if (r && Wire.decodeResponse(r) && Wire.decodeResponse(r).ok) sdRefresh();
         }),
         // panel firmware
-        cfwpick: () => $('cFwInput').click(),
+        cfwpick: () => { if (!ispBusy()) $('cFwInput').click(); },
         cfwinfo: () => readFirmwareInfo(),
+        cispbatch: () => { if (Studio.ispBatchRun) Studio.ispBatchRun(); },
+        cispstop: () => { if (Studio.ispBatchStop) Studio.ispBatchStop(); },
+        cispcopy: () => { if (Studio.ispBatchCopy) Studio.ispBatchCopy(); },
         cfwflash: () => guardDestructive(async () => {
-            if (!connected()) return;
+            if (!connected() || ispBusy()) return;
             const panel = num('cFwAddr');
             if (!Number.isInteger(panel) || panel < 1 || panel > 20) { clog('flash: enter a valid panel number (1–20)', 'err'); return; }
             if (!confirm('Reflash panel ' + panel + ' from /firmware/panel.bin?\nThe panel is reprogrammed over SPI and reboots. Do NOT power off mid-flash.')) return;
@@ -2781,7 +2819,7 @@
             $('cFwName').textContent = v ? (v.ok ? 'panel ' + panel + ' flashed — Verify to confirm' : 'FAILED: ' + v.message) : 'flash failed';
         }),
         cfwverify: async () => {
-            if (!connected()) return;
+            if (!connected() || ispBusy()) return;
             const panel = num('cFwAddr');
             if (!Number.isInteger(panel) || panel < 1 || panel > 20) { clog('verify: enter a valid panel number (1–20)', 'err'); return; }
             await quiesceDisplay(); // 0xC9 requires the display stopped
@@ -3271,15 +3309,21 @@ async function populateArenaSelect() {
     sel.addEventListener('change', () => {
         const opt = sel.selectedOptions[0];
         Studio.consoleArena = opt ? { name: opt.value, arenaConfig: opt.dataset.arena } : null;
+        updateIspShowUI(); // the batch progress map needs a 20-panel layout
     });
     if (rigIndex && rigIndex[0]) Studio.consoleArena = { name: rigIndex[0].name, arenaConfig: rigIndex[0].arena };
+    updateIspShowUI();
 }
 // Point the console arena selector at a rig name (called when a protocol loads).
 function selectConsoleArena(rigName) {
     const sel = $('cArena');
     if (!sel || !rigName) return;
     const opt = Array.from(sel.options).find((o) => o.value === rigName);
-    if (opt) { sel.value = rigName; Studio.consoleArena = { name: opt.value, arenaConfig: opt.dataset.arena }; }
+    if (opt) {
+        sel.value = rigName;
+        Studio.consoleArena = { name: opt.value, arenaConfig: opt.dataset.arena };
+        updateIspShowUI();
+    }
 }
 
 // ---- metadata controlled vocabularies ----
@@ -3622,6 +3666,288 @@ Studio.doStream = async function (kind) {
     else if (kind === 'checker') grid = genChecker();
     else return;
     await streamGrid(grid, streamGs, kind);
+};
+
+// ---- batch panel programming (ISP) — the panel-firmware tile's batch row ----
+// Host-side loop over the single-panel opcodes (0xC8 flash / 0xC9 verify) with
+// retry-once-then-skip, a per-panel report, and an optional progress map on the
+// arena. Ported from arena_console's In-System ISP Programmer; lives in the
+// module block because the map needs the stream-frame builders above.
+const isp = { running: false, abort: false, reportText: '' };
+const ispSleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const ispLog = (text, cls) => (Studio.clog || Studio.rawLog)(text, cls);
+
+// Parse "1-20" / "1,3,5-8" → sorted unique ints in [1..255] (255 is the
+// G6_PROGRAM_PANEL u8 wire ceiling, NOT an arena limit). null = invalid.
+function parsePanelRange(text) {
+    if (!text) return null;
+    const out = new Set();
+    for (const tok of text.split(',')) {
+        const t = tok.trim();
+        if (!t) continue;
+        const m = t.match(/^(\d+)\s*(?:-\s*(\d+))?$/);
+        if (!m) return null;
+        let lo = parseInt(m[1], 10);
+        let hi = m[2] != null ? parseInt(m[2], 10) : lo;
+        if (hi < lo) { const tmp = lo; lo = hi; hi = tmp; }
+        if (lo < 1 || hi > 255) return null;
+        for (let n = lo; n <= hi; n++) out.add(n);
+    }
+    if (!out.size) return null;
+    return Array.from(out).sort((a, b) => a - b);
+}
+// Compact a sorted list back to "1-8,11,13-20" for the confirm dialog.
+function fmtRange(panels) {
+    const parts = [];
+    let i = 0;
+    while (i < panels.length) {
+        let j = i;
+        while (j + 1 < panels.length && panels[j + 1] === panels[j] + 1) j++;
+        parts.push(i === j ? String(panels[i]) : panels[i] + '-' + panels[j]);
+        i = j + 1;
+    }
+    return parts.join(',');
+}
+function ispStateView(state) {
+    switch (state) {
+        case 'pending': return { cls: 'ir-pending', label: 'pending' };
+        case 'flashing': return { cls: 'ir-active', label: 'flashing…' };
+        case 'verifying': return { cls: 'ir-active', label: 'verifying…' };
+        case 'verified': return { cls: 'ir-ok', label: '✓ verified' };
+        case 'flashed': return { cls: 'ir-ok', label: '✓ flashed' };
+        case 'mismatch': return { cls: 'ir-warn', label: '⚠ mismatch' };
+        case 'failed': return { cls: 'ir-fail', label: '✗ failed' };
+        case 'skipped': return { cls: 'ir-fail', label: '⤼ skipped' };
+        default: return { cls: 'ir-pending', label: state };
+    }
+}
+function renderIspReport(states) {
+    const tb = $('cIspReport');
+    if (!tb) return;
+    tb.innerHTML = '';
+    for (const s of states) {
+        const view = ispStateView(s.state);
+        const tr = document.createElement('tr');
+        const tdIdx = document.createElement('td');
+        tdIdx.className = 'ir-idx';
+        tdIdx.textContent = s.panel;
+        const tdRes = document.createElement('td');
+        tdRes.className = view.cls;
+        tdRes.textContent = view.label;
+        const tdDet = document.createElement('td');
+        tdDet.className = 'ir-detail';
+        tdDet.textContent = s.detail || '';
+        tdDet.title = s.detail || '';
+        tr.appendChild(tdIdx); tr.appendChild(tdRes); tr.appendChild(tdDet);
+        tb.appendChild(tr);
+    }
+}
+function buildIspReportText(states, summary) {
+    const lines = ['Batch panel programming report', summary, ''];
+    for (const s of states) {
+        lines.push('panel ' + s.panel + '\t' + ispStateView(s.state).label + (s.detail ? '\t' + s.detail : ''));
+    }
+    return lines.join('\n');
+}
+// Map a report state to an arena fill category for the status map.
+function ispArenaCat(state) {
+    if (state === 'verified' || state === 'flashed') return 'done';
+    if (state === 'mismatch' || state === 'failed' || state === 'skipped') return 'bad';
+    return 'idle'; // pending / flashing / verifying
+}
+// GS16 status map: done panels solid-bright, bad panels a checker marker,
+// everything else dim. Panels outside the layout are simply not drawn.
+function genIspStatusFrame(states) {
+    const a = activeArenaGeom();
+    const grid = newGrid();
+    const nPanels = a.rowCount * a.colCount;
+    for (const s of states) {
+        const n = s.panel;
+        if (n < 1 || n > nPanels) continue;
+        const pr = Math.floor((n - 1) / a.colCount);
+        const pc = (n - 1) % a.colCount;
+        const cat = ispArenaCat(s.state);
+        for (let y = 0; y < 20; y++) {
+            for (let x = 0; x < 20; x++) {
+                let v;
+                if (cat === 'done') v = 15;
+                else if (cat === 'bad') v = ((x >> 1) + (y >> 1)) % 2 === 0 ? 15 : 0;
+                else v = 2;
+                setPx(grid, a, pr * 20 + y, pc * 20 + x, v);
+            }
+        }
+    }
+    return grid;
+}
+// Best-effort progress frame. ISP commands REQUIRE the display stopped
+// (CE_DISPLAY_ACTIVE) and panels blank on stop, so the map BLINKS between
+// panels: stream · hold 0.7 s · quiesce. The final frame (opts.final) stays lit.
+async function pushIspStatus(states, opts) {
+    const cb = $('cIspShow');
+    if (!cb || !cb.checked || !streamable()) return;
+    try {
+        const built = buildStreamFrame(genIspStatusFrame(states), 16);
+        await Studio.session.send(built.bytes, { expectedCmd: Wire.OPCODES.STREAM_FRAME, timeoutMs: 1500 });
+    } catch (e) {
+        ispLog('isp progress frame failed: ' + (e.message || e), 'info');
+        return;
+    }
+    if (!(opts && opts.final)) {
+        await ispSleep(700);
+        await Studio.quiesceDisplay();
+    }
+}
+// Send a flash/verify command; log a one-liner and return { ok, message, timeout }.
+async function ispSend(label, bytes, expectedCmd, timeoutMs) {
+    try {
+        const frame = await Studio.session.send(bytes, { expectedCmd, timeoutMs });
+        const resp = Wire.decodeResponse(frame);
+        const v = Wire.decodeProgramPanelResponse(resp);
+        if (resp) {
+            ispLog(label + ': status=' + resp.status + ' ok=' + resp.ok +
+                (v && v.message ? '  «' + v.message + '»' : ''), resp.ok ? 'rx' : 'err');
+        }
+        if (!v) return { ok: false, message: 'malformed response', timeout: false };
+        return { ok: v.ok, message: v.message, timeout: false };
+    } catch (e) {
+        const msg = e && e.message ? e.message : String(e);
+        const isTimeout = /timeout/i.test(msg);
+        ispLog(label + ': ' + msg, 'err');
+        return { ok: false, message: isTimeout ? 'timeout' : msg, timeout: isTimeout };
+    }
+}
+// The show-on-arena toggle needs a 20-panel layout (STREAM_FRAME constraint);
+// the batch itself runs on any arena, just without the map.
+function updateIspShowUI() {
+    const cb = $('cIspShow');
+    if (!cb) return;
+    cb.disabled = !streamable();
+    const wrap = $('cIspShowWrap');
+    if (wrap && !streamable()) {
+        wrap.title = 'Progress map needs a 20-panel arena (e.g. G6_2x10); the batch still runs without it.';
+    }
+}
+Studio.ispBatchRunning = () => isp.running;
+Studio.ispBatchStop = function () {
+    if (!isp.running) return;
+    isp.abort = true;
+    $('cIspStatus').textContent = 'stopping after current panel…';
+};
+Studio.ispBatchCopy = async function () {
+    try {
+        await navigator.clipboard.writeText(isp.reportText || '');
+        ispLog('batch report copied to clipboard', 'info');
+    } catch (e) { ispLog('copy failed: ' + (e.message || e), 'err'); }
+};
+Studio.ispBatchRun = async function () {
+    if (isp.running || !Studio.session || !Studio.session.connected) return;
+    const panels = parsePanelRange($('cIspRange').value);
+    if (!panels || !panels.length) {
+        ispLog('program set: enter a panel range like 1-20 or 1,3,5-8', 'err');
+        return;
+    }
+    // Precheck: a firmware image must be on the SD (single /firmware/panel.bin).
+    let fi = null;
+    try {
+        const r = await Studio.session.send(Wire.encodeGetFirmwareInfo(),
+            { timeoutMs: 5000, expectedCmd: Wire.OPCODES.GET_FIRMWARE_INFO });
+        fi = Wire.decodeFirmwareInfo(r);
+    } catch (_) { /* treated as missing */ }
+    if (!fi) {
+        if (!confirm('No firmware image detected on the controller SD (/firmware/panel.bin).\n' +
+            'Upload a .bin first (Choose…), or click OK to try anyway.')) return;
+    }
+    const verify = $('cIspVerify').checked;
+    const est = Math.ceil((panels.length * (20 + (verify ? 2 : 0))) / 60);
+    if (!confirm('Program ' + panels.length + ' panel(s) [' + fmtRange(panels) + '] from /firmware/panel.bin?\n' +
+        'Each panel is reflashed over SPI and reboots (~20 s). Do NOT power off mid-flash.\n' +
+        'Estimated time ~' + est + ' min.')) return;
+
+    isp.running = true;
+    isp.abort = false;
+    $('cIspBtn').disabled = true;
+    $('cIspStopBtn').disabled = false;
+    $('cIspCopyBtn').style.display = 'none';
+
+    const states = panels.map((p) => ({ panel: p, state: 'pending', detail: '' }));
+    const byPanel = {};
+    states.forEach((s) => (byPanel[s.panel] = s));
+    $('cIspReportWrap').style.display = '';
+    renderIspReport(states);
+    // ALWAYS stop the display first — a running pattern makes every 0xC8/0xC9
+    // fail with CE_DISPLAY_ACTIVE, independent of the show-on-arena toggle.
+    await Studio.quiesceDisplay();
+    await pushIspStatus(states);
+
+    let nVerified = 0, nFlashed = 0, nBad = 0;
+    try {
+        for (let i = 0; i < panels.length; i++) {
+            if (isp.abort || !Studio.session.connected) break;
+            const panel = panels[i];
+            const st = byPanel[panel];
+            $('cIspStatus').textContent = 'programming panel ' + panel + ' (' + (i + 1) + '/' + panels.length + ')…';
+            const sum = $('cFwSum');
+            if (sum) sum.textContent = 'flashing ' + (i + 1) + '/' + panels.length;
+            st.state = 'flashing';
+            st.detail = '';
+            renderIspReport(states);
+            await pushIspStatus(states);
+
+            // Flash with one retry on timeout/failure.
+            let flashed = false, lastMsg = '';
+            for (let attempt = 1; attempt <= 2 && !flashed; attempt++) {
+                if (attempt === 2) {
+                    st.detail = 'retry…';
+                    renderIspReport(states);
+                    await ispSleep(400);
+                }
+                const r = await ispSend(
+                    'g6-program-panel ' + panel + (attempt === 2 ? ' (retry)' : ''),
+                    Wire.encodeG6ProgramPanel(panel), Wire.OPCODES.G6_PROGRAM_PANEL, 45000);
+                if (r.ok) { flashed = true; lastMsg = r.message; }
+                else lastMsg = r.message || (r.timeout ? 'timeout' : 'error');
+            }
+            if (!flashed) {
+                st.state = 'skipped';
+                st.detail = lastMsg || 'no response';
+                nBad++;
+                renderIspReport(states);
+                await pushIspStatus(states);
+                await ispSleep(300);
+                continue;
+            }
+            if (verify && !isp.abort && Studio.session.connected) {
+                st.state = 'verifying';
+                renderIspReport(states);
+                const v = await ispSend('g6-verify-panel ' + panel,
+                    Wire.encodeG6VerifyPanel(panel), Wire.OPCODES.G6_VERIFY_PANEL, 10000);
+                if (v.ok) { st.state = 'verified'; st.detail = v.message || 'CRC match'; nVerified++; }
+                else { st.state = 'mismatch'; st.detail = v.message || (v.timeout ? 'verify timeout' : 'no match'); nBad++; }
+            } else {
+                st.state = 'flashed';
+                st.detail = lastMsg;
+                nFlashed++;
+            }
+            renderIspReport(states);
+            await pushIspStatus(states);
+            await ispSleep(300); // settle before hitting the next panel
+        }
+    } finally {
+        isp.running = false;
+        $('cIspStopBtn').disabled = true;
+        if (Studio.session.connected) $('cIspBtn').disabled = false;
+        $('cIspCopyBtn').style.display = '';
+        const summary = 'Done: ' + nVerified + ' verified, ' + nFlashed + ' flashed, ' +
+            nBad + ' failed/skipped of ' + panels.length + (isp.abort ? ' (stopped)' : '');
+        $('cIspStatus').textContent = summary;
+        const sum = $('cFwSum');
+        if (sum) sum.textContent = 'flash · verify · batch';
+        ispLog('isp batch — ' + summary, nBad ? 'err' : 'info');
+        isp.reportText = buildIspReportText(states, summary);
+        // Batch over — leave the final report map lit (nothing guarded follows;
+        // All off / Stop clears it).
+        await pushIspStatus(states, { final: true });
+    }
 };
 
 // ---- paste-frame: parse JSON {gs,rows,cols,data} or an integer grid (row 0 = bottom) ----
