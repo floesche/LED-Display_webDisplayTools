@@ -260,7 +260,8 @@
   .console-view .crow label{color:var(--dim);font-size:11px;display:flex;align-items:center;gap:6px}
   .console-view .crow input[type=number],.console-view .crow input[type=text],.console-view .crow select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 7px;font-family:var(--mono);font-size:11px}
   .console-view .lbl{font-family:var(--head);font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);min-width:58px}
-  .console-view .thumb{width:34px;height:34px;border:1px solid var(--border);border-radius:5px;background:var(--surface2);display:inline-block;flex:0 0 auto}
+  .console-view .thumb{width:34px;height:34px;border:1px solid var(--border);border-radius:5px;background:var(--surface2);display:inline-block;flex:0 0 auto;overflow:hidden}
+  .console-view .thumb img{width:100%;height:100%;object-fit:contain;display:block}
   .console-view .seg2{display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden}
   .console-view .seg2 button{background:transparent;border:0;color:var(--dim);padding:4px 11px;font-size:11px}
   .console-view .seg2 button.on{background:var(--accent);color:#06210f;font-weight:700}
@@ -516,7 +517,14 @@
 
     <!-- pattern + trial params -->
     <div class="cgroup">
-      <div class="gh">pattern + trial params <span class="op">· TRIAL_PARAMS 0x08 · GET_PATTERN_INFO 0x88</span></div>
+      <div class="gh">pattern + trial params <span class="op">· TRIAL_PARAMS 0x08 · GET_PATTERN_INFO 0x88 · by name → SD idx</span></div>
+      <div class="crow"><span class="lbl">pattern</span>
+        <button class="pill" data-cmd="cloadset" title="Load a pattern-set FOLDER (MANIFEST.txt + patterns/) — names resolve to 1-based SD indices with preview thumbnails">Load set…</button>
+        <select id="cPatName" style="min-width:190px" title="Pattern by name — drives the SD index sent in trial params"></select>
+        <span class="thumb" id="cPatThumb" title="Pattern preview (hover a multi-frame pattern to animate)"></span>
+        <span class="dim" id="cPatSetStatus">loading built-in library…</span>
+        <input id="cPatFolder" type="file" webkitdirectory directory style="display:none">
+      </div>
       <div class="crow"><span class="lbl">params</span>
         <label>mode <select id="cMode"><option value="2">2 open-loop</option><option value="3">3 show-frame</option><option value="4">4 closed-loop</option></select></label>
         <label>pat idx <input id="cPat" type="number" min="1" value="1" style="width:56px" title="1-based SD index"></label>
@@ -1126,6 +1134,8 @@
         // depth toggles
         cgs16: (e) => segPick(e, 'cGs16', 'cGs2'),
         cgs2: (e) => segPick(e, 'cGs2', 'cGs16'),
+        // pattern-set folder load (picker logic lives in the module block)
+        cloadset: () => $('cPatFolder').click(),
         // heavier features — port pending (avoid shipping half-working paths)
         cstreamff: () => notPorted('stream full-field'),
         cstreampm: () => notPorted('stream panel-map'),
@@ -1241,6 +1251,8 @@
 <script type="module">
 import { parseV3Protocol, V3ParseError } from './js/protocol-yaml-v3.js';
 import { getConfig } from './js/arena-configs.js'; // side effect: sets window.PANEL_SPECS
+import PatParser from './js/pat-parser.js';
+import { generatePatternIcon } from './js/icon-generator.js';
 import * as YAML from 'yaml'; // vendored build has NAMED exports only (no default)
 
 const Studio = window.Studio;
@@ -1337,19 +1349,142 @@ async function populateMetaDatalists() {
     }
 }
 
-// ---- pattern-id resolution (pattern-set optional; pattern_ID fallback) ----
-function resolvePatternIdForCmd(cmd) {
-    // If a pattern set is active later, prefer it; MVP falls back to protocol pattern_ID.
-    const ps = window.PatternSet;
-    if (ps && Studio.activeSet && typeof ps.indexByName === 'function') {
-        const id = ps.indexByName(Studio.activeSet, cmd.pattern);
-        if (id != null) return id;
+// ---- pattern set / name picker (Console) + Run pattern resolution ----
+// Studio.patternSet = { patterns: { name: { index, sd_name, preview } } } | null.
+const PS = window.PatternSet;
+const PP = window.PatPreview;
+const BUILTIN_BASE = './patterns/g6_2x10/';
+Studio.patternSet = null;
+let patByteSource = null; // (sd_name) => Promise<ArrayBuffer>
+let patPreviewCache = {};
+
+function arenaForConfig(cfg) {
+    const c = cfg ? getConfig(cfg) : null;
+    return c && c.arena;
+}
+Studio.patternIndexByName = function (name) {
+    const m = Studio.patternSet;
+    const p = m && m.patterns && m.patterns[name];
+    return p && p.index != null ? p.index : null;
+};
+Studio.patternFramesByName = function (name) {
+    const m = Studio.patternSet;
+    const p = m && m.patterns && m.patterns[name];
+    return p && p.preview && Number.isFinite(p.preview.frames) ? p.preview.frames : null;
+};
+
+function manifestFromTxt(parsed, arenaConfig) {
+    const m = { arenaConfig: arenaConfig || null, set_id: parsed.pattern_set_id || null, patterns: {} };
+    for (const p of parsed.patterns) m.patterns[p.name] = { index: p.index, sd_name: p.sd_name, preview: null };
+    return m;
+}
+function cPatStatus(text) { const el = $('cPatSetStatus'); if (el) el.textContent = text; }
+
+function populatePatDropdown() {
+    const sel = $('cPatName');
+    const m = Studio.patternSet;
+    if (!sel) return;
+    sel.innerHTML = '';
+    const names = Object.keys((m && m.patterns) || {});
+    if (!names.length) { $('cPatThumb').innerHTML = ''; if ($('cPat')) $('cPat').readOnly = false; return; }
+    names.sort((a, b) => (m.patterns[a].index || 0) - (m.patterns[b].index || 0));
+    for (const n of names) {
+        const o = document.createElement('option');
+        o.value = n;
+        o.textContent = (m.patterns[n].index != null ? m.patterns[n].index + ' · ' : '') + n;
+        sel.appendChild(o);
     }
-    const pid = Number(cmd.pattern_ID);
+    sel.value = names[0];
+    applyPatPick(names[0]);
+    if ($('cPat')) $('cPat').readOnly = true; // a set drives the SD index
+}
+function applyPatPick(name) {
+    const idx = Studio.patternIndexByName(name);
+    if (idx != null && $('cPat')) $('cPat').value = idx; // trial-params reads cPat
+    renderPatThumb(name);
+}
+async function renderPatThumb(name) {
+    const host = $('cPatThumb');
+    if (host) host.innerHTML = '';
+    const m = Studio.patternSet;
+    const p = m && m.patterns[name];
+    if (!p || !patByteSource || !PP || !host) return;
+    try {
+        let sampled = patPreviewCache[name];
+        if (!sampled) {
+            const ab = await patByteSource(p.sd_name);
+            const parsed = PatParser.parsePatFile(ab);
+            sampled = PP.samplePreviewFrames(parsed, arenaForConfig(m.arenaConfig), {
+                renderIcon: generatePatternIcon,
+                iconOpts: { width: 48, height: 48, backgroundColor: '#141a20', innerRadiusRatio: 0.4, padding: 2, showGaps: false, showOutlines: false }
+            });
+            patPreviewCache[name] = sampled;
+            p.preview = { frames: (sampled.frames || []).length };
+        }
+        if (!sampled.frames || !sampled.frames.length) return;
+        const img = document.createElement('img');
+        img.src = sampled.frames[sampled.staticIndex || 0];
+        img.alt = name;
+        host.appendChild(img);
+        if (sampled.frames.length > 1) {
+            let iv = null, k = 0;
+            host.addEventListener('mouseenter', () => { k = 0; iv = setInterval(() => { k = (k + 1) % sampled.frames.length; img.src = sampled.frames[k]; }, 150); });
+            host.addEventListener('mouseleave', () => { if (iv) { clearInterval(iv); iv = null; } img.src = sampled.frames[sampled.staticIndex || 0]; });
+        }
+    } catch (e) { /* preview is best-effort */ }
+}
+async function loadBuiltinPatternSet() {
+    if (!PS || typeof PS.parseManifestTxt !== 'function') { cPatStatus('pattern-set module unavailable'); return; }
+    try {
+        const resp = await fetch(BUILTIN_BASE + 'MANIFEST.txt', { cache: 'no-store' });
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        const m = manifestFromTxt(PS.parseManifestTxt(await resp.text()), 'G6_2x10');
+        Studio.patternSet = m;
+        patByteSource = async (sd) => {
+            const r = await fetch(BUILTIN_BASE + 'patterns/' + sd, { cache: 'no-store' });
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.arrayBuffer();
+        };
+        patPreviewCache = {};
+        cPatStatus('built-in · ' + Object.keys(m.patterns).length + ' patterns' + (m.set_id ? ' · ' + m.set_id : ''));
+        populatePatDropdown();
+    } catch (e) {
+        cPatStatus('built-in library unavailable — use Load set… or a raw pat idx');
+        if ($('cPat')) $('cPat').readOnly = false;
+    }
+}
+function wirePatPicker() {
+    const sel = $('cPatName');
+    if (sel) sel.addEventListener('change', () => applyPatPick(sel.value));
+    const folder = $('cPatFolder');
+    if (folder) folder.addEventListener('change', async () => {
+        const files = Array.from(folder.files || []);
+        folder.value = '';
+        if (!files.length) return;
+        const manifestFile = files.find((f) => f.name === 'MANIFEST.txt');
+        if (!manifestFile) { cPatStatus('no MANIFEST.txt in that folder'); return; }
+        try {
+            const m = manifestFromTxt(PS.parseManifestTxt(await manifestFile.text()), (Studio.consoleArena && Studio.consoleArena.arenaConfig) || 'G6_2x10');
+            const map = {};
+            for (const f of files) map[f.name] = f;
+            Studio.patternSet = m;
+            patByteSource = (sd) => { const f = map[sd]; return f ? f.arrayBuffer() : Promise.reject(new Error('missing ' + sd)); };
+            patPreviewCache = {};
+            cPatStatus('loaded · ' + Object.keys(m.patterns).length + ' patterns' + (m.set_id ? ' · ' + m.set_id : ''));
+            populatePatDropdown();
+        } catch (e) { cPatStatus('load failed: ' + (e.message || e)); }
+    });
+}
+
+// ---- pattern-id resolution (active set by name; pattern_ID fallback) ----
+function resolvePatternIdForCmd(cmd) {
+    const id = Studio.patternIndexByName(cmd && cmd.pattern);
+    if (id != null) return id;
+    const pid = Number(cmd && cmd.pattern_ID);
     return Number.isInteger(pid) && pid >= 1 ? pid : null;
 }
 function resolvePatternFramesForCmd(cmd) {
-    return null; // filled when a pattern set is active (Console phase)
+    return Studio.patternFramesByName(cmd && cmd.pattern);
 }
 function fictracPluginNames(exp) {
     if (!exp || !Array.isArray(exp.plugins)) return [];
@@ -1776,6 +1911,8 @@ Studio.onModeChange = (m) => {
 async function initFromUrl() {
     await populateMetaDatalists();
     await populateArenaSelect();
+    wirePatPicker();
+    loadBuiltinPatternSet();
     let allowedKeys = [];
     let protoIndex = [];
     try {
