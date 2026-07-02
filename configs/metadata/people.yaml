@@ -1,0 +1,15 @@
+# Controlled vocabulary — experimenters for the Arena Studio Run-details panel.
+# The `id` is written into the run log's `experimenter` field; `name` is the
+# label shown in the dropdown. Free text is still allowed (it's a datalist, not
+# a locked select). Add yourself via a PR — Studio's "Save as Pull Request" can
+# append here for you.
+format_version: "1.0"
+people:
+  - id: mreiser
+    name: "Michael Reiser"
+  - id: taylorl
+    name: "Lisa Taylor"
+  - id: santosh
+    name: "Hannah Santos"
+  - id: loeschef
+    name: "Frank Loesche"

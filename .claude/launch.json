@@ -1,0 +1,12 @@
+{
+    "version": "0.0.1",
+    "configurations": [
+        {
+            "name": "webDisplayTools",
+            "runtimeExecutable": "bash",
+            "runtimeArgs": ["-c", "PORT=${PORT:-8091} python3 .claude/nocache-server.py"],
+            "port": 8091,
+            "autoPort": true
+        }
+    ]
+}

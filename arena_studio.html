@@ -1,0 +1,1684 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Arena Studio</title>
+<!-- The v3 designer modules import the vendored `yaml` via this bare specifier. -->
+<script type="importmap">
+    { "imports": { "yaml": "./js/vendor/yaml/browser/dist/index.js" } }
+</script>
+<style>
+  :root{
+    --bg:#0f1419; --surface:#1a1f26; --surface2:#141a20; --border:#2d3640;
+    --text:#e6edf3; --dim:#8b949e; --accent:#00e676; --hover:#00c853;
+    --danger:#ff5252; --warn:#e3a008; --beta:#4aa8ff; --rec:#ff5252;
+    --mode:#00e676; --modec:#062a16;
+    --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+    --head:'JetBrains Mono',var(--mono);
+    /* Aliases so the ported console (--surface2/--dim/--err) and designer
+       (--surface-2/--text-dim/--error) CSS can paste verbatim in later phases. */
+    --surface-2:var(--surface2); --text-dim:var(--dim); --err:var(--danger); --error:var(--danger);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:13px;
+       display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  button{font-family:var(--mono);cursor:pointer}
+  a{color:var(--accent)}
+  .dim{color:var(--dim)}
+  .pill{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:5px;padding:5px 10px;font-size:12px}
+  .pill:hover{border-color:var(--accent)}
+  .pill:disabled{opacity:.45;cursor:not-allowed}
+  .spacer{flex:1}
+  .hidden{display:none !important}
+
+  /* ===== ONE merged top bar ===== */
+  .topbar{flex:0 0 auto;display:flex;align-items:center;gap:7px;min-height:44px;
+          padding:4px 12px;background:var(--surface);border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .sep-v{width:1px;height:20px;background:var(--border);margin:0 1px;flex:0 0 auto}
+  .brand{font-family:var(--head);font-weight:700;letter-spacing:.5px;color:var(--accent);font-size:14px;white-space:nowrap}
+  .status{display:flex;align-items:center;gap:6px;font-size:12px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--danger);box-shadow:0 0 6px var(--danger);flex:0 0 auto;cursor:help}
+  body.connected .dot{background:var(--accent);box-shadow:0 0 6px var(--accent)}
+  body.connected #statusTxt{display:none}
+  .arena{color:var(--dim);font-size:11.5px;white-space:nowrap;cursor:help}
+  .arena b{color:var(--text);font-weight:600}
+  body:not(.connected) .fw{display:none}
+  .doc-name{font-family:var(--head);font-weight:700;font-size:12.5px;white-space:nowrap}
+  .chip{font-family:var(--mono);font-size:11px;font-weight:600;border-radius:20px;padding:2px 8px;border:1px solid;white-space:nowrap}
+  .chip.saved{color:var(--accent);border-color:var(--accent);background:rgba(0,230,118,.08)}
+  .chip.edited,.chip.untitled-chip{display:none}
+  .chip.edited{color:var(--warn);border-color:var(--warn);background:rgba(227,160,8,.08)}
+  .chip.untitled-chip{color:var(--warn);border-color:var(--warn);background:rgba(227,160,8,.08)}
+  body.unsaved:not(.untitled) .chip.saved{display:none}
+  body.unsaved:not(.untitled) .chip.edited{display:inline-block}
+  body.untitled .chip.saved{display:none}
+  body.untitled .chip.untitled-chip{display:inline-block}
+  body:not(.hasproto) .doc-name,body:not(.hasproto) .chip,body:not(.hasproto) .plug-hover{display:none}
+  .chip.lock{color:var(--dim);border-color:var(--border);background:var(--surface);cursor:help}
+  body.editmode .chip.lock{display:none}
+  .doc-summary{color:var(--dim);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  @media (max-width:1399px){.doc-summary{display:none}}
+  .run-inline{font-size:11px;color:var(--accent);display:none;align-items:center;gap:6px}
+  body.running .run-inline{display:flex}
+  .run-inline.rec{color:var(--rec);font-weight:700}
+  .run-inline .bar{width:70px;height:5px;border-radius:3px;background:#0a3a20;overflow:hidden}
+  .run-inline .bar i{display:block;height:100%;width:0;background:currentColor;transition:width .3s}
+  .ribbon-btn{background:transparent;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 11px;font-size:12px;white-space:nowrap}
+  .ribbon-btn:hover{border-color:var(--accent)}
+  body.editmode .open-proto-btn{display:none}
+  body:not(.editmode) #fileMenu{display:none}
+  .filemenu{position:relative}
+  .filemenu .menu{position:absolute;top:120%;right:0;background:var(--surface);border:1px solid var(--border);
+        border-radius:7px;min-width:288px;padding:4px;display:none;z-index:60;box-shadow:0 8px 22px rgba(0,0,0,.55)}
+  .filemenu.open .menu{display:block}
+  .filemenu .menu button{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--text);padding:7px 10px;border-radius:5px;font-size:12px}
+  .filemenu .menu button:hover{background:var(--surface2)}
+  .filemenu .menu .sep{height:1px;background:var(--border);margin:4px 2px}
+  .gh-block{padding:7px 10px;font-size:11.5px;color:var(--dim)}
+  .gh-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+  .gh-signin{background:transparent;border:1px solid var(--border);color:var(--beta);border-radius:5px;padding:3px 9px;font-size:11px}
+  .gh-who{color:var(--accent);font-weight:600;display:none}
+  body.ghauth .gh-signin{display:none}
+  body.ghauth .gh-who{display:inline}
+  .gh-check{display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text)}
+  .gh-check input{accent-color:var(--accent)}
+  body:not(.ghauth) .gh-check{opacity:.45;cursor:not-allowed}
+  .gh-dest{font-size:10.5px;color:var(--dim);margin-top:5px;padding-left:2px}
+  .seg{display:flex;align-self:center;height:30px;border:1px solid var(--border);border-radius:6px;overflow:hidden;flex:0 0 auto}
+  .seg button{display:flex;align-items:center;background:transparent;border:0;color:var(--dim);padding:0 11px;font-size:12px}
+  .seg button + button{border-left:1px solid var(--bg)}
+  .seg button.on{background:#26405e;color:#cfe6ff;font-weight:700}
+  .seg button.console{border-left-width:2px}
+  .seg button.console.on{background:rgba(0,230,118,.12);color:var(--accent)}
+  .connect{background:var(--accent);border:0;color:#06210f;font-weight:700;border-radius:6px;padding:6px 13px;font-size:12px;white-space:nowrap}
+  body.connected .connect{background:transparent;border:1px solid var(--border);color:var(--dim);font-weight:400}
+  .gear{position:relative}
+  .gear-btn{font-size:16px;color:var(--dim);background:transparent;border:0;padding:2px 6px}
+  .gear .menu{position:absolute;top:120%;right:0;background:var(--surface);border:1px solid var(--border);border-radius:7px;min-width:230px;padding:4px;display:none;z-index:60;box-shadow:0 8px 22px rgba(0,0,0,.55)}
+  .gear.open .menu{display:block}
+  .gear .menu a,.gear .menu button{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--text);padding:7px 10px;border-radius:5px;font-size:12px;text-decoration:none}
+  .gear .menu a:hover,.gear .menu button:hover{background:var(--surface2)}
+  .gear .menu .sep{height:1px;background:var(--border);margin:4px 2px}
+
+  /* ===== BODY ===== */
+  .body-wrap{flex:1 1 auto;position:relative;overflow:auto;min-height:0}
+
+  /* RUN view: launcher+seq on the left, metadata rail on the right */
+  .run-view{display:grid;grid-template-columns:1fr 300px;gap:14px;max-width:1180px;margin:0 auto;padding:12px 20px 20px;align-items:start}
+  body.editmode .run-view,body.consolemode .run-view{display:none}
+  @media (max-width:860px){.run-view{grid-template-columns:1fr}}
+  .run-main{min-width:0}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:10px}
+  .launch-card{padding:8px 12px}
+  .launch-row{display:flex;gap:10px;align-items:stretch}
+  .btn-run{flex:1;background:var(--accent);color:#06210f;border:0;border-radius:8px;font-family:var(--head);font-weight:700;font-size:15px;padding:9px;letter-spacing:.3px}
+  .btn-run:hover{background:var(--hover)}
+  .btn-run .hint{display:block;font-size:10px;font-weight:400;margin-top:3px;min-height:0}
+  .btn-run[disabled]{background:#0e2a1a;color:#3f7d5c;cursor:not-allowed}
+  .btn-testexp{flex:0 0 188px;background:transparent;border:1px solid var(--beta);color:var(--beta);border-radius:8px;font-family:var(--head);font-weight:700;font-size:13px;padding:6px 12px;letter-spacing:.2px}
+  .btn-testexp:hover{background:rgba(74,168,255,.08)}
+  .btn-testexp .sub{display:block;font-size:9.5px;font-weight:400;color:var(--dim);margin-top:2px}
+  .btn-testexp[disabled]{opacity:.4;cursor:not-allowed}
+  body.running .launch-row{display:none}
+  .launch-note{display:flex;align-items:center;gap:8px;margin-top:7px}
+  .kchip.hostbadge{cursor:help}
+  .running-panel{display:none;align-items:center;gap:14px;background:#06210f;border:1px solid var(--accent);border-radius:8px;padding:8px 14px}
+  body.running .running-panel{display:flex}
+  body.running.testing .running-panel{background:#0a1a2e;border-color:var(--beta)}
+  .running-panel .rp-lead{font-family:var(--head);font-weight:700;font-size:16px;color:var(--accent);display:flex;align-items:center;gap:9px}
+  body.running.testing .rp-lead{color:var(--beta)}
+  .running-panel .rp-lead .blip{width:11px;height:11px;border-radius:50%;background:var(--rec);box-shadow:0 0 8px var(--rec);animation:pulse 1s infinite}
+  body.running.testing .rp-lead .blip{background:var(--beta);box-shadow:0 0 8px var(--beta)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .running-panel .rp-prog{flex:1;height:8px;border-radius:5px;background:#0a3a20;overflow:hidden}
+  .running-panel .rp-prog i{display:block;height:100%;width:0;background:var(--accent);transition:width .4s}
+  body.running.testing .rp-prog i{background:var(--beta)}
+  .btn-stop{background:var(--danger);border:0;color:#2a0000;font-weight:700;border-radius:8px;padding:8px 20px;font-size:14px;font-family:var(--head)}
+  .btn-stop:hover{filter:brightness(1.1)}
+  .plug-hover{font-size:11px;color:var(--beta);border:1px solid rgba(74,168,255,.4);background:rgba(74,168,255,.06);border-radius:20px;padding:2px 8px;cursor:help;white-space:nowrap}
+
+  .seqlist h3{font-family:var(--head);font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);margin:0 0 8px}
+  .blockhead{display:flex;align-items:center;gap:12px;padding:6px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:6px;background:var(--surface2)}
+  .blockhead .bt{font-family:var(--head);font-size:12px;color:var(--text)}
+  .blockhead .meta{color:var(--dim);font-size:11px}
+  .blockhead.active{border-color:var(--accent)}
+  .seqrow{position:relative;display:flex;align-items:center;gap:10px;padding:6px 10px;border:1px solid var(--border);border-radius:7px;margin-bottom:5px;background:var(--surface2);transition:border-color .2s,background .2s}
+  .seqrow.nested{margin-left:18px}
+  .seqrow .idx{color:var(--dim);font-size:11px;width:18px}
+  .seqrow .nm{font-size:13px;min-width:150px}
+  .kchips{display:flex;gap:5px;flex-wrap:wrap;flex:1}
+  .kchip{font-size:10px;border-radius:4px;padding:1px 7px;border:1px solid;white-space:nowrap}
+  .kchip.mode{color:var(--mode);border-color:rgba(0,230,118,.5);background:rgba(0,230,118,.07)}
+  .kchip.dur{color:var(--text);border-color:var(--border);background:var(--surface)}
+  .kchip.io{color:var(--warn);border-color:rgba(227,160,8,.5);background:rgba(227,160,8,.07)}
+  .seqrow .play{background:transparent;border:1px solid var(--beta);color:var(--beta);border-radius:5px;padding:4px 12px;font-size:12px;font-weight:600}
+  .seqrow .play:hover{background:rgba(74,168,255,.08)}
+  .seqrow.active{border-color:var(--accent);background:rgba(0,230,118,.10)}
+  .seqrow.active .nm{color:var(--accent);font-weight:600}
+  .seqrow.active .idx{color:var(--accent)}
+  .seqrow.active::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent);animation:pulse 1s infinite}
+  body.testing .seqrow.active{border-color:var(--beta);background:rgba(74,168,255,.10)}
+  body.testing .seqrow.active .nm,body.testing .seqrow.active .idx{color:var(--beta)}
+  body.testing .seqrow.active::before{background:var(--beta)}
+
+  /* ===== metadata SIDE PANEL (replaces the modal) ===== */
+  .meta-panel{position:sticky;top:12px}
+  body.running .meta-panel .mp-run-note{display:block}
+  .mp-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+  .mp-card h4{font-family:var(--head);font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);margin:0 0 8px}
+  .mp-field{margin-bottom:9px}
+  .mp-field label{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--dim);margin-bottom:3px}
+  .mp-field .req{color:var(--warn)}
+  .mp-field input,.mp-field textarea{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:6px 8px;font-family:var(--mono);font-size:12px}
+  .mp-field textarea{resize:vertical;min-height:44px}
+  .mp-field.invalid input{border-color:var(--danger)}
+  .mp-field .hint{font-size:10px;color:var(--danger);margin-top:3px;display:none}
+  .mp-field.invalid .hint{display:block}
+  .srclink{font-size:10px;color:var(--beta);text-decoration:none;font-weight:400}
+  .srclink:hover{text-decoration:underline}
+  .prov{font-size:10.5px;color:var(--dim);line-height:1.7}
+  .prov b{color:var(--text);font-weight:600}
+  .prov .sha{color:var(--accent);word-break:break-all;cursor:help}
+  .mp-note{font-size:10px;color:var(--dim);margin-top:6px}
+
+  /* ===== RUN-LOG STRIP ===== */
+  .run-log-strip{margin-top:8px;display:flex;flex-direction:column;height:190px;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  body.log-collapsed .run-log-strip{height:auto}
+  body.log-collapsed .dock-pane{display:none}
+  .dock-h{display:flex;align-items:center;gap:9px;padding:7px 12px;border-bottom:1px solid var(--border);font-family:var(--head);font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim)}
+  body.log-collapsed .dock-h{border-bottom:0}
+  .log-chev{background:transparent;border:0;color:var(--dim);font-size:11px;padding:0 2px}
+  .log-chev::before{content:'▾'}
+  body.log-collapsed .log-chev::before{content:'▸'}
+  .dock-h .acts{margin-left:auto;display:flex;gap:6px;align-items:center}
+  .dock-pane{padding:10px 12px;overflow:auto;flex:1;font-size:12px;display:flex;flex-direction:column;min-height:0}
+  .runlog-head{display:flex;align-items:center;gap:9px;margin-bottom:7px;font-size:11px;flex-wrap:wrap}
+  .runlog-head .tag{font-weight:700;border-radius:4px;padding:2px 8px;font-size:10px}
+  .runlog-head .tag.exp{background:var(--rec);color:#2a0000}
+  .runlog-head .tag.test{background:var(--border);color:var(--dim)}
+  .runlog-head .ctr{color:var(--dim)}
+  .dock-stop{background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:5px;padding:3px 12px;font-size:11px;font-weight:700;opacity:.5;pointer-events:none}
+  body.running .dock-stop{background:var(--danger);border-color:var(--danger);color:#2a0000;opacity:1;pointer-events:auto}
+  .logbox{background:#0a0e12;border:1px solid var(--border);border-radius:5px;padding:8px;overflow:auto;font-size:11px;color:#9fe8c0;white-space:pre-wrap;font-family:var(--mono);flex:1;min-height:0}
+  .logbox .l-err{color:var(--danger)}
+  .logbox .l-warn{color:var(--warn)}
+  .logbox .l-info{color:var(--dim)}
+  .runlog-saved{margin-top:7px;font-size:11px;color:var(--accent);display:none}
+  .runlog-saved.show{display:block}
+
+  /* ===== EDIT + CONSOLE views (ported in later phases) ===== */
+  .edit-view,.console-view{display:none;height:100%;flex-direction:column;overflow:auto}
+  body.editmode .edit-view{display:flex}
+  body.consolemode .console-view{display:flex}
+  .view-placeholder{margin:auto;max-width:520px;text-align:center;color:var(--dim);padding:40px 20px}
+  .view-placeholder h2{font-family:var(--head);color:var(--text)}
+  .view-placeholder a{color:var(--accent)}
+
+  /* ===== CONSOLE view (Phase 2) — scoped under .console-view ===== */
+  .console-view{padding:10px 16px;gap:8px}
+  .console-caption{flex:0 0 auto;display:flex;align-items:center;gap:8px;color:var(--beta);font-size:11.5px;padding:2px 2px 4px}
+  .console-caption .ic{border:1px solid rgba(74,168,255,.5);border-radius:50%;width:15px;height:15px;display:inline-flex;align-items:center;justify-content:center;font-size:9px;cursor:help}
+  .console-caption .ca-acts{margin-left:auto;display:flex;gap:6px}
+  .console-caption .ca-acts .pill{padding:3px 9px;font-size:10.5px}
+  /* console menubar (restored Controller ▾ / Debug ▾) */
+  .cmenubar{flex:0 0 auto;display:flex;gap:6px;align-items:center;margin-bottom:6px}
+  .cmenu{position:relative}
+  .cmenu-btn{background:var(--surface);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:6px 12px;font-size:12px}
+  .cmenu-btn:hover,.cmenu.open .cmenu-btn{border-color:var(--accent)}
+  .cmenu-pop{position:absolute;top:118%;left:0;background:var(--surface);border:1px solid var(--border);border-radius:8px;min-width:250px;padding:5px;display:none;z-index:60;box-shadow:0 8px 22px rgba(0,0,0,.55)}
+  .cmenu.open .cmenu-pop{display:block}
+  .cmenu-item{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--text);padding:7px 9px;border-radius:5px;font-size:12px}
+  .cmenu-item:hover:not(:disabled){background:var(--surface2)}
+  .cmenu-item:disabled{opacity:.5;cursor:not-allowed}
+  .cmenu-row{display:flex;align-items:center;gap:7px;padding:5px 9px;font-size:12px}
+  .cmenu-row label{color:var(--dim);font-size:11px;min-width:64px}
+  .cmenu-row input,.cmenu-row select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px 6px;font-family:var(--mono);font-size:11px;width:80px}
+  .cmenu-sep{font-family:var(--head);font-size:9px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);padding:6px 9px 3px;border-top:1px solid var(--border);margin-top:4px}
+  .cmenu-btn.danger{border-color:rgba(255,82,82,.5);color:var(--danger)}
+  .cgroup{flex:0 0 auto;border:1px solid var(--border);border-radius:10px;background:var(--surface);padding:9px 12px;margin-bottom:8px}
+  .cgroup .gh{font-family:var(--head);font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);margin-bottom:7px;display:flex;align-items:center;gap:8px}
+  .cgroup .gh .op{text-transform:none;letter-spacing:0;font-weight:400;font-family:var(--mono);color:var(--dim)}
+  .cgroup.inline{display:flex;align-items:center;gap:12px}
+  .cgroup.inline .gh{margin:0;flex:0 0 auto}
+  .cgroup.inline .crow{margin:0;flex:1}
+  details.cgroup{padding:0}
+  details.cgroup > summary{list-style:none;cursor:pointer;padding:8px 12px;display:flex;align-items:center;gap:8px;font-family:var(--head);font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim)}
+  details.cgroup > summary::-webkit-details-marker{display:none}
+  details.cgroup > summary::before{content:'▸';color:var(--dim);font-size:10px;transition:transform .15s;flex:0 0 auto}
+  details.cgroup[open] > summary::before{transform:rotate(90deg)}
+  details.cgroup > summary .op{text-transform:none;letter-spacing:0;font-weight:400;font-family:var(--mono);color:var(--dim)}
+  details.cgroup > summary .sum{margin-left:auto;text-transform:none;letter-spacing:0;font-weight:400;font-family:var(--mono);color:var(--dim);font-size:11px}
+  details.cgroup[open] > summary .sum{display:none}
+  details.cgroup > .cbody{padding:2px 12px 10px}
+  .console-tier{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start}
+  .console-tier .wide{grid-column:1/-1}
+  @media (max-width:900px){.console-tier{grid-template-columns:1fr}}
+  .console-view .crow{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:9px}
+  .console-view .crow:last-child{margin-bottom:0}
+  .console-view .crow label{color:var(--dim);font-size:11px;display:flex;align-items:center;gap:6px}
+  .console-view .crow input[type=number],.console-view .crow input[type=text],.console-view .crow select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:5px 7px;font-family:var(--mono);font-size:11px}
+  .console-view .lbl{font-family:var(--head);font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);min-width:58px}
+  .console-view .thumb{width:34px;height:34px;border:1px solid var(--border);border-radius:5px;background:var(--surface2);display:inline-block;flex:0 0 auto}
+  .console-view .seg2{display:flex;border:1px solid var(--border);border-radius:5px;overflow:hidden}
+  .console-view .seg2 button{background:transparent;border:0;color:var(--dim);padding:4px 11px;font-size:11px}
+  .console-view .seg2 button.on{background:var(--accent);color:#06210f;font-weight:700}
+  .console-view .memb{font-size:11px;color:var(--dim);line-height:1.5;max-height:80px;overflow:auto}
+  .console-view .memb[hidden]{display:none}
+  .console-view .clog{background:#0a0e12;border:1px solid var(--border);border-radius:5px;padding:8px;overflow:auto;font-size:11px;color:#9fe8c0;white-space:pre-wrap;font-family:var(--mono);height:120px}
+  .console-view .clog .l-tx{color:#7fd0ff}.console-view .clog .l-rx{color:#9fe8c0}.console-view .clog .l-err{color:var(--danger)}.console-view .clog .l-info{color:var(--dim)}
+  .console-view fieldset:disabled{opacity:.55}
+
+  footer{flex:0 0 auto;padding:3px 14px;font-size:10px;color:var(--dim);background:var(--surface);border-top:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .banner{background:rgba(227,160,8,.12);border:1px solid var(--warn);color:var(--warn);border-radius:8px;padding:8px 12px;margin:10px 20px;font-size:12px;display:none}
+  .banner.show{display:block}
+</style>
+</head>
+<body>
+
+<!-- ===== TOP BAR (the persistent spine) ===== -->
+<div class="topbar">
+  <span class="brand">Arena Studio</span>
+  <span class="status"><span class="dot" id="statusDot" title="Connection status (green = connected). One ArenaSession broker owns the single Web Serial port."></span><span id="statusTxt">disconnected</span></span>
+  <span class="arena" id="deviceLine" title="Target arena + rig for the loaded protocol. Firmware appears only when connected (from GET_CONTROLLER_INFO 0xC2). Arena geometry comes from the rig, not the controller."><b>—</b></span>
+
+  <span class="sep-v"></span>
+
+  <span id="docName" class="doc-name" title="Loaded protocol">📄 —</span>
+  <span class="chip saved">saved ✓</span>
+  <span class="chip edited">● edited</span>
+  <span class="chip untitled-chip">unsaved</span>
+  <span class="chip lock" title="Read-only in Run mode — switch to ✎ Edit to change it">🔒</span>
+  <span id="docSummary" class="doc-summary"></span>
+  <span class="plug-hover" id="plugHover" title="Plugins this protocol declares. backlight / camera / temperature are SKIPPED by the web runner; a fictrac plugin is EXECUTED (closed-loop Mode 3).">⚡ Plugins · 0</span>
+
+  <span class="spacer"></span>
+  <span class="run-inline" id="runInline"><span id="runInlineTxt">▸ running…</span><span class="bar"><i id="runInlineBar"></i></span></span>
+
+  <button class="ribbon-btn open-proto-btn" id="openProtoBtn" title="Open a v3 protocol YAML to run">📂 Open</button>
+  <div class="filemenu" id="fileMenu">
+    <button class="ribbon-btn" id="fileMenuBtn">File ▾</button>
+    <div class="menu">
+      <button id="fmNew">New protocol</button>
+      <button id="fmOpen">Open… (Import YAML)</button>
+      <button id="fmSave">Save → local file</button>
+      <div class="sep"></div>
+      <div class="gh-block">
+        <div class="gh-row">
+          <span>GitHub:</span>
+          <button class="gh-signin" id="ghSignInBtn">Sign in…</button>
+          <span class="gh-who" id="ghWho"></span>
+        </div>
+        <label class="gh-check"><input type="checkbox" id="ghPR"> Save as Pull Request</label>
+        <div class="gh-dest" id="ghDest">→ writes a local .yaml file (sign in to GitHub to open a PR instead)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="seg" id="modeSeg">
+    <button class="on" data-mode="run">▶ Run</button>
+    <button data-mode="edit">✎ Edit</button>
+    <button class="console" data-mode="console">⛭ Console</button>
+  </div>
+
+  <button class="connect" id="connectBtn" title="Pick the arena's serial port and open it (115200 baud)">Connect</button>
+
+  <div class="gear" id="gearMenu">
+    <button class="gear-btn" id="gearBtn" title="Tools · Diagnostics">⚙</button>
+    <div class="menu">
+      <div class="sep"></div>
+      <a href="index.html">↗ All tools</a>
+      <a href="experiment_designer_v3.html">↗ v3 Experiment Designer</a>
+      <a href="arena_console.html">↗ Arena Console</a>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept=".yaml,.yml" style="display:none" />
+<div class="banner" id="banner"></div>
+
+<!-- ===== BODY ===== -->
+<div class="body-wrap">
+  <!-- RUN view -->
+  <div class="run-view" id="runView">
+    <div class="run-main">
+      <div class="card launch-card">
+        <div class="launch-row">
+          <button class="btn-run" id="btnRunExp">▶ Run experiment
+            <span class="hint" id="runHint">Connect to run</span>
+          </button>
+          <button class="btn-testexp" id="btnTestExp">▶ Test experiment
+            <span class="sub">not recorded</span>
+          </button>
+        </div>
+        <div class="launch-note">
+          <span class="kchip dur hostbadge" title="Trial timing is host-side / best-effort until firmware #4 lands. Plugin commands are skipped by the runner with a warning — EXCEPT log and fictrac, which the runner DOES execute (fictrac = closed-loop Mode 3).">⏱ host-timed · plugins skipped (log + fictrac run)</span>
+        </div>
+        <div class="running-panel">
+          <span class="rp-lead"><span class="blip"></span><span id="rpLeadTxt">running</span></span>
+          <span class="rp-prog"><i id="rpBar"></i></span>
+          <span class="dim" id="rpStep" style="font-size:11px"></span>
+          <button class="btn-stop" id="btnStopRun">■ STOP</button>
+        </div>
+      </div>
+
+      <div class="card seqlist">
+        <h3>Sequence · test any single condition ▶</h3>
+        <div id="seqBody"><span class="dim">Open a protocol (📂 Open) to see its sequence.</span></div>
+      </div>
+
+      <!-- RUN-LOG STRIP -->
+      <div class="run-log-strip">
+        <div class="dock-h">
+          <button class="log-chev" id="logChev" title="Collapse / expand the run log"></button>
+          <span>Run log</span>
+          <span class="acts">
+            <button class="dock-stop" id="btnStopDock">■ STOP</button>
+            <button class="pill" id="btnAllOn" title="Quick 'is it wired?' check — turn all LEDs on (ALL_ON 0xFF)">All on</button>
+            <button class="pill" id="btnAllOff" title="All off (ALL_OFF 0x00)">All off</button>
+            <button class="pill" id="btnLogClear">Clear</button>
+            <button class="pill" id="btnLogCopy" title="Copy log to clipboard">Copy</button>
+            <button class="pill" id="btnLogSave" title="Download the recorded run log (.json + .txt)" disabled>⬇ Save</button>
+          </span>
+        </div>
+        <div class="dock-pane">
+          <div class="runlog-head">
+            <span class="tag test" id="rlTag">—</span>
+            <span class="ctr" id="rlCtr">idle</span>
+          </div>
+          <div class="logbox" id="runlogBox"><span class="dim">No run yet. Click ▶ Run experiment to start a recorded run, or ▶ Test experiment to run un-recorded.</span></div>
+          <div class="runlog-saved" id="rlSaved"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- metadata SIDE PANEL -->
+    <aside class="meta-panel" id="metaPanel">
+      <div class="mp-card">
+        <h4>Run details</h4>
+        <div class="mp-field" id="mfExp">
+          <label>Experimenter <span class="req">*</span>
+            <a class="srclink" href="https://github.com/reiserlab/webDisplayTools/blob/main/configs/metadata/people.yaml" target="_blank" rel="noopener">↗ source</a>
+          </label>
+          <input id="mExp" list="expList" placeholder="who is running this?" autocomplete="off">
+          <datalist id="expList"></datalist>
+          <div class="hint">Required for a recorded run.</div>
+        </div>
+        <div class="mp-field" id="mfGeno">
+          <label>Fly genotype <span class="req">*</span>
+            <a class="srclink" href="https://github.com/reiserlab/webDisplayTools/blob/main/configs/metadata/genotypes.yaml" target="_blank" rel="noopener">↗ source</a>
+          </label>
+          <input id="mGeno" list="genoList" placeholder="e.g. w;UAS-CsChrimson" autocomplete="off">
+          <datalist id="genoList"></datalist>
+          <div class="hint">Required for a recorded run.</div>
+        </div>
+        <div class="mp-field">
+          <label>Notes</label>
+          <textarea id="mNotes" placeholder="temperature, fly age, anything odd…"></textarea>
+        </div>
+        <div class="mp-note" id="mSrcNote">Dropdowns read controlled-vocabulary files in the repo — extend via a PR.</div>
+      </div>
+      <div class="mp-card">
+        <h4>Auto-captured</h4>
+        <div class="prov" id="provBox">
+          <div>protocol: <b id="pvFile">—</b></div>
+          <div>sha256: <span class="sha" id="pvSha">—</span></div>
+          <div>arena: <b id="pvArena">—</b> · rig: <b id="pvRig">—</b></div>
+          <div>firmware: <b id="pvFw">—</b></div>
+          <div>run_id: <b id="pvRunId">— (assigned at run start)</b></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- EDIT view — interim raw-YAML editor (full three-zone designer embeds here in the final phase) -->
+  <div class="edit-view" id="editView">
+    <div class="edit-toolbar" style="display:flex;align-items:center;gap:8px;padding:7px 14px;background:var(--surface);border-bottom:1px solid var(--border)">
+      <button class="pill" id="edApply" title="Re-parse the YAML and apply it (updates the sequence + provenance; marks unsaved)">Re-parse &amp; apply</button>
+      <button class="pill" id="edRevert" title="Discard edits, restore the loaded protocol text">Revert</button>
+      <span class="dim" id="edStatus" style="font-size:11px">—</span>
+      <span class="spacer"></span>
+      <span class="dim" style="font-size:11px">Interim raw-YAML editor · full three-zone designer embeds here next · <a href="experiment_designer_v3.html">open v3 designer ↗</a></span>
+    </div>
+    <textarea id="edYaml" spellcheck="false" style="flex:1;width:100%;background:#0a0e12;color:#cfe6ff;border:0;outline:0;padding:14px;font-family:var(--mono);font-size:12.5px;resize:none;line-height:1.5" placeholder="Open a protocol to edit its YAML here…"></textarea>
+  </div>
+
+  <!-- CONSOLE view — bench surface, shares the one connection -->
+  <div class="console-view" id="consoleView">
+    <fieldset id="consoleFields" style="border:0;padding:0;margin:0" disabled>
+    <div class="console-caption">
+      <span style="font-family:var(--head);text-transform:uppercase;letter-spacing:.6px;font-size:11px">⛭ Console — bench surface</span>
+      <span class="ic" title="The Console drives the arena directly over the live connection, independent of the loaded protocol. Connect (top bar) to enable it. Uncommon queries/settings live in the Controller ▾ / Debug ▾ menus.">i</span>
+      <span class="dim" id="consoleHint">connect to enable</span>
+      <span class="ca-acts">
+        <button class="pill" id="cExpandAll">Expand all</button>
+        <button class="pill" id="cCollapseAll">Collapse all</button>
+      </span>
+    </div>
+
+    <!-- Restored Controller ▾ / Debug ▾ dropdown menus (uncommon controls) -->
+    <div class="cmenubar">
+      <div class="cmenu" data-cmenu>
+        <button class="cmenu-btn" title="Controller queries (run on demand)">Controller ▾</button>
+        <div class="cmenu-pop">
+          <button class="cmenu-item" data-cmd="info" title="GET_CONTROLLER_INFO (0xC2) — firmware version + capability bitmap">Get info</button>
+          <button class="cmenu-item" data-cmd="ip" title="GET_ETHERNET_IP (0xC1)">Get IP</button>
+          <button class="cmenu-item" data-cmd="frames" title="GET_FRAMES_SENT (0x33)">Get frames sent</button>
+          <button class="cmenu-item" data-cmd="resetframes" title="RESET_FRAMES_SENT (0x34)">Reset frames sent</button>
+          <div class="cmenu-sep">Panel display mode</div>
+          <div class="cmenu-row">
+            <label title="Sticky panel display mode applied to forwarded/synthesized frames">Mode</label>
+            <select id="cPanelMode" title="0 oneshot / 1 persist / 2 triggered / 3 gated">
+              <option value="0">Oneshot</option><option value="1" selected>Persistent</option>
+              <option value="2">Triggered</option><option value="3">Gated</option>
+            </select>
+            <button class="cmenu-item" data-cmd="setpanelmode" style="width:auto" title="SET_PANEL_DISPLAY_MODE (0x1B)">Set</button>
+            <button class="cmenu-item" data-cmd="getpanelmode" style="width:auto" title="GET_PANEL_DISPLAY_MODE (0x1C)">Get</button>
+          </div>
+        </div>
+      </div>
+      <div class="cmenu" data-cmenu>
+        <button class="cmenu-btn" title="Advanced / debug settings">Debug ▾</button>
+        <div class="cmenu-pop">
+          <div class="cmenu-row">
+            <label title="SPI master clock">SPI MHz</label>
+            <input id="cSpiMhz" type="number" min="1" max="30" value="20" title="SPI clock: 1–30 MHz">
+            <button class="cmenu-item" data-cmd="setspi" style="width:auto" title="SET_SPI_CLOCK (0xC5)">Set</button>
+            <button class="cmenu-item" data-cmd="getspi" style="width:auto" title="GET_SPI_CLOCK (0xC6)">Get</button>
+          </div>
+          <div class="cmenu-row">
+            <label title="Panel re-transmit rate">Refresh Hz</label>
+            <input id="cRrHz" type="number" min="0" max="65535" value="1000" title="Refresh rate: 0–65535 Hz">
+            <button class="cmenu-item" data-cmd="setrate" style="width:auto" title="SET_REFRESH_RATE (0x16)">Set</button>
+            <button class="cmenu-item" data-cmd="getrate" style="width:auto" title="GET_REFRESH_RATE (0x17)">Get</button>
+          </div>
+          <div class="cmenu-sep">Danger</div>
+          <button class="cmenu-item" data-cmd="sysreset" title="SYSTEM_RESET (0x01) — ack then reboot the controller firmware">Reset controller</button>
+        </div>
+      </div>
+      <span class="spacer"></span>
+    </div>
+
+    <!-- ESSENTIALS: display (always visible) -->
+    <div class="cgroup inline">
+      <div class="gh">display</div>
+      <div class="crow">
+        <button class="pill" data-cmd="callon" title="ALL_ON (0xFF)">All on</button>
+        <button class="pill" data-cmd="calloff" title="ALL_OFF (0x00)">All off</button>
+        <button class="pill" data-cmd="cstop" title="STOP_DISPLAY (0x30)">Stop</button>
+        <span class="dim" style="font-size:10.5px;margin-left:6px">ALL_ON 0xFF · ALL_OFF 0x00 · STOP 0x30</span>
+      </div>
+    </div>
+
+    <!-- pattern + trial params -->
+    <div class="cgroup">
+      <div class="gh">pattern + trial params <span class="op">· TRIAL_PARAMS 0x08 · GET_PATTERN_INFO 0x88</span></div>
+      <div class="crow"><span class="lbl">params</span>
+        <label>mode <select id="cMode"><option value="2">2 open-loop</option><option value="3">3 show-frame</option><option value="4">4 closed-loop</option></select></label>
+        <label>pat idx <input id="cPat" type="number" min="1" value="1" style="width:56px" title="1-based SD index"></label>
+        <label>rate <input id="cRate" type="number" value="30" style="width:54px"></label>
+        <label>gain <input id="cGain" type="number" value="0" style="width:48px"></label>
+        <label>init <input id="cInit" type="number" value="0" style="width:48px" title="mode-3 start frame (SET_FRAME_POSITION 0x70)"></label>
+        <label>dur (s) <input id="cDur" type="number" value="0" style="width:48px" title="host-timed auto-stop; 0 = run until Stop"></label>
+        <button class="pill" data-cmd="ctrial" title="Send TRIAL_PARAMS (0x08)">Send trial params</button>
+      </div>
+      <div class="crow" style="border-top:1px dashed var(--border);padding-top:9px"><span class="lbl">info</span>
+        <button class="pill" data-cmd="cpatinfo" title="GET_PATTERN_INFO (0x88) for the pat idx above">Get pattern info</button>
+        <span class="dim" id="cPatInfo">—</span>
+      </div>
+    </div>
+
+    <!-- FOOT-GUN tier (collapsible, 2-col) -->
+    <div class="console-tier">
+      <details class="cgroup">
+        <summary class="gh">frame stepper <span class="op">· mode 3 · 0x70</span><span class="sum" id="cStepSum">frame – / –</span></summary>
+        <div class="cbody">
+          <div class="crow"><span class="lbl">frame</span>
+            <button class="pill" data-cmd="cframeprev">◀</button>
+            <input id="cFrame" type="number" value="0" style="width:56px">
+            <button class="pill" data-cmd="cframego">Go</button>
+            <button class="pill" data-cmd="cframenext">▶</button>
+            <span class="dim">SET_FRAME_POSITION 0x70</span>
+          </div>
+        </div>
+      </details>
+
+      <details class="cgroup">
+        <summary class="gh">device memory <span class="op">· SD · 0x80/0x82/0x84</span><span class="sum" id="cSdSum">SD —</span></summary>
+        <div class="cbody">
+          <div class="crow"><button class="pill" data-cmd="csdlist" title="GET_FILE_COUNT 0x80 + names">List SD patterns</button>
+            <span class="dim" id="cSdCount">—</span></div>
+          <div class="memb" id="cSdList"></div>
+        </div>
+      </details>
+
+      <details class="cgroup wide">
+        <summary class="gh">stream frame <span class="op">· STREAM_FRAME 0x32</span><span class="sum">GS16 · full-field</span></summary>
+        <div class="cbody">
+          <div class="crow"><span class="lbl">depth</span>
+            <span class="seg2"><button id="cGs16" class="on" data-cmd="cgs16">GS16</button><button id="cGs2" data-cmd="cgs2">GS2</button></span>
+            <label>level <input id="cLevel" type="range" min="0" max="15" value="15" style="width:90px"> <span class="dim" id="cLevelVal">15/15</span></label>
+            <label>duty <input id="cDuty" type="range" min="0" max="255" value="128" style="width:90px"></label></div>
+          <div class="crow"><span class="lbl">send</span>
+            <button class="pill" data-cmd="cstreamff">Full-field</button>
+            <button class="pill" data-cmd="cstreampm">Panel map</button>
+            <button class="pill" data-cmd="cstreamor">Orientation</button>
+            <button class="pill" data-cmd="cstreamck">Checker</button>
+            <label>fps <input id="cFps" type="number" min="1" max="120" value="30" style="width:48px" title="multi-frame .pat playback rate"></label>
+            <button class="pill" data-cmd="cloadfile" title="Load .bin or .pat and host-stream (js/bin-classifier.js)">Load .bin/.pat…</button>
+            <input id="cFileInput" type="file" accept=".bin,.pat" style="display:none">
+          </div>
+        </div>
+      </details>
+
+      <details class="cgroup">
+        <summary class="gh">hardware I/O <span class="op">· 0x1B/0x1C · 0xA0 · 0xAA (G6)</span><span class="sum" id="cIoSum">A0 – · DO –</span></summary>
+        <div class="cbody">
+          <div class="crow"><span class="lbl">analog out</span><input id="cAoMv" type="number" value="0" style="width:64px"><span class="dim">mV (0–5000)</span>
+            <button class="pill" data-cmd="caoset" title="SET_AO_VOLTAGE 0xA0">Set</button>
+            <button class="pill" data-cmd="caoget" title="GET_AO_VOLTAGE 0xA1">Get</button>
+            <span class="dim" id="cAoRead"></span></div>
+          <div class="crow" style="margin-bottom:0"><span class="lbl">digital out</span>
+            <select id="cDoCh" style="width:64px"><option value="1">DO1</option><option value="2">DO2</option></select>
+            <span class="seg2"><button id="cDoLow" class="on" data-cmd="cdolow">LOW</button><button id="cDoHigh" data-cmd="cdohigh">HIGH</button></span>
+            <button class="pill" data-cmd="cdoset" title="SET_DIGITAL_OUT 0xAA">Set</button>
+            <button class="pill" data-cmd="cdoget" title="GET_DIGITAL_OUT 0xAB">Get</button></div>
+        </div>
+      </details>
+
+      <details class="cgroup">
+        <summary class="gh">panel firmware <span class="op">· 0xE0/0xC8/0xC9/0xE3</span><span class="sum">flash · verify</span></summary>
+        <div class="cbody">
+          <div class="crow"><span class="lbl">.bin</span>
+            <button class="pill" data-cmd="cfwpick" title="Pick a panel firmware .bin">Choose…</button>
+            <span class="dim" id="cFwName">no file</span>
+            <input id="cFwInput" type="file" accept=".bin" style="display:none"></div>
+          <div class="crow" style="margin-bottom:0"><span class="lbl">panel</span>
+            <input id="cFwAddr" type="number" min="1" value="1" style="width:56px" title="panel address">
+            <button class="pill" data-cmd="cfwinfo" title="GET_FIRMWARE_INFO 0xE3">Info</button>
+            <button class="pill danger" data-cmd="cfwflash" title="Upload (0xE0) + program (0xC8)">Flash</button>
+            <button class="pill" data-cmd="cfwverify" title="Verify (0xC9)">Verify</button></div>
+        </div>
+      </details>
+
+      <details class="cgroup wide">
+        <summary class="gh">raw + log <span class="op">· hex bytes → controller</span><span class="sum" id="cRawSum">idle</span></summary>
+        <div class="cbody">
+          <div class="crow"><span class="lbl">raw</span><input id="cRawHex" type="text" placeholder="hex bytes, e.g. 01 C2" style="min-width:200px">
+            <button class="pill" data-cmd="crawsend">Send</button>
+            <span class="spacer"></span>
+            <button class="pill" data-cmd="crawclear">Clear</button>
+            <button class="pill" data-cmd="crawcopy">Copy</button></div>
+          <div class="clog" id="cLog"><span class="l-info">connect to drive the arena directly.</span></div>
+        </div>
+      </details>
+    </div>
+    </fieldset>
+  </div>
+</div>
+
+<footer id="footer">Arena Studio v0.1 | 2026-07-01 21:59 ET · Run + unified run-log + metadata side panel · Edit/Console porting in progress</footer>
+
+<!-- ============================================================ -->
+<!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
+<!-- ============================================================ -->
+<script src="js/arena-wire-g6.js"></script>
+<script src="js/arena-link.js"></script>
+<script src="js/arena-runner-g6.js"></script>
+<script src="js/run-log.js"></script>
+<script src="js/fictrac-bridge-client.js"></script>
+<script src="js/arena-session.js"></script>
+<script src="js/pat-encoder.js"></script>
+<script src="js/pattern-set.js"></script>
+<script src="js/pat-preview.js"></script>
+<script src="js/bin-classifier.js"></script>
+<!-- (1b) DOM-free studio helpers -->
+<script src="js/studio-meta.js"></script>
+<script src="js/studio-url-state.js"></script>
+<script src="js/studio-runlog-adapter.js"></script>
+<script src="js/studio-github.js"></script>
+
+<!-- ============================================================ -->
+<!-- (2) STUDIO SHELL — the spine (classic; owns view model + wiring) -->
+<!-- ============================================================ -->
+<script>
+'use strict';
+(function () {
+    const TOOL_VERSION = 'Arena Studio v0.1';
+    const $ = (id) => document.getElementById(id);
+    const Wire = window.ArenaWireG6;
+    const RunLog = window.RunLog;
+    const Adapter = window.StudioRunLogAdapter;
+    const Meta = window.StudioMeta;
+
+    const Studio = {
+        $: $,
+        session: window.ArenaSession ? window.ArenaSession.shared() : null,
+        mode: 'run',
+        importMode: false,
+        firmware: null,
+        currentDoc: null, // {filename, sha256, source, experiment, rig:{name,arenaConfig}}
+        activeRunLog: null,
+        TOOL_VERSION: TOOL_VERSION
+    };
+    Studio.canMutate = () => Meta.canMutate({ mode: Studio.mode, importMode: Studio.importMode });
+    window.Studio = Studio;
+
+    // ---- unified log: raw transport trace (console 'log' events) --------------
+    function rawLine(text, cls) {
+        const box = $('runlogBox');
+        if (!box) return;
+        // Clear the placeholder on first real line.
+        if (box.firstChild && box.firstChild.classList && box.firstChild.classList.contains('dim')) {
+            box.textContent = '';
+        }
+        const div = document.createElement('div');
+        if (cls) div.className = 'l-' + cls;
+        div.textContent = text;
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+    Studio.rawLog = rawLine;
+
+    // ---- unified log: recorded-run stream (run-log.js accumulator) ------------
+    function renderRunEvent(ev) {
+        const box = $('runlogBox');
+        if (!box || !ev) return;
+        if (box.firstChild && box.firstChild.classList && box.firstChild.classList.contains('dim')) {
+            box.textContent = '';
+        }
+        const div = document.createElement('div');
+        if (ev.phase === 'error') div.className = 'l-err';
+        else if (ev.phase === 'skip') div.className = 'l-warn';
+        // Reuse run-log.js's own transcript line if available, else a compact fallback.
+        div.textContent =
+            (ev.t_iso ? ev.t_iso.slice(11, 19) + '  ' : '') +
+            (ev.phase || '') +
+            (ev.step && ev.step.conditionName ? ' · ' + ev.step.conditionName : '') +
+            (ev.op ? ' ' + ev.op : '') +
+            (ev.plugin_name ? ' ' + ev.plugin_name + (ev.command_name ? '.' + ev.command_name : '') : '') +
+            (ev.reason ? ' (' + ev.reason + ')' : '');
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    // The single run-status sink (subscribed once at the session level).
+    Studio.onRunStatus = function (s) {
+        if (!s) return;
+        // top-bar + running-panel progress + step highlight
+        if (s.phase === 'step-start' && typeof s.index === 'number') {
+            const total = s.total || 1;
+            const pct = Math.round(((s.index + 1) / total) * 100);
+            const bar = $('rpBar');
+            if (bar) bar.style.width = pct + '%';
+            const ibar = $('runInlineBar');
+            if (ibar) ibar.style.width = pct + '%';
+            const step = $('rpStep');
+            if (step) step.textContent = 'step ' + (s.index + 1) + ' / ' + total;
+            const nm = s.step && s.step.conditionName;
+            if (nm) {
+                $('runInlineTxt').textContent = '▸ ' + nm;
+                highlightSeq(nm);
+            }
+        }
+        // feed the recorded-run accumulator
+        if (Studio.activeRunLog) {
+            const r = Adapter.feedRunStatus(Studio.activeRunLog, s);
+            if (r.event) renderRunEvent(r.event);
+            if (r.terminal) onRunFinished(r.summary);
+        }
+    };
+
+    function highlightSeq(name) {
+        document.querySelectorAll('.seqrow.active').forEach((el) => el.classList.remove('active'));
+        const row = document.querySelector('.seqrow[data-cond="' + cssEscape(name) + '"]');
+        if (row) row.classList.add('active');
+    }
+    function clearSeqHighlight() {
+        document.querySelectorAll('.seqrow.active').forEach((el) => el.classList.remove('active'));
+    }
+    function cssEscape(s) {
+        return String(s).replace(/["\\]/g, '\\$&');
+    }
+
+    function onRunFinished(summary) {
+        const log = Studio.activeRunLog;
+        clearSeqHighlight();
+        if (!log) return;
+        const btn = $('btnLogSave');
+        if (btn) btn.disabled = false;
+        const saved = $('rlSaved');
+        if (saved) {
+            saved.textContent =
+                '✓ ' + (log.summary ? log.summary.outcome : 'done') +
+                ' — ' + (log.events.length) + ' events. Click ⬇ Save to download the run log.';
+            saved.classList.add('show');
+        }
+        $('rlCtr').textContent =
+            (log.meta.run_id || 'run') + ' · ' + (log.summary ? log.summary.outcome : 'done');
+    }
+
+    // ---- top-bar state binding ------------------------------------------------
+    function refreshState() {
+        const connected = !!(Studio.session && Studio.session.connected);
+        const running = !!(Studio.session && Studio.session.running);
+        document.body.classList.toggle('connected', connected);
+        document.body.classList.toggle('running', running);
+        $('connectBtn').textContent = connected ? 'Disconnect' : 'Connect';
+        $('statusTxt').textContent = connected ? 'connected' : 'disconnected';
+        updateDeviceLine();
+        updateRunGate();
+    }
+    Studio.refreshState = refreshState;
+
+    function updateDeviceLine() {
+        const el = $('deviceLine');
+        const doc = Studio.currentDoc;
+        const arena = doc && doc.rig ? doc.rig.arenaConfig : null;
+        const rig = doc && doc.rig ? doc.rig.name : null;
+        const fw = Studio.firmware;
+        let html = '<b>' + (arena || '—') + '</b>';
+        if (rig) html += ' · <b>' + rig + '</b>';
+        if (fw) html += '<span class="fw"> · fw ' + fw + '</span>';
+        el.innerHTML = html;
+    }
+
+    function updateRunGate() {
+        const doc = Studio.currentDoc;
+        const gate = Meta.canRunExperiment({
+            connected: !!(Studio.session && Studio.session.connected),
+            hasProtocol: !!doc,
+            dirty: false,
+            unsaved: doc ? doc.source === 'local-unsaved' : false,
+            experimenter: $('mExp').value,
+            genotype: $('mGeno').value
+        });
+        const runBtn = $('btnRunExp');
+        runBtn.disabled = !gate.ok;
+        $('runHint').textContent = gate.ok ? '' : gate.reason;
+        const testBtn = $('btnTestExp');
+        testBtn.disabled = !(Studio.session && Studio.session.connected && doc);
+    }
+    Studio.updateRunGate = updateRunGate;
+
+    // ---- connection ----------------------------------------------------------
+    async function toggleConnect() {
+        if (!Studio.session) {
+            showBanner('Web Serial is unavailable in this browser. Use Chrome or Edge.');
+            return;
+        }
+        if (Studio.session.connected) {
+            try { await Studio.session.disconnect(); } catch (e) { /* ignore */ }
+            return;
+        }
+        try {
+            await Studio.session.connect();
+            rawLine('› connected', 'info');
+            // Health check + firmware (GET_CONTROLLER_INFO 0xC2). Best-effort.
+            try {
+                const resp = await Studio.session.send(Wire.encodeGetControllerInfo());
+                const info = Wire.decodeControllerInfo(resp);
+                if (info) {
+                    Studio.firmware = 'v' + info.version;
+                    rawLine('‹ controller info: fw v' + info.version + ' · caps [' + info.capabilities.join(', ') + ']', 'info');
+                }
+            } catch (e) { /* older fw / no reply — fine */ }
+            refreshState();
+        } catch (e) {
+            showBanner('Connect failed: ' + (e && e.message ? e.message : e));
+        }
+    }
+
+    function showBanner(msg) {
+        const b = $('banner');
+        b.textContent = msg;
+        b.classList.add('show');
+        setTimeout(() => b.classList.remove('show'), 8000);
+    }
+    Studio.showBanner = showBanner;
+
+    // ---- view model ----------------------------------------------------------
+    function setMode(m) {
+        Studio.mode = m;
+        document.body.classList.toggle('editmode', m === 'edit');
+        document.body.classList.toggle('consolemode', m === 'console');
+        document.querySelectorAll('#modeSeg button').forEach((b) => {
+            b.classList.toggle('on', b.dataset.mode === m);
+        });
+        if (typeof Studio.onModeChange === 'function') Studio.onModeChange(m);
+    }
+    Studio.setMode = setMode;
+
+    // ---- STOP (both buttons) --------------------------------------------------
+    async function doStop() {
+        if (!Studio.session) return;
+        try { await Studio.session.stop(); } catch (e) { rawLine('stop error: ' + e.message, 'err'); }
+    }
+    $('btnStopRun').addEventListener('click', doStop);
+    $('btnStopDock').addEventListener('click', doStop);
+
+    // All on / All off (the "is it wired?" check)
+    $('btnAllOn').addEventListener('click', async () => {
+        if (!Studio.session || !Studio.session.connected) { showBanner('Connect first.'); return; }
+        try { await Studio.session.send(Wire.encodeAllOn()); rawLine('› ALL_ON 0xFF', 'info'); }
+        catch (e) { rawLine('all-on error: ' + e.message, 'err'); }
+    });
+    $('btnAllOff').addEventListener('click', async () => {
+        if (!Studio.session || !Studio.session.connected) { showBanner('Connect first.'); return; }
+        try { await Studio.session.send(Wire.encodeAllOff()); rawLine('› ALL_OFF 0x00', 'info'); }
+        catch (e) { rawLine('all-off error: ' + e.message, 'err'); }
+    });
+
+    // ---- log strip controls ---------------------------------------------------
+    $('logChev').addEventListener('click', () => document.body.classList.toggle('log-collapsed'));
+    $('btnLogClear').addEventListener('click', () => {
+        const box = $('runlogBox');
+        box.innerHTML = '<span class="dim">cleared</span>';
+        $('rlSaved').classList.remove('show');
+    });
+    $('btnLogCopy').addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText($('runlogBox').innerText); rawLine('copied log to clipboard', 'info'); }
+        catch (e) { showBanner('Copy failed: ' + e.message); }
+    });
+    $('btnLogSave').addEventListener('click', () => {
+        if (Studio.activeRunLog && RunLog.download) RunLog.download(Studio.activeRunLog);
+    });
+
+    // ---- top-bar buttons ------------------------------------------------------
+    $('connectBtn').addEventListener('click', toggleConnect);
+    $('gearBtn').addEventListener('click', (e) => { e.stopPropagation(); $('gearMenu').classList.toggle('open'); });
+    $('fileMenuBtn').addEventListener('click', (e) => { e.stopPropagation(); $('fileMenu').classList.toggle('open'); });
+    document.addEventListener('click', () => {
+        $('gearMenu').classList.remove('open');
+        $('fileMenu').classList.remove('open');
+    });
+    document.querySelectorAll('#modeSeg button').forEach((b) =>
+        b.addEventListener('click', () => setMode(b.dataset.mode))
+    );
+    $('openProtoBtn').addEventListener('click', () => $('fileInput').click());
+    $('fmOpen').addEventListener('click', () => { $('fileMenu').classList.remove('open'); $('fileInput').click(); });
+
+    // metadata gating live
+    ['mExp', 'mGeno'].forEach((id) => $(id).addEventListener('input', updateRunGate));
+
+    // ---- session subscriptions (the single spine) ----------------------------
+    if (Studio.session) {
+        Studio.session.on('state', refreshState);
+        Studio.session.on('runstatus', (s) => Studio.onRunStatus(s));
+        Studio.session.on('log', (m) => {
+            const cls = /(^|\s)‹|<-|rx/i.test(m) ? '' : /(^|\s)›|->|tx/i.test(m) ? '' : 'info';
+            rawLine(m, cls);
+        });
+        Studio.session.on('error', (e) => rawLine('error: ' + (e && e.message ? e.message : e), 'err'));
+        Studio.session.on('disconnect', (info) => {
+            if (info && info.involuntary && Studio.activeRunLog && !Studio.activeRunLog.summary) {
+                Adapter.finishDisconnected(Studio.activeRunLog, { aborted: true, steps: 0, errors: 0, skipped: 0 });
+                onRunFinished(Studio.activeRunLog.summary);
+                rawLine('■ disconnected mid-run', 'err');
+            }
+            refreshState();
+        });
+    } else {
+        showBanner('Web Serial is unavailable in this browser — Run/Console need Chrome or Edge.');
+    }
+
+    // beforeunload guard (dirty || importMode || running)
+    window.addEventListener('beforeunload', (e) => {
+        const running = Studio.session && Studio.session.running;
+        const dirty = Studio.currentDoc && Studio.currentDoc.source === 'local-unsaved';
+        if (running || dirty || Studio.importMode) e.returnValue = 'A run or unsaved edit is in progress.';
+    });
+
+    refreshState();
+})();
+</script>
+
+<!-- ============================================================ -->
+<!-- (2b) CONSOLE VIEW — bench control, classic (Wire + shared session) -->
+<!-- ============================================================ -->
+<script>
+'use strict';
+(function ConsoleView() {
+    const Studio = window.Studio;
+    if (!Studio) return;
+    const $ = Studio.$;
+    const Wire = window.ArenaWireG6;
+    const session = Studio.session;
+
+    const logEl = () => $('cLog');
+    function clog(text, cls) {
+        const box = logEl();
+        if (!box) return;
+        if (box.firstElementChild && box.firstElementChild.classList.contains('l-info') && box.children.length === 1 && /connect to drive/.test(box.textContent)) {
+            box.textContent = '';
+        }
+        const t = new Date().toLocaleTimeString();
+        const div = document.createElement('div');
+        if (cls) div.className = 'l-' + cls;
+        div.textContent = '[' + t + '] ' + text;
+        box.appendChild(div);
+        box.scrollTop = box.scrollHeight;
+    }
+
+    function hex(bytes) {
+        return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join(' ');
+    }
+    async function send(bytes, label, opts) {
+        if (!session || !session.connected) { clog('not connected', 'err'); return null; }
+        clog('› ' + label + '  [' + hex(bytes).slice(0, 32) + ']', 'tx');
+        try {
+            const resp = await session.send(bytes, opts);
+            const d = Wire.decodeResponse(resp);
+            clog('‹ ' + label + (d ? ' · status ' + d.status : '') + (d && d.ok ? ' ok' : ''), d && d.ok ? 'rx' : 'err');
+            return resp;
+        } catch (e) {
+            clog('‹ ' + label + ' failed: ' + e.message, 'err');
+            return null;
+        }
+    }
+
+    function guardDestructive(fn) {
+        // A run in progress: read-only queries serialize fine, but a destructive
+        // bench action should confirm + STOP first (design §5 collision rule).
+        if (session && session.running) {
+            if (!confirm('A sequence is running. Interrupt it (STOP) and run this bench action?')) return;
+            session.stop();
+        }
+        fn();
+    }
+
+    const num = (id) => Number($(id).value);
+
+    // ---- command dispatch ----
+    const handlers = {
+        // display essentials
+        callon: () => guardDestructive(() => send(Wire.encodeAllOn(), 'ALL_ON 0xFF')),
+        calloff: () => guardDestructive(() => send(Wire.encodeAllOff(), 'ALL_OFF 0x00')),
+        cstop: () => send(Wire.encodeStop(), 'STOP_DISPLAY 0x30'),
+        // trial params
+        ctrial: () =>
+            guardDestructive(() => {
+                const p = { mode: num('cMode'), patternId: num('cPat'), frameRate: num('cRate'), gain: num('cGain'), initPos: num('cInit') };
+                send(Wire.encodeTrialParams(p), 'TRIAL_PARAMS 0x08 mode ' + p.mode + ' pat ' + p.patternId);
+                const dur = num('cDur');
+                if (dur > 0) clog('(host-timed auto-stop in ' + dur + 's — send STOP or All off to end)', 'info');
+            }),
+        cpatinfo: async () => {
+            const resp = await send(Wire.encodeGetPatternInfo(num('cPat')), 'GET_PATTERN_INFO 0x88 idx ' + num('cPat'));
+            const info = resp && Wire.decodePatternInfo(resp);
+            $('cPatInfo').textContent = info
+                ? info.frames + ' fr · ' + (info.grayscale === 2 ? 'GS2' : 'GS16') + ' · ' + (info.numCols || '?') + '×' + (info.numRows || '?')
+                : 'no reply';
+        },
+        // frame stepper (0x70)
+        cframego: () => send(Wire.encodeSetFramePosition(num('cFrame')), 'SET_FRAME_POSITION 0x70 → ' + num('cFrame')),
+        cframeprev: () => { const v = Math.max(0, num('cFrame') - 1); $('cFrame').value = v; send(Wire.encodeSetFramePosition(v), 'SET_FRAME_POSITION 0x70 → ' + v); },
+        cframenext: () => { const v = num('cFrame') + 1; $('cFrame').value = v; send(Wire.encodeSetFramePosition(v), 'SET_FRAME_POSITION 0x70 → ' + v); },
+        // SD list
+        csdlist: async () => {
+            const resp = await send(Wire.encodeGetFileCount(), 'GET_FILE_COUNT 0x80');
+            const count = resp && Wire.decodeFileCount(resp);
+            $('cSdCount').textContent = count != null ? count + ' patterns' : '—';
+            $('cSdSum').textContent = 'SD (' + (count || 0) + ')';
+            const list = $('cSdList');
+            list.innerHTML = '';
+            if (!count) return;
+            for (let i = 1; i <= Math.min(count, 64); i++) {
+                try {
+                    const r = await session.send(Wire.encodeGetPatternFilename(i));
+                    const name = Wire.decodePatternFilename(r);
+                    const div = document.createElement('div');
+                    div.textContent = i + ' · ' + (name || '?');
+                    list.appendChild(div);
+                } catch (e) { /* skip */ }
+            }
+        },
+        // hardware I/O
+        caoset: () => send(Wire.encodeSetAoVoltage(num('cAoMv')), 'SET_AO_VOLTAGE 0xA0 ' + num('cAoMv') + ' mV'),
+        caoget: async () => {
+            const resp = await send(Wire.encodeGetAoVoltage(), 'GET_AO_VOLTAGE 0xA1');
+            const mv = resp && Wire.decodeAoVoltage ? Wire.decodeAoVoltage(resp) : null;
+            $('cAoRead').textContent = mv != null ? mv + ' mV' : '';
+            $('cIoSum').textContent = 'A0 ' + (mv != null ? mv : '–') + ' mV';
+        },
+        cdolow: (e) => segPick(e, 'cDoLow', 'cDoHigh'),
+        cdohigh: (e) => segPick(e, 'cDoHigh', 'cDoLow'),
+        cdoset: () => {
+            const ch = num('cDoCh');
+            const state = $('cDoHigh').classList.contains('on') ? 1 : 0;
+            send(Wire.encodeSetDigitalOut(ch, state), 'SET_DIGITAL_OUT 0xAA DO' + ch + ' ' + (state ? 'HIGH' : 'LOW'));
+        },
+        cdoget: async () => {
+            const resp = await send(Wire.encodeGetDigitalOut(), 'GET_DIGITAL_OUT 0xAB');
+            const d = resp && Wire.decodeResponse(resp);
+            if (d && d.ok && d.payload.length >= 2) $('cIoSum').textContent = 'DO1 ' + d.payload[0] + ' · DO2 ' + d.payload[1];
+        },
+        // Controller ▾ menu
+        info: async () => {
+            const resp = await send(Wire.encodeGetControllerInfo(), 'GET_CONTROLLER_INFO 0xC2');
+            const info = resp && Wire.decodeControllerInfo(resp);
+            if (info) { Studio.firmware = 'v' + info.version; Studio.refreshState(); clog('  fw v' + info.version + ' · caps [' + info.capabilities.join(', ') + ']', 'info'); }
+        },
+        ip: async () => { const r = await send(Wire.encodeGetIp(), 'GET_ETHERNET_IP 0xC1'); const ip = r && Wire.decodeIp && Wire.decodeIp(r); if (ip) clog('  ip ' + ip, 'info'); },
+        frames: async () => { const r = await send(Wire.encodeGetFramesSent(), 'GET_FRAMES_SENT 0x33'); const n = r && Wire.decodeFramesSent(r); if (n != null) clog('  frames sent ' + n, 'info'); },
+        resetframes: () => send(Wire.encodeResetFramesSent(), 'RESET_FRAMES_SENT 0x34'),
+        setpanelmode: () => send(Wire.encodeSetPanelDisplayMode(num('cPanelMode')), 'SET_PANEL_DISPLAY_MODE 0x1B ' + num('cPanelMode')),
+        getpanelmode: async () => { const r = await send(Wire.encodeGetPanelDisplayMode(), 'GET_PANEL_DISPLAY_MODE 0x1C'); const m = r && Wire.decodePanelDisplayMode(r); if (m != null) $('cPanelMode').value = String(m); },
+        // Debug ▾ menu
+        setspi: () => send(Wire.encodeSetSpiClock(num('cSpiMhz')), 'SET_SPI_CLOCK 0xC5 ' + num('cSpiMhz') + ' MHz'),
+        getspi: async () => { const r = await send(Wire.encodeGetSpiClock(), 'GET_SPI_CLOCK 0xC6'); const v = r && Wire.decodeSpiClock(r); if (v != null) $('cSpiMhz').value = String(v); },
+        setrate: () => send(Wire.encodeSetRefreshRate(num('cRrHz')), 'SET_REFRESH_RATE 0x16 ' + num('cRrHz') + ' Hz'),
+        getrate: async () => { const r = await send(Wire.encodeGetRefreshRate(), 'GET_REFRESH_RATE 0x17'); const v = r && Wire.decodeRefreshRate(r); if (v != null) $('cRrHz').value = String(v); },
+        sysreset: () => guardDestructive(() => { if (confirm('SYSTEM_RESET (0x01) reboots the controller firmware. Continue?')) send(Wire.encodeSystemReset(), 'SYSTEM_RESET 0x01'); }),
+        // raw hex
+        crawsend: () => {
+            const parts = $('cRawHex').value.trim().split(/[\s,]+/).filter(Boolean).map((h) => parseInt(h, 16));
+            if (!parts.length || parts.some((n) => Number.isNaN(n) || n < 0 || n > 255)) { clog('invalid hex', 'err'); return; }
+            guardDestructive(() => send(Uint8Array.from(parts), 'RAW ' + hex(Uint8Array.from(parts))));
+        },
+        crawclear: () => { logEl().innerHTML = ''; },
+        crawcopy: async () => { try { await navigator.clipboard.writeText(logEl().innerText); } catch (e) {} },
+        // depth toggles
+        cgs16: (e) => segPick(e, 'cGs16', 'cGs2'),
+        cgs2: (e) => segPick(e, 'cGs2', 'cGs16'),
+        // heavier features — port pending (avoid shipping half-working paths)
+        cstreamff: () => notPorted('stream full-field'),
+        cstreampm: () => notPorted('stream panel-map'),
+        cstreamor: () => notPorted('stream orientation'),
+        cstreamck: () => notPorted('stream checker'),
+        cloadfile: () => notPorted('.bin/.pat load'),
+        cfwpick: () => notPorted('firmware flash'),
+        cfwinfo: () => notPorted('firmware info'),
+        cfwflash: () => notPorted('firmware flash'),
+        cfwverify: () => notPorted('firmware verify')
+    };
+
+    function notPorted(what) {
+        clog(what + ': not yet wired in Studio (needs the frame/firmware builders). Use the standalone Arena Console for now.', 'info');
+    }
+    function segPick(e, onId, offId) {
+        $(onId).classList.add('on');
+        $(offId).classList.remove('on');
+        if (e && e.target && $('cLevelVal')) $('cLevelVal').textContent = $('cLevel').value + '/15';
+    }
+
+    // delegated click dispatch
+    $('consoleView').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-cmd]');
+        if (!btn || btn.disabled) return;
+        const cmd = btn.dataset.cmd;
+        if (handlers[cmd]) { e.preventDefault(); handlers[cmd](e); }
+    });
+    // level slider readout
+    $('cLevel').addEventListener('input', () => { $('cLevelVal').textContent = $('cLevel').value + '/15'; });
+
+    // console dropdown menus (Controller ▾ / Debug ▾) — open/close + click-away
+    document.querySelectorAll('.cmenu[data-cmenu] > .cmenu-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const menu = btn.parentElement;
+            const wasOpen = menu.classList.contains('open');
+            document.querySelectorAll('.cmenu.open').forEach((m) => m.classList.remove('open'));
+            if (!wasOpen) menu.classList.add('open');
+        });
+    });
+    document.addEventListener('click', () => document.querySelectorAll('.cmenu.open').forEach((m) => m.classList.remove('open')));
+
+    // expand / collapse all
+    $('cExpandAll').addEventListener('click', () => document.querySelectorAll('.console-view details.cgroup').forEach((d) => (d.open = true)));
+    $('cCollapseAll').addEventListener('click', () => document.querySelectorAll('.console-view details.cgroup').forEach((d) => (d.open = false)));
+
+    // enable/disable the whole console surface on connection state
+    function syncEnabled() {
+        const on = !!(session && session.connected);
+        $('consoleFields').disabled = !on;
+        $('consoleHint').textContent = on ? 'live — drives the arena directly' : 'connect to enable';
+    }
+    if (session) session.on('state', syncEnabled);
+    syncEnabled();
+})();
+</script>
+
+<!-- ============================================================ -->
+<!-- (3) MODULE BLOCK — ES-import-dependent code (protocol parse + run) -->
+<!-- ============================================================ -->
+<script type="module">
+import { parseV3Protocol, V3ParseError } from './js/protocol-yaml-v3.js';
+import { getConfig } from './js/arena-configs.js'; // side effect: sets window.PANEL_SPECS
+import * as YAML from 'yaml'; // vendored build has NAMED exports only (no default)
+
+const Studio = window.Studio;
+const $ = Studio.$;
+const RunLog = window.RunLog;
+const RunnerLib = window.ArenaRunnerG6;
+
+// ---- sha256 over the exact YAML text (self-verifying pair with the saved file) ----
+async function sha256Hex(text) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// ---- rig index: map a protocol's rig_path → {name, arenaConfig} (no YAML parse) ----
+let rigIndex = null;
+async function ensureRigIndex() {
+    if (rigIndex) return rigIndex;
+    try {
+        const res = await fetch('./configs/rigs/index.json', { cache: 'no-store' });
+        rigIndex = res.ok ? (await res.json()).rigs || [] : [];
+    } catch (_) {
+        rigIndex = [];
+    }
+    return rigIndex;
+}
+function rigInfoForPath(rigPath) {
+    if (!rigPath) return { name: null, arenaConfig: null };
+    const base = String(rigPath).split('/').pop();
+    const hit = (rigIndex || []).find((r) => String(r.path).split('/').pop() === base);
+    return hit ? { name: hit.name, arenaConfig: hit.arena } : { name: base.replace(/\.ya?ml$/i, ''), arenaConfig: null };
+}
+
+// ---- metadata controlled vocabularies ----
+async function loadVocab(path, key) {
+    try {
+        const res = await fetch(path, { cache: 'no-store' });
+        if (!res.ok) return null;
+        const data = YAML.parse(await res.text());
+        return data && data[key] ? data[key] : null;
+    } catch (_) {
+        return null;
+    }
+}
+async function populateMetaDatalists() {
+    const people = await loadVocab('./configs/metadata/people.yaml', 'people');
+    const genos = await loadVocab('./configs/metadata/genotypes.yaml', 'genotypes');
+    const expList = $('expList');
+    if (people) {
+        expList.innerHTML = '';
+        people.forEach((p) => {
+            const o = document.createElement('option');
+            o.value = p.id || p.name || p;
+            if (p.name && p.id) o.label = p.name;
+            expList.appendChild(o);
+        });
+    }
+    const genoList = $('genoList');
+    if (genos) {
+        genoList.innerHTML = '';
+        genos.forEach((g) => {
+            const o = document.createElement('option');
+            o.value = typeof g === 'string' ? g : g.name || g.id;
+            genoList.appendChild(o);
+        });
+    }
+    if (!people && !genos) {
+        $('mSrcNote').textContent = 'Controlled list unavailable — free text is fine.';
+    }
+}
+
+// ---- pattern-id resolution (pattern-set optional; pattern_ID fallback) ----
+function resolvePatternIdForCmd(cmd) {
+    // If a pattern set is active later, prefer it; MVP falls back to protocol pattern_ID.
+    const ps = window.PatternSet;
+    if (ps && Studio.activeSet && typeof ps.indexByName === 'function') {
+        const id = ps.indexByName(Studio.activeSet, cmd.pattern);
+        if (id != null) return id;
+    }
+    const pid = Number(cmd.pattern_ID);
+    return Number.isInteger(pid) && pid >= 1 ? pid : null;
+}
+function resolvePatternFramesForCmd(cmd) {
+    return null; // filled when a pattern set is active (Console phase)
+}
+function fictracPluginNames(exp) {
+    if (!exp || !Array.isArray(exp.plugins)) return [];
+    return exp.plugins
+        .filter((p) => p && ((p.matlab && p.matlab.class === 'FicTracPlugin') || p.name === 'fictrac'))
+        .map((p) => p.name);
+}
+
+// ---- load / render a protocol ----
+Studio.loadProtocol = async function (text, filename, source) {
+    let exp;
+    try {
+        exp = parseV3Protocol(text);
+    } catch (err) {
+        if (err instanceof V3ParseError) {
+            Studio.showBanner('Could not load "' + (filename || 'protocol') + '": ' + err.message);
+        } else {
+            Studio.showBanner('Load error: ' + (err && err.message ? err.message : err));
+        }
+        return false;
+    }
+    await ensureRigIndex();
+    const rig = rigInfoForPath(exp.rig_path || exp.rig);
+    const sha = await sha256Hex(text);
+    Studio.currentDoc = {
+        filename: filename || 'untitled.yaml',
+        sha256: sha,
+        source: source || 'committed',
+        experiment: exp,
+        rig: rig,
+        loadedText: text
+    };
+    $('edYaml').value = text;
+    $('edStatus').textContent = 'loaded ' + (filename || 'untitled');
+    document.body.classList.add('hasproto');
+    document.body.classList.toggle('untitled', !filename);
+    document.body.classList.toggle('unsaved', source === 'local-unsaved');
+    // top bar
+    $('docName').textContent = '📄 ' + (filename || 'untitled');
+    $('docName').title = filename || 'untitled';
+    const nConds = (exp.conditions || []).length;
+    const nBlocks = (exp.sequence || []).filter((e) => e.kind === 'block').length;
+    $('docSummary').textContent = nConds + ' cond · ' + nBlocks + ' blk';
+    const plugins = (exp.plugins || []).length;
+    $('plugHover').textContent = '⚡ Plugins · ' + plugins;
+    // provenance panel
+    $('pvFile').textContent = filename || 'untitled';
+    $('pvSha').textContent = sha.slice(0, 12) + '…';
+    $('pvSha').title = sha;
+    $('pvArena').textContent = rig.arenaConfig || '—';
+    $('pvRig').textContent = rig.name || '—';
+    $('pvFw').textContent = Studio.firmware || '(connect)';
+    renderSequence(exp);
+    Studio.refreshState();
+    Studio.setMode('run');
+    return true;
+};
+
+function condChips(cond) {
+    const tp = RunnerLib.findTrialParams(cond);
+    const chips = [];
+    if (tp) {
+        const mode = Number(tp.mode);
+        const modeLbl = mode === 2 ? 'mode 2 · open-loop' : mode === 3 ? 'mode 3 · show-frame' : mode === 4 ? 'mode 4 · closed-loop' : 'mode ' + tp.mode;
+        chips.push('<span class="kchip mode">' + modeLbl + '</span>');
+        const dur = RunnerLib.conditionDuration(cond);
+        if (dur) chips.push('<span class="kchip dur">' + dur + ' s</span>');
+    } else {
+        // allOn/allOff/wait-only condition
+        const first = (cond.commands || []).find((c) => c.type === 'controller');
+        if (first) chips.push('<span class="kchip mode">' + (first.command_name || 'controller') + '</span>');
+        const dur = RunnerLib.conditionDuration(cond);
+        if (dur) chips.push('<span class="kchip dur">' + dur + ' s</span>');
+    }
+    const hasIO = (cond.commands || []).some(
+        (c) => c.type === 'controller' && (c.command_name === 'setAnalogOut' || c.command_name === 'setDigitalOut')
+    );
+    if (hasIO) chips.push('<span class="kchip io">AO/DO</span>');
+    return chips.join('');
+}
+
+function renderSequence(exp) {
+    const body = $('seqBody');
+    body.innerHTML = '';
+    const condByName = new Map((exp.conditions || []).map((c) => [c.name, c]));
+    const seq = exp.sequence || [];
+    if (!seq.length) {
+        body.innerHTML = '<span class="dim">This protocol has no sequence entries.</span>';
+        return;
+    }
+    seq.forEach((entry) => {
+        if (entry.kind === 'block') {
+            const head = document.createElement('div');
+            head.className = 'blockhead';
+            const nTrials = (entry.trials || []).length;
+            head.innerHTML =
+                '<span class="bt">▸ Block: ' + escapeHtml(entry.name || 'block') + '</span>' +
+                '<span class="meta">×' + (entry.repetitions || 1) + (entry.randomize ? ' randomized' : '') +
+                ' · ' + nTrials + ' condition' + (nTrials === 1 ? '' : 's') + '</span>';
+            body.appendChild(head);
+            // trials is an array of condition-name strings.
+            (entry.trials || []).forEach((name) => {
+                body.appendChild(seqRow(name, condByName.get(name), true));
+            });
+            // intertrial is a condition-name string (or null).
+            if (entry.intertrial) {
+                const r = seqRow(entry.intertrial, condByName.get(entry.intertrial), true);
+                r.style.borderStyle = 'dashed';
+                body.appendChild(r);
+            }
+        } else {
+            const name = entry.condition_name || entry.name;
+            body.appendChild(seqRow(name, condByName.get(name), false));
+        }
+    });
+}
+
+function seqRow(name, cond, nested) {
+    const row = document.createElement('div');
+    row.className = 'seqrow' + (nested ? ' nested' : '');
+    row.dataset.cond = name || '';
+    const chips = cond ? condChips(cond) : '';
+    row.innerHTML =
+        '<span class="idx">▸</span><span class="nm">' + escapeHtml(name || '?') + '</span>' +
+        '<span class="kchips">' + chips + '</span>' +
+        '<button class="play">▶ Test on arena</button>';
+    row.querySelector('.play').addEventListener('click', (e) => {
+        e.stopPropagation();
+        Studio.runCondition(name);
+    });
+    return row;
+}
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+// ---- run the whole sequence (green Run experiment / blue Test experiment) ----
+Studio.beginRun = async function (isExperiment) {
+    const doc = Studio.currentDoc;
+    if (!doc || !Studio.session) return;
+    if (!Studio.session.connected) {
+        try { await Studio.session.connect(); } catch (e) { Studio.showBanner('Connect failed: ' + e.message); return; }
+    }
+    const exp = doc.experiment;
+    const { steps } = RunnerLib.flattenStructure(exp, { shuffle: shuffleInPlace });
+    const conditionsByName = new Map((exp.conditions || []).map((c) => [c.name, c]));
+    startRunLog(isExperiment);
+    document.body.classList.toggle('testing', !isExperiment);
+    await runSteps(steps, conditionsByName, exp);
+};
+
+Studio.runCondition = async function (name) {
+    const doc = Studio.currentDoc;
+    if (!doc || !Studio.session) return;
+    if (!Studio.session.connected) {
+        try { await Studio.session.connect(); } catch (e) { Studio.showBanner('Connect failed: ' + e.message); return; }
+    }
+    const cond = (doc.experiment.conditions || []).find((c) => c.name === name);
+    if (!cond) return;
+    const steps = [{ kind: 'ref', label: name, conditionName: name, seqIdx: 0, dur: RunnerLib.conditionDuration(cond) }];
+    const conditionsByName = new Map([[name, cond]]);
+    startRunLog(false); // per-condition test is never recorded
+    document.body.classList.add('testing');
+    await runSteps(steps, conditionsByName, doc.experiment);
+};
+
+function startRunLog(isExperiment) {
+    const doc = Studio.currentDoc;
+    const runId = window.StudioMeta.makeRunId();
+    const meta = window.StudioMeta.buildMeta({
+        runId,
+        panel: { experimenter: $('mExp').value, genotype: $('mGeno').value, notes: $('mNotes').value },
+        doc: { filename: doc.filename, sha256: doc.sha256 },
+        session: { firmware: Studio.firmware },
+        rig: doc.rig,
+        toolVersion: Studio.TOOL_VERSION
+    });
+    Studio.activeRunLog = RunLog.createRunLog({ intent: isExperiment ? 'experiment' : 'test', meta });
+    // reset the log surface
+    const box = $('runlogBox');
+    box.innerHTML = '';
+    $('btnLogSave').disabled = true;
+    $('rlSaved').classList.remove('show');
+    $('rlTag').className = 'tag ' + (isExperiment ? 'exp' : 'test');
+    $('rlTag').textContent = isExperiment ? 'EXPERIMENT' : 'TEST';
+    $('rlCtr').textContent = runId + ' · running';
+    $('rpLeadTxt').textContent = isExperiment ? 'REC · running experiment' : 'TEST · running';
+    $('pvRunId').textContent = runId;
+    $('runInline').classList.toggle('rec', isExperiment);
+}
+
+async function runSteps(steps, conditionsByName, exp) {
+    const ftNames = fictracPluginNames(exp);
+    try {
+        // NOTE: do NOT pass onProgress — the session broadcasts 'runstatus' which
+        // Studio.onRunStatus (subscribed once) consumes, so the log/highlight stay
+        // live across view switches.
+        await Studio.session.runSequence({
+            steps,
+            conditionsByName,
+            resolvePatternId: resolvePatternIdForCmd,
+            resolvePatternFrames: resolvePatternFramesForCmd,
+            fictracPluginNames: new Set(ftNames)
+        });
+    } catch (e) {
+        Studio.rawLog('run error: ' + (e && e.message ? e.message : e), 'err');
+        if (Studio.activeRunLog && !Studio.activeRunLog.summary) {
+            window.StudioRunLogAdapter.finishDisconnected(Studio.activeRunLog, { aborted: true, errors: 1, steps: 0, skipped: 0 });
+        }
+    } finally {
+        document.body.classList.remove('testing');
+        Studio.refreshState();
+    }
+}
+
+function shuffleInPlace(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const t = arr[i];
+        arr[i] = arr[j];
+        arr[j] = t;
+    }
+    return arr;
+}
+
+// ---- launcher buttons ----
+$('btnRunExp').addEventListener('click', () => Studio.beginRun(true));
+$('btnTestExp').addEventListener('click', () => Studio.beginRun(false));
+
+// ---- file open + save ----
+$('fileInput').addEventListener('change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    const text = await f.text();
+    await Studio.loadProtocol(text, f.name, 'local');
+});
+$('fmNew').addEventListener('click', () => {
+    $('fileMenu').classList.remove('open');
+    Studio.showBanner('New protocol authoring lands with the Edit view (Phase 3). For now, Open an existing YAML.');
+});
+// ---- Save (local file, or GitHub PR when signed in + checked) ----
+const GH_OWNER = 'reiserlab';
+const GH_REPO = 'webDisplayTools';
+const GH = window.StudioGitHub;
+
+function ghToken() {
+    return sessionStorage.getItem('studio_gh_pat') || localStorage.getItem('studio_gh_pat') || null;
+}
+function currentSaveText() {
+    const doc = Studio.currentDoc;
+    if (!doc) return '';
+    return $('edYaml').value || (doc.experiment._doc ? doc.experiment._doc.toString() : doc.loadedText || '');
+}
+function saveLocal() {
+    const doc = Studio.currentDoc;
+    const blob = new Blob([currentSaveText()], { type: 'text/yaml' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = (doc && doc.filename) || 'protocol.yaml';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+    if (doc) { doc.source = 'committed'; document.body.classList.remove('unsaved'); Studio.updateRunGate(); }
+    Studio.rawLog('saved local file: ' + ((doc && doc.filename) || 'protocol.yaml'), 'info');
+}
+
+async function saveViaPR() {
+    const doc = Studio.currentDoc;
+    const token = ghToken();
+    if (!token) { Studio.showBanner('Sign in to GitHub first.'); return; }
+    const base = (doc.filename || 'protocol.yaml').replace(/\.ya?ml$/i, '');
+    const path = 'protocols/' + GH.slug(base) + '.yaml';
+    const runId = window.StudioMeta.makeRunId();
+    const branch = GH.branchName(base, runId);
+    const text = currentSaveText();
+    Studio.rawLog('GitHub: opening PR for ' + path + ' on ' + branch + '…', 'info');
+    try {
+        const repo = await GH.run(fetch, GH.reqGetRepo(GH_OWNER, GH_REPO, token));
+        if (!repo.ok) throw new Error('repo read failed (' + repo.status + (repo.status === 401 ? ' — token invalid' : '') + ')');
+        const baseBranch = repo.data.default_branch;
+        const ref = await GH.run(fetch, GH.reqGetRef(GH_OWNER, GH_REPO, baseBranch, token));
+        if (!ref.ok) throw new Error('base ref read failed');
+        const baseSha = ref.data.object.sha;
+        const cr = await GH.run(fetch, GH.reqCreateRef(GH_OWNER, GH_REPO, branch, baseSha, token));
+        if (!cr.ok && cr.status !== 422) throw new Error('branch create failed (' + cr.status + ')');
+        // create-vs-update: look for an existing blob on the new branch
+        let existingSha;
+        const cur = await GH.run(fetch, GH.reqGetContents(GH_OWNER, GH_REPO, path, branch, token));
+        if (cur.ok && cur.data && cur.data.sha) existingSha = cur.data.sha;
+        const put = await GH.run(fetch, GH.reqPutContents(GH_OWNER, GH_REPO, path, {
+            message: 'Add/update protocol ' + base + ' via Arena Studio', contentText: text, branch, sha: existingSha
+        }, token));
+        if (!put.ok) throw new Error('file write failed (' + put.status + ')');
+        const pr = await GH.run(fetch, GH.reqCreatePull(GH_OWNER, GH_REPO, {
+            title: 'Protocol: ' + base, head: branch, base: baseBranch,
+            body: 'Committed from Arena Studio.\n\n- file: `' + path + '`\n- run_id: `' + runId + '`\n- sha256: `' + doc.sha256 + '`'
+        }, token));
+        if (!pr.ok) throw new Error('PR open failed (' + pr.status + ')');
+        Studio.rawLog('✓ PR opened: ' + pr.data.html_url, 'info');
+        Studio.showBanner('PR opened — ' + pr.data.html_url);
+        doc.source = 'committed';
+        document.body.classList.remove('unsaved');
+        Studio.updateRunGate();
+    } catch (e) {
+        if (String(e.message).includes('token invalid')) { sessionStorage.removeItem('studio_gh_pat'); localStorage.removeItem('studio_gh_pat'); document.body.classList.remove('ghauth'); }
+        Studio.rawLog('GitHub save failed: ' + e.message + ' — saving locally instead.', 'err');
+        Studio.showBanner('GitHub save failed (' + e.message + '); saved a local file instead.');
+        saveLocal();
+    }
+}
+
+$('fmSave').addEventListener('click', () => {
+    $('fileMenu').classList.remove('open');
+    if (!Studio.currentDoc) { Studio.showBanner('Open a protocol first.'); return; }
+    if (document.body.classList.contains('ghauth') && $('ghPR').checked) saveViaPR();
+    else saveLocal();
+});
+
+$('ghSignInBtn').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const pat = prompt(
+        'Paste a GitHub fine-grained personal access token for ' + GH_OWNER + '/' + GH_REPO +
+        '\n(Contents: read/write + Pull requests: read/write).\n\n' +
+        'Stored in sessionStorage (cleared when this tab closes). Do NOT use "remember" on a shared machine.'
+    );
+    if (!pat) return;
+    try {
+        const res = await fetch('https://api.github.com/user', { headers: GH.headers(pat.trim()) });
+        if (!res.ok) throw new Error('token rejected (' + res.status + ')');
+        const user = await res.json();
+        sessionStorage.setItem('studio_gh_pat', pat.trim());
+        if (confirm('Remember this token on THIS browser (localStorage)? Only on a private machine.')) {
+            localStorage.setItem('studio_gh_pat', pat.trim());
+        }
+        document.body.classList.add('ghauth');
+        $('ghWho').textContent = '✓ @' + (user.login || 'user');
+        $('ghPR').checked = true;
+        updateSaveLabel();
+    } catch (err) {
+        Studio.showBanner('GitHub sign-in failed: ' + err.message);
+    }
+});
+function updateSaveLabel() {
+    const pr = document.body.classList.contains('ghauth') && $('ghPR').checked;
+    $('ghDest').textContent = pr ? '→ commits to a branch + opens a Pull Request' : '→ writes a local .yaml file (sign in to GitHub to open a PR instead)';
+    $('fmSave').textContent = pr ? 'Save → Pull Request' : 'Save → local file';
+}
+$('ghPR').addEventListener('change', updateSaveLabel);
+// Restore an existing session token on load.
+if (ghToken()) {
+    fetch('https://api.github.com/user', { headers: GH.headers(ghToken()) })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((u) => { if (u) { document.body.classList.add('ghauth'); $('ghWho').textContent = '✓ @' + (u.login || 'user'); $('ghPR').checked = true; updateSaveLabel(); } })
+        .catch(() => {});
+}
+
+// ---- interim Edit view (raw-YAML editor) ----
+// The full three-zone designer embeds here in the final phase; this interim
+// editor makes edit → save → run work in one tool today. Mutation is an explicit
+// "Re-parse & apply" gated on Edit mode (the pushUndo() canMutate chokepoint
+// governs the three-zone designer once embedded).
+$('edApply').addEventListener('click', async () => {
+    if (Studio.mode !== 'edit') return; // canMutate: only Edit mode mutates
+    const doc = Studio.currentDoc;
+    if (!doc) { Studio.showBanner('Open a protocol first.'); return; }
+    const text = $('edYaml').value;
+    let exp;
+    try {
+        exp = parseV3Protocol(text);
+    } catch (err) {
+        $('edStatus').textContent = '✗ ' + (err && err.message ? err.message : 'parse error');
+        $('edStatus').style.color = 'var(--danger)';
+        return;
+    }
+    $('edStatus').style.color = '';
+    await ensureRigIndex();
+    const rig = rigInfoForPath(exp.rig_path || exp.rig);
+    const sha = await sha256Hex(text);
+    doc.experiment = exp;
+    doc.rig = rig;
+    doc.sha256 = sha;
+    doc.source = 'local-unsaved';
+    document.body.classList.add('unsaved');
+    document.body.classList.remove('untitled');
+    $('docSummary').textContent = (exp.conditions || []).length + ' cond · ' + (exp.sequence || []).filter((e) => e.kind === 'block').length + ' blk';
+    $('plugHover').textContent = '⚡ Plugins · ' + (exp.plugins || []).length;
+    $('pvSha').textContent = sha.slice(0, 12) + '…';
+    $('pvSha').title = sha;
+    $('pvArena').textContent = rig.arenaConfig || '—';
+    $('pvRig').textContent = rig.name || '—';
+    renderSequence(exp);
+    Studio.updateRunGate();
+    $('edStatus').textContent = '✓ applied — ' + (exp.conditions || []).length + ' conditions (unsaved)';
+});
+// Typing in the editor marks the doc unsaved (so Run-experiment requires an
+// explicit Save first, and the beforeunload guard fires).
+$('edYaml').addEventListener('input', () => {
+    if (Studio.mode !== 'edit' || !Studio.currentDoc) return;
+    if (Studio.currentDoc.source !== 'local-unsaved') {
+        Studio.currentDoc.source = 'local-unsaved';
+        document.body.classList.add('unsaved');
+        Studio.updateRunGate();
+    }
+});
+$('edRevert').addEventListener('click', () => {
+    const doc = Studio.currentDoc;
+    if (!doc) return;
+    $('edYaml').value = doc.loadedText || (doc.experiment._doc ? doc.experiment._doc.toString() : '');
+    $('edStatus').textContent = 'reverted to loaded text';
+    $('edStatus').style.color = '';
+});
+// When entering Edit, make sure the textarea reflects the current doc.
+Studio.onModeChange = (m) => {
+    if (m === 'edit' && Studio.currentDoc && !$('edYaml').value) {
+        $('edYaml').value = Studio.currentDoc.loadedText || '';
+    }
+};
+
+// ---- URL state (#107) on load ----
+async function initFromUrl() {
+    await populateMetaDatalists();
+    let allowedKeys = [];
+    let protoIndex = [];
+    try {
+        const res = await fetch('./protocols/index.json', { cache: 'no-store' });
+        if (res.ok) {
+            protoIndex = (await res.json()).protocols || [];
+            allowedKeys = protoIndex.map((p) => p.key);
+        }
+    } catch (_) { /* offline — no committed protocols */ }
+    const { state, warnings } = window.StudioUrlState.decode(location.search, { allowedKeys });
+    warnings.forEach((w) => Studio.rawLog(w, 'warn'));
+    if (state.p) {
+        const entry = protoIndex.find((p) => p.key === state.p);
+        if (entry && window.StudioUrlState.isSafePath(entry.path)) {
+            try {
+                const res = await fetch(entry.path, { cache: 'no-store' });
+                if (res.ok) await Studio.loadProtocol(await res.text(), entry.path.split('/').pop(), 'committed');
+                else Studio.showBanner('Could not fetch protocol "' + state.p + '".');
+            } catch (e) {
+                Studio.showBanner('Protocol fetch failed: ' + e.message);
+            }
+        }
+    }
+    if (state.mode && state.mode !== 'run') Studio.setMode(state.mode);
+}
+initFromUrl();
+</script>
+</body>
+</html>

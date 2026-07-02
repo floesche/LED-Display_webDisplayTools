@@ -1,0 +1,22 @@
+{
+  "tool": "webDisplayTools/protocol-index",
+  "version": 1,
+  "description": "Committed v3 protocols selectable via ?p= / ?lib= in Arena Studio. Add a protocol YAML alongside this file and a matching entry here (keys must be unique; paths stay under ./protocols/).",
+  "protocols": [
+    {
+      "key": "g6_2x10_smoke",
+      "label": "G6 2×10 smoke test (all commands, no plugins)",
+      "path": "./protocols/g6_2x10_smoke.yaml"
+    },
+    {
+      "key": "fictrac_closed_loop",
+      "label": "FicTrac closed-loop (Mode 3)",
+      "path": "./protocols/fictrac_closed_loop.yaml"
+    },
+    {
+      "key": "full_experiment",
+      "label": "Full experiment (blocks, plugins, ITI)",
+      "path": "./protocols/full_experiment.yaml"
+    }
+  ]
+}
