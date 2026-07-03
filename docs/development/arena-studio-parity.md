@@ -31,6 +31,8 @@ Update this list when a Studio feature intentionally skips the twins.
 | Bidirectional YAML tab | n/a | ✗ |
 | §6 canMutate() chokepoint (read-only Run/Console lock) | n/a | ✗ (importMode guards only) |
 | Unified run path (Studio.runCondition; run-log.js recording; metadata panel) | ✗ | ✗ (own #runStatusLog) |
+| URL state read+write (#107: `?p`/`?mode`; push-view/replace-doc history, popstate, own-refresh via history.state) | ✗ | ✗ |
+| Edit-toolbar 💾 Save = the real save path (marks saved, opens run gate; Export YAML ≠ Save) | n/a | ✗ (Export only, never marks saved) |
 
 Backported to both (the safety class): display-quiesce before ISP/SD-write ops
 (`e79007f`), batch show-on-arena blink pattern, `decodeRefreshRate`/`encodeGetRefreshRate`
@@ -47,7 +49,8 @@ exports (shared module — healed all pages at once).
 2. **At least one real recorded experiment** — ✅ covered by the Tier-2 pass.
 3. **Colleague sign-off** (circulate like the wireframes; #panels).
 4. `?mode=console` honored in URL state (✅ done 2026-07-02) so redirect
-   deep-links land correctly.
+   deep-links land correctly; write side (URL tracks state, back/forward)
+   ✅ shipped 2026-07-02 (Studio v0.3).
 5. One soak cycle with both available (Studio promoted on index.html — done;
    standalones marked "legacy — features land in Studio").
 
@@ -63,6 +66,15 @@ exports (shared module — healed all pages at once).
   effort goes to shortening the overlap, not making it comfortable.
 
 Related: GitHub [#107](https://github.com/reiserlab/webDisplayTools/issues/107)
-(URL state; read side largely done, write side pending), design doc
-`arena-studio-unification-design.md` §10 phase 5 / §12 Stage C (on the
-`docs/arena-studio-wireframes` branch), memory note `arena-studio-unification`.
+(URL state; read+write shipped in Studio v0.3 — `lib`/`set` params reserved,
+`dock` removed), design doc `arena-studio-unification-design.md` §10 phase 5 /
+§12 Stage C (on the `docs/arena-studio-wireframes` branch), memory note
+`arena-studio-unification`.
+
+**Direction (2026-07-02, user):** eventual save target is a **per-user GitHub
+repo** associated with the Studio session (holding that user's protocol YAMLs,
+pattern sets, etc.), with merge/PR back — generalizing today's hardcoded
+`reiserlab/webDisplayTools` `saveViaPR`. Needs its own design round (auth
+model, repo picker, content layout, private-repo API access; `?p=` grows a
+repo dimension — `encodeApp` extends, the registry fetch is already
+pluggable). Tracked as a future arc, NOT part of #107.

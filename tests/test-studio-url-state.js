@@ -51,10 +51,15 @@ d = U.decode('?p=looming_v3&mode=console', { allowedKeys: ALLOWED });
 check('mode=console honored with shared p', d.state.mode, 'console');
 check('p still resolved alongside console', d.state.p, 'looming_v3');
 
-d = U.decode('?p=g6_2x10_smoke&lib=looming_v3&dock=raw&set=g6_2x10', { allowedKeys: ALLOWED });
+d = U.decode('?p=g6_2x10_smoke&lib=looming_v3&set=g6_2x10', { allowedKeys: ALLOWED });
 check('lib resolved', d.state.lib, 'looming_v3');
-check('dock enum', d.state.dock, 'raw');
 check('set key', d.state.set, 'g6_2x10');
+
+// dock was removed with the bottom-dock concept — now an unknown param:
+// silently ignored (no warning), never decoded.
+d = U.decode('?dock=raw&mode=edit', { allowedKeys: ALLOWED });
+check('legacy dock param ignored', d.state.dock, undefined);
+checkBool('legacy dock does not warn', d.warnings.length === 0, d.warnings.join('|'));
 
 // ── decode: rejection ────────────────────────────────────────────────────────
 console.log('=== decode: rejection ===');
@@ -64,9 +69,6 @@ checkBool('unknown p warns', d.warnings.length === 1, d.warnings.join('|'));
 
 d = U.decode('?mode=bogus', { allowedKeys: ALLOWED });
 check('bogus mode → run', d.state.mode, 'run');
-
-d = U.decode('?dock=danger', { allowedKeys: ALLOWED });
-check('bad dock dropped', d.state.dock, undefined);
 
 // ── path-traversal / key safety ──────────────────────────────────────────────
 console.log('=== safety ===');
@@ -95,16 +97,68 @@ check('edit mode kept', U.encode({ mode: 'edit', p: 'x', source: 'committed' }),
 check('console mode kept', U.encode({ mode: 'console' }), '?mode=console');
 // Local (file-picked) doc is NOT shareable → p/set omitted.
 check('local doc omits p', U.encode({ mode: 'run', p: 'x', set: 'y', source: 'local' }), '');
-check('closed dock omitted', U.encode({ dock: 'closed' }), '');
-check('non-closed dock kept', U.encode({ dock: 'stepper' }), '?dock=stepper');
+
+// ── encodeApp (write side: live app state → search) ──────────────────────────
+console.log('=== encodeApp ===');
+check(
+    'registry doc, run',
+    U.encodeApp({ mode: 'run', protocolKey: 'looming_v3' }),
+    '?p=looming_v3'
+);
+check(
+    'registry doc, edit',
+    U.encodeApp({ mode: 'edit', protocolKey: 'looming_v3' }),
+    '?mode=edit&p=looming_v3'
+);
+check(
+    'registry doc, console',
+    U.encodeApp({ mode: 'console', protocolKey: 'looming_v3' }),
+    '?mode=console&p=looming_v3'
+);
+check('no doc, run (clean default)', U.encodeApp({ mode: 'run', protocolKey: null }), '');
+check('local doc, edit', U.encodeApp({ mode: 'edit', protocolKey: null }), '?mode=edit');
+// encodeApp must ignore source/baseSource/dirty entirely — key-presence is the
+// only signal (saveLocal flips baseSource to 'committed' for plain local saves).
+check(
+    'ignores source/baseSource/dirty fields',
+    U.encodeApp({
+        mode: 'run',
+        protocolKey: null,
+        source: 'committed',
+        baseSource: 'committed',
+        dirty: false
+    }),
+    ''
+);
+check('empty state', U.encodeApp({}), '');
+check('no arg', U.encodeApp(), '');
+
+// ── navMode (popstate: literal mode, NO shared-p force) ──────────────────────
+console.log('=== navMode ===');
+check('empty search → run', U.navMode(''), 'run');
+check(
+    'edit honored even with p (in-session traversal)',
+    U.navMode('?mode=edit&p=looming_v3'),
+    'edit'
+);
+check('console honored', U.navMode('?mode=console'), 'console');
+check('bogus mode → run', U.navMode('?mode=bogus'), 'run');
+check('undefined search → run', U.navMode(undefined), 'run');
 
 // round-trip
 console.log('=== round-trip ===');
-const rt = U.encode({ mode: 'edit', lib: 'looming_v3', dock: 'raw', source: 'committed' });
+const rt = U.encode({ mode: 'edit', lib: 'looming_v3', source: 'committed' });
 const back = U.decode(rt, { allowedKeys: ALLOWED });
 check('round-trip mode', back.state.mode, 'edit'); // no p present → edit honored
 check('round-trip lib', back.state.lib, 'looming_v3');
-check('round-trip dock', back.state.dock, 'raw');
+// encodeApp→decode: the shared-p force still applies to a FRESH load of an
+// edit+p URL (newbie-safety) — the write side bypasses it only via
+// history.state (own refresh) and navMode (popstate).
+const rt2 = U.decode(U.encodeApp({ mode: 'edit', protocolKey: 'looming_v3' }), {
+    allowedKeys: ALLOWED
+});
+check('fresh load of edit+p URL forces Run', rt2.state.mode, 'run');
+check('fresh load of edit+p URL keeps p', rt2.state.p, 'looming_v3');
 
 console.log('\n=== Summary ===');
 console.log(`${totalChecks - failures} / ${totalChecks} checks passed`);

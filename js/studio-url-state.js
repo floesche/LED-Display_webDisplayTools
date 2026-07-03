@@ -1,11 +1,25 @@
 /**
  * studio-url-state.js — Arena Studio URL state codec (#107, DOM-free, testable).
  *
- * Encodes/decodes the shareable link params: mode / p / lib / dock / set.
+ * Encodes/decodes the shareable link params: mode / p / lib / set.
  * Shareability boundary (design §9): `p`/`lib` resolve ONLY to committed
  * protocol keys (validated against protocols/index.json by the caller); a
  * locally file-picked YAML has NO shareable URL, so encode() omits p/set when
  * the doc is local. Running-experiment progress is deliberately NOT encoded.
+ *
+ * WRITE SIDE (#107): the Studio mirrors state back into the URL via
+ * encodeApp() — pushState for user view (mode) changes, replaceState for
+ * document-identity changes, popstate restores MODE ONLY (doc identity does
+ * not time-travel; the visited entry is canonicalized to actual state, so a
+ * stale `p` in an old entry is rewritten on visit). `p` means REGISTRY
+ * PROVENANCE: it is kept while the doc is edited/saved (sharing a dirty doc's
+ * URL gives the recipient the pristine committed copy). A valid
+ * `history.state.mode` marks the AUTHORING browser's own refresh and may
+ * override the shared-`p` edit→run force below. `lib`/`set` are reserved
+ * (decode-validated, nothing consumes them yet) and are scrubbed by the first
+ * write-side URL update — thread them through encodeApp when they get wired.
+ * (`dock` was removed 2026-07-02 with the bottom-dock concept; old dock=
+ * params are now unknown → silently ignored + scrubbed.)
  *
  * Security: decode() clamps `mode` to run|edit|console, drops unknown enum
  * values, and rejects path-traversal even though paths come from a committed
@@ -21,7 +35,6 @@
     'use strict';
 
     const MODES = ['run', 'edit', 'console'];
-    const DOCKS = ['closed', 'quick', 'stepper', 'stream', 'raw', 'mem'];
     // A committed protocol/pattern-set key: conservative slug, no separators.
     const KEY_RE = /^[A-Za-z0-9_-]{1,64}$/;
     // A safe committed path under an allowed dir — no traversal, no scheme.
@@ -81,12 +94,7 @@
         }
         state.mode = mode || 'run';
 
-        // dock / set — clamp to enum / safe key.
-        const dock = params.get('dock');
-        if (dock != null) {
-            if (DOCKS.includes(dock)) state.dock = dock;
-            else warnings.push('Ignored dock=' + dock);
-        }
+        // set — clamp to safe key.
         const set = params.get('set');
         if (set != null) {
             if (isSafeKey(set)) state.set = set;
@@ -99,7 +107,7 @@
     /**
      * Encode a state object to a query string (leading '?', or '' if empty).
      * A local (non-committed) doc omits p/set — they aren't shareable.
-     * @param {object} state {mode, p, lib, dock, set, source?: 'local'|'committed'}
+     * @param {object} state {mode, p, lib, set, source?: 'local'|'committed'}
      */
     function encode(state) {
         const s = state || {};
@@ -108,13 +116,44 @@
         if (s.mode && s.mode !== 'run' && MODES.includes(s.mode)) params.set('mode', s.mode);
         if (!local && isSafeKey(s.p)) params.set('p', s.p);
         if (isSafeKey(s.lib)) params.set('lib', s.lib);
-        if (s.dock && DOCKS.includes(s.dock) && s.dock !== 'closed') params.set('dock', s.dock);
         if (!local && isSafeKey(s.set)) params.set('set', s.set);
         const q = params.toString();
         return q ? '?' + q : '';
     }
 
-    const StudioUrlState = { encode, decode, isSafeKey, isSafePath, MODES, DOCKS };
+    /**
+     * Encode LIVE app state for the write side (Studio.updateUrl). Reads ONLY
+     * {mode, protocolKey} by construction — never doc.source/baseSource (a
+     * plain local save flips baseSource to 'committed'; key-presence is the
+     * only safe "this doc is the committed one" signal). `p` = registry
+     * provenance: emitted whenever the doc was loaded from the registry, even
+     * if since edited (see header).
+     * @param {object} app {mode, protocolKey}
+     * @returns {string} query string (leading '?', or '' when all defaults)
+     */
+    function encodeApp(app) {
+        const a = app || {};
+        return encode({
+            mode: a.mode,
+            p: a.protocolKey || undefined,
+            source: a.protocolKey ? 'committed' : 'local'
+        });
+    }
+
+    /**
+     * The LITERAL clamped mode of a search string — for in-session history
+     * traversal (popstate). No shared-`p` edit→run force: that rule protects
+     * fresh loads of shared links; applying it here would bounce Forward
+     * navigation into an Edit entry back to Run.
+     * @param {string} search  e.g. '?mode=edit&p=x'
+     * @returns {'run'|'edit'|'console'}
+     */
+    function navMode(search) {
+        const mode = new URLSearchParams(search || '').get('mode');
+        return MODES.includes(mode) ? mode : 'run';
+    }
+
+    const StudioUrlState = { encode, encodeApp, navMode, decode, isSafeKey, isSafePath, MODES };
 
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = StudioUrlState;

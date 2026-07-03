@@ -211,10 +211,19 @@ fix flows to every page automatically; two hand-written HTML pages never will.
   when adding encoders/decoders, add them to the export list AND a test; audit
   with `Object.keys(require('./js/arena-wire-g6.js'))` vs the page's `Wire.*`
   uses (a missing export throws silently inside async handlers).
-- URL state: `js/studio-url-state.js` (`mode` ∈ run|edit|console; a shared `p`
-  forces `edit`→Run, never `console`). The write side of
-  [#107](https://github.com/reiserlab/webDisplayTools/issues/107) (URL updates
-  on navigation) is not yet wired.
+- URL state ([#107](https://github.com/reiserlab/webDisplayTools/issues/107),
+  read+write): `js/studio-url-state.js` (`mode` ∈ run|edit|console; a shared
+  `p` forces `edit`→Run on fresh loads, never `console`). Write side:
+  `Studio.updateUrl` mirrors `{mode, currentDoc.protocolKey}` — user mode
+  switches PUSH (Back/forward = view history), doc-identity changes REPLACE
+  (one call in `syncFromEditor`); popstate restores MODE ONLY, then
+  canonicalizes the visited entry (doc identity never time-travels). `p` =
+  registry provenance (`protocolKey` set only by a validated `?p=` load, kept
+  across edits/saves); `history.state.mode` marks an own-refresh and may
+  override the shared-`p` force. `initFromUrl` + popstate wrap `setMode` in
+  `Studio._urlSuppress`. URL writing is NOT a protocol mutation — never route
+  it through `pushUndo`. Any NEW shareable state must flow through
+  `encodeApp()` + `Studio.updateUrl` (never hand-build `location.search`).
 - Bump the footer version/timestamp on every edit; never Prettier the HTML.
 
 ## CI/CD Validation

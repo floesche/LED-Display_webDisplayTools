@@ -1859,7 +1859,7 @@
              does NOT shift the right-aligned action buttons (Undo/Redo/Reset).
              Previously it sat among the buttons and pushed them ~83px left on
              the first edit, causing clicks on Reset to miss after editing. -->
-        <span id="dirtyIndicator" class="dirty-badge" style="display: none;" title="Unsaved edits — Export to save">● edited</span>
+        <span id="dirtyIndicator" class="dirty-badge" style="display: none;" title="Unsaved edits — Save (💾 or File ▾) to mark the protocol saved and unlock recorded experiment runs">● edited</span>
         <div class="header-spacer"></div>
         <button id="undoBtn" class="header-btn" disabled title="Undo last edit (Ctrl+Z)">↶ Undo</button>
         <button id="redoBtn" class="header-btn" disabled title="Redo (Ctrl+Y)">↷ Redo</button>
@@ -1887,7 +1887,8 @@
         <input type="file" id="importFromInput" accept=".yaml,.yml" style="display: none;">
         <button id="importFromBtn" class="header-btn" disabled title="Copy conditions from a second v3 YAML into this one (brings their anchors + plugins along)">Import from YAML…</button>
         <button id="patternSetBtn" class="header-btn" title="Build an SD-card pattern set (bundle) for this rig's arena — pick patterns, order them, export a ZIP to copy onto the SD card">Pattern Set…</button>
-        <button id="exportBtn" class="header-btn" disabled title="Export the (possibly edited) YAML">Export YAML</button>
+        <button id="edSaveBtn" class="header-btn primary" disabled title="Save the protocol — writes a local .yaml (or opens a GitHub PR when signed in with the PR box checked), marks it saved, and unlocks recorded experiment runs. Same action as File ▾ → Save.">💾 Save</button>
+        <button id="exportBtn" class="header-btn" disabled title="Download a regenerated copy (*_roundtrip.yaml) for diffing/MATLAB checks — does NOT mark the protocol saved; use 💾 Save for that">Export YAML</button>
         <a href="experiment_designer_v3_quickstart.html" target="_blank" class="header-btn" style="text-decoration: none; display: inline-flex; align-items: center;" title="Open the v3 Experiment Designer quick-start guide in a new tab">Quick Start</a>
     </div>
 
@@ -2310,7 +2311,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.2 | 2026-07-02 17:19 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint)</footer>
+<footer id="footer">Arena Studio v0.3 | 2026-07-02 23:29 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint) · URL state r/w (#107) · Edit 💾 Save</footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -2338,7 +2339,7 @@
 <script>
 'use strict';
 (function () {
-    const TOOL_VERSION = 'Arena Studio v0.2';
+    const TOOL_VERSION = 'Arena Studio v0.3';
     const $ = (id) => document.getElementById(id);
     const Wire = window.ArenaWireG6;
     const RunLog = window.RunLog;
@@ -2549,16 +2550,69 @@
     Studio.showBanner = showBanner;
 
     // ---- view model ----------------------------------------------------------
-    function setMode(m) {
+    function setMode(m, opts) {
         Studio.mode = m;
         document.body.classList.toggle('editmode', m === 'edit');
         document.body.classList.toggle('consolemode', m === 'console');
         document.querySelectorAll('#modeSeg button').forEach((b) => {
             b.classList.toggle('on', b.dataset.mode === m);
         });
+        // #107 write side: user view changes PUSH (Back/forward = view history);
+        // programmatic ones (a load's jump to Run) pass {push:false} → replace.
+        // MUST run BEFORE onModeChange: entering Edit re-renders → syncFromEditor
+        // → updateUrl(replace), which would canonicalize the URL first and make
+        // this push dedup to a no-op (no history entry — bench-found ordering bug).
+        Studio.updateUrl({ push: !opts || opts.push !== false });
         if (typeof Studio.onModeChange === 'function') Studio.onModeChange(m);
     }
     Studio.setMode = setMode;
+
+    // ---- URL state (#107 write side) ------------------------------------------
+    // The URL mirrors {mode, protocolKey} — see js/studio-url-state.js header
+    // for the model (push-view / replace-doc, `p` = registry provenance). NOT a
+    // protocol mutation: never route through pushUndo (it would refuse outside
+    // Edit). New shareable state must flow through encodeApp + this function.
+    Studio._urlSuppress = false; // initFromUrl/popstate wrap their setMode calls
+    Studio._pendingProtocolKey = null; // registry-key handoff, see loadProtocol
+    Studio.updateUrl = function (opts) {
+        if (Studio._urlSuppress || !window.StudioUrlState) return;
+        const q = window.StudioUrlState.encodeApp({
+            mode: Studio.mode,
+            protocolKey: Studio.currentDoc && Studio.currentDoc.protocolKey
+        });
+        // Load-bearing dedup: re-clicks and per-mutation syncs must not stack
+        // history entries (or burn Safari's ~100/30s history-call budget).
+        if (q === location.search) return;
+        try {
+            const st = { studio: 1, mode: Studio.mode }; // own-refresh marker
+            const url = location.pathname + q + location.hash;
+            if (opts && opts.push) history.pushState(st, '', url);
+            else history.replaceState(st, '', url);
+        } catch (e) {
+            // file:// opaque origins and Safari's throttle THROW — URL sync is
+            // best-effort chrome; it must never break mode switching.
+            rawLine('URL update skipped: ' + e.message, 'warn');
+        }
+    };
+    // Back/forward restores MODE ONLY (document identity does not time-travel;
+    // popstate can't be cancelled, so reloading a doc here would fight the
+    // dirty-confirm). Then canonicalize the visited entry to actual app state —
+    // a stale `p` in an old entry gets rewritten on visit, so the URL never
+    // lies. navMode (not decode) because the shared-p edit→run force is for
+    // fresh loads; here it would bounce Forward-into-Edit back to Run.
+    window.addEventListener('popstate', (e) => {
+        const S = window.StudioUrlState;
+        if (!S) return;
+        const m = e.state && S.MODES.includes(e.state.mode) ? e.state.mode : S.navMode(location.search);
+        const prev = Studio._urlSuppress;
+        Studio._urlSuppress = true;
+        try {
+            setMode(m);
+        } finally {
+            Studio._urlSuppress = prev;
+        }
+        Studio.updateUrl({ push: false });
+    });
 
     // ---- STOP (both buttons) --------------------------------------------------
     async function doStop() {
@@ -4314,7 +4368,7 @@ function fictracPluginNames(exp) {
 // The embedded designer (Studio.editor) is the single source of truth for the
 // document; opening a protocol delegates to it, and Studio.syncFromEditor
 // recomputes all studio-side state (Run view, chips, provenance sha).
-Studio.loadProtocol = async function (text, filename, source) {
+Studio.loadProtocol = async function (text, filename, source, opts) {
     // D4 lock: during a cross-library import the target doc is frozen — a load
     // here would clobber it AND the undo stacks under live staging (§6 audit).
     if (Studio.importMode) {
@@ -4346,10 +4400,19 @@ Studio.loadProtocol = async function (text, filename, source) {
         return false;
     }
     // Designer re-parses + validates on its own path (same functions), then
-    // calls Studio.syncFromEditor via its loadYamlText tail.
-    const ok = Studio.editor.load(text, filename || 'untitled.yaml', source || 'committed');
+    // calls Studio.syncFromEditor via its loadYamlText tail. The registry-key
+    // stash (#107) brackets EXACTLY this call: every early return above stays
+    // clear of it, and editor.load → loadYamlText → syncFromEditor's isLoad
+    // branch is fully synchronous — that's what makes the handoff race-free.
+    Studio._pendingProtocolKey = (opts && opts.key) || null;
+    let ok;
+    try {
+        ok = Studio.editor.load(text, filename || 'untitled.yaml', source || 'committed');
+    } finally {
+        Studio._pendingProtocolKey = null;
+    }
     if (!ok) return false;
-    Studio.setMode('run');
+    Studio.setMode('run', { push: false }); // programmatic — part of the load, not a view nav
     return true;
 };
 
@@ -4366,15 +4429,26 @@ Studio.syncFromEditor = async function (info) {
     if (info.isLoad || !doc) {
         doc = Studio.currentDoc = {
             filename: info.filename || 'untitled.yaml',
-            baseSource: info.source || 'local'
+            baseSource: info.source || 'local',
+            protocolKey: null
         };
     }
     doc.experiment = exp;
     if (info.isLoad) {
         doc.filename = info.filename || 'untitled.yaml';
         doc.baseSource = info.source || 'local';
+        // Registry provenance (#107): only a ?p= load sets the stash (see
+        // loadProtocol); every other load path (local file, New, demo, Reset)
+        // reaches here with null → the URL drops `p`. Non-load syncs preserve
+        // the key, so edits/saves keep provenance. (Reset + undo restores the
+        // old text WITHOUT the key — conservative loss, never a wrong key.)
+        doc.protocolKey = Studio._pendingProtocolKey || null;
     }
     doc.source = info.dirty ? 'local-unsaved' : doc.baseSource;
+    // Doc identity → replace, never push. Still in the synchronous prefix:
+    // atomic with the identity fields above, so _syncSeq supersession can't
+    // reorder URL writes; mutation-time calls dedup to a no-op in updateUrl.
+    Studio.updateUrl({ push: false });
     const text = exp._doc ? exp._doc.toString() : '';
     if (info.isLoad) doc.loadedText = text;
     await ensureRigIndex();
@@ -4730,8 +4804,12 @@ async function saveViaPR() {
     }
 }
 
-$('fmSave').addEventListener('click', () => {
-    $('fileMenu').classList.remove('open');
+// The ONE save path — File ▾ → Save AND the Edit toolbar's 💾 Save. Writes a
+// local .yaml (or opens a GitHub PR when signed in + box checked) and marks
+// the doc saved (markSaved → dirty clears → the recorded-run gate opens).
+// Distinct from the Edit toolbar's "Export YAML", which downloads a
+// REGENERATED roundtrip copy and marks nothing saved.
+Studio.saveCurrent = function () {
     if (!Studio.currentDoc) { Studio.showBanner('Open a protocol first.'); return; }
     if (Studio.editor && Studio.editor.hasUnappliedYaml()) {
         Studio.showBanner('The YAML tab has unapplied edits — Apply or Revert them first.');
@@ -4739,6 +4817,10 @@ $('fmSave').addEventListener('click', () => {
     }
     if (document.body.classList.contains('ghauth') && $('ghPR').checked) saveViaPR();
     else saveLocal();
+};
+$('fmSave').addEventListener('click', () => {
+    $('fileMenu').classList.remove('open');
+    Studio.saveCurrent();
 });
 
 $('ghSignInBtn').addEventListener('click', async (e) => {
@@ -4785,34 +4867,57 @@ if (ghToken()) {
 
 // ---- URL state (#107) on load ----
 async function initFromUrl() {
-    await populateMetaDatalists();
-    await populateArenaSelect();
-    wirePatPicker();
-    loadBuiltinPatternSet();
-    let allowedKeys = [];
-    let protoIndex = [];
+    // Write side: suppress URL writes for the whole init (loadProtocol's
+    // internal setMode + the final setMode below must not push entries); the
+    // finally block emits ONE canonical replace from LIVE state — scrubbing
+    // bogus/stale params, stamping the {studio, mode} own-refresh marker, and
+    // never clobbering a mode the user clicked during the awaits below.
+    Studio._urlSuppress = true;
     try {
-        const res = await fetch('./protocols/index.json', { cache: 'no-store' });
-        if (res.ok) {
-            protoIndex = (await res.json()).protocols || [];
-            allowedKeys = protoIndex.map((p) => p.key);
-        }
-    } catch (_) { /* offline — no committed protocols */ }
-    const { state, warnings } = window.StudioUrlState.decode(location.search, { allowedKeys });
-    warnings.forEach((w) => Studio.rawLog(w, 'warn'));
-    if (state.p) {
-        const entry = protoIndex.find((p) => p.key === state.p);
-        if (entry && window.StudioUrlState.isSafePath(entry.path)) {
-            try {
-                const res = await fetch(entry.path, { cache: 'no-store' });
-                if (res.ok) await Studio.loadProtocol(await res.text(), entry.path.split('/').pop(), 'committed');
-                else Studio.showBanner('Could not fetch protocol "' + state.p + '".');
-            } catch (e) {
-                Studio.showBanner('Protocol fetch failed: ' + e.message);
+        await populateMetaDatalists();
+        await populateArenaSelect();
+        wirePatPicker();
+        loadBuiltinPatternSet();
+        let allowedKeys = [];
+        let protoIndex = [];
+        try {
+            const res = await fetch('./protocols/index.json', { cache: 'no-store' });
+            if (res.ok) {
+                protoIndex = (await res.json()).protocols || [];
+                allowedKeys = protoIndex.map((p) => p.key);
+            }
+        } catch (_) { /* offline — no committed protocols */ }
+        const { state, warnings } = window.StudioUrlState.decode(location.search, { allowedKeys });
+        // history.state marks the AUTHORING browser's own refresh (pasted or
+        // shared links arrive with null state) — honor its mode over the
+        // decoded one, so refreshing in Edit stays in Edit despite the
+        // shared-p→Run force (which still protects genuinely shared links),
+        // and drop the now-misleading "opened in Run" warning.
+        const hist = history.state;
+        const ownMode =
+            hist && hist.studio && window.StudioUrlState.MODES.includes(hist.mode) ? hist.mode : null;
+        if (ownMode) state.mode = ownMode;
+        warnings
+            .filter((w) => !(ownMode && /opened in Run/.test(w)))
+            .forEach((w) => Studio.rawLog(w, 'warn'));
+        if (state.p) {
+            const entry = protoIndex.find((p) => p.key === state.p);
+            if (entry && window.StudioUrlState.isSafePath(entry.path)) {
+                try {
+                    const res = await fetch(entry.path, { cache: 'no-store' });
+                    if (res.ok)
+                        await Studio.loadProtocol(await res.text(), entry.path.split('/').pop(), 'committed', { key: state.p });
+                    else Studio.showBanner('Could not fetch protocol "' + state.p + '".');
+                } catch (e) {
+                    Studio.showBanner('Protocol fetch failed: ' + e.message);
+                }
             }
         }
+        if (state.mode && state.mode !== 'run') Studio.setMode(state.mode);
+    } finally {
+        Studio._urlSuppress = false;
+        Studio.updateUrl({ push: false });
     }
-    if (state.mode && state.mode !== 'run') Studio.setMode(state.mode);
 }
 
 // ============================================================
@@ -5159,6 +5264,7 @@ async function initFromUrl() {
                 // (async, non-blocking) so the Pattern Set builder + W/C resolution work
                 // without re-picking the pre-selected rig. Local paths are left for Browse….
                 maybeAutoLoadBuiltinRig();
+                $('edSaveBtn').disabled = false;
                 $('exportBtn').disabled = false;
                 $('resetBtn').disabled = false;
                 $('addCondBtn').disabled = false;
@@ -5293,6 +5399,14 @@ async function initFromUrl() {
                 showError('Demo load failed', err.message);
             }
             e.target.value = '';  // reset so the same demo can be re-loaded
+        });
+
+        // 💾 Save — delegates to the Studio's single save path (same as
+        // File ▾ → Save). Lives in the Edit toolbar because "● edited" users
+        // reached for Export YAML here, which does NOT mark the doc saved.
+        $('edSaveBtn').addEventListener('click', () => {
+            if (!experiment || importMode) return;
+            window.Studio.saveCurrent();
         });
 
         $('exportBtn').addEventListener('click', async () => {
@@ -6569,9 +6683,9 @@ async function initFromUrl() {
         // Controls disabled while "yours" is locked (design fix #8 — lock at the
         // UI, not by suppressing pushUndo, since commit itself pushes one undo).
         const IMPORT_LOCKED_CONTROLS = [
-            'addCondBtn', 'addRefBtn', 'addBlockBtn', 'edTabYaml', 'exportBtn', 'resetBtn',
-            'undoBtn', 'redoBtn', 'newBtn', 'importBtn', 'importFromBtn', 'demoSelect',
-            'settingsToggle', 'librarySearch'
+            'addCondBtn', 'addRefBtn', 'addBlockBtn', 'edTabYaml', 'edSaveBtn', 'exportBtn',
+            'resetBtn', 'undoBtn', 'redoBtn', 'newBtn', 'importBtn', 'importFromBtn',
+            'demoSelect', 'settingsToggle', 'librarySearch'
         ];
 
         function enterImportMode(srcExperiment, filename) {
