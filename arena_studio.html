@@ -45,6 +45,12 @@
   .arena{color:var(--dim);font-size:11.5px;white-space:nowrap;cursor:help}
   .arena b{color:var(--text);font-weight:600}
   body:not(.connected) .fw{display:none}
+  /* session (bench) rig selector — ONE shared selection across views (#135) */
+  .rigsel{display:flex;align-items:center;gap:5px;color:var(--dim);font-size:11px;white-space:nowrap;cursor:help}
+  .rigsel select{background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 6px;font-family:var(--mono);font-size:11px;max-width:220px}
+  .rigsel select:disabled{opacity:.75;cursor:not-allowed}
+  .rigsel .pill{padding:2px 7px;font-size:11px}
+  .chip.rig-mismatch{color:var(--warn);border-color:var(--warn);background:rgba(227,160,8,.08);cursor:help}
   .doc-name{font-family:var(--head);font-weight:700;font-size:12.5px;white-space:nowrap}
   .chip{font-family:var(--mono);font-size:11px;font-weight:600;border-radius:20px;padding:2px 8px;border:1px solid;white-space:nowrap}
   .chip.saved{color:var(--accent);border-color:var(--accent);background:rgba(0,230,118,.08)}
@@ -1691,7 +1697,12 @@
 <div class="topbar">
   <span class="brand">Arena Studio</span>
   <span class="status"><span class="dot" id="statusDot" title="Connection status (green = connected). One ArenaSession broker owns the single Web Serial port."></span><span id="statusTxt">disconnected</span></span>
-  <span class="arena" id="deviceLine" title="Target arena + rig for the loaded protocol. Firmware appears only when connected (from GET_CONTROLLER_INFO 0xC2). Arena geometry comes from the rig, not the controller."><b>—</b></span>
+  <label class="rigsel" title="Session (bench) rig — ONE shared selection consumed by Run, Edit, and Console (stream-frame geometry, ISP progress map, paste validation, FicTrac framing). Follows the loaded protocol's rig unless you explicitly pick one; locked against accidental change (#135).">rig
+    <select id="sessionRig" disabled></select>
+    <button class="pill" id="sessionRigLock" title="Session rig is locked — click to unlock (changing it alters what geometry gets streamed to the hardware)">🔒</button>
+  </label>
+  <span class="chip rig-mismatch" id="rigMismatch" style="display:none" title="Session (bench) rig differs from the loaded protocol's rig: field — the bench geometry wins for Console/stream operations; the protocol still runs with its own rig. Unlock the rig selector to reconcile, or load a matching protocol.">⚠ bench ≠ protocol</span>
+  <span class="arena" id="deviceLine" title="Arena geometry of the SESSION rig (left) — what stream/ISP/paste operations target. Firmware appears only when connected (from GET_CONTROLLER_INFO 0xC2)."><b>—</b></span>
 
   <span class="sep-v"></span>
 
@@ -2041,10 +2052,7 @@
       <span style="font-family:var(--head);text-transform:uppercase;letter-spacing:.6px;font-size:11px">⛭ Console — bench surface</span>
       <span class="ic" title="The Console drives the arena directly over the live connection, independent of the loaded protocol. Connect (top bar) to enable it. Uncommon queries/settings live in the Controller ▾ / Debug ▾ menus.">i</span>
       <span class="dim" id="consoleHint">connect to enable</span>
-      <label class="dim" style="font-size:11px;display:flex;align-items:center;gap:5px" title="Arena/rig for bench work — sets the geometry for stream frames, the ISP progress map, and FicTrac. Follows the loaded protocol's rig; LOCKED against accidental change (see #135 — one shared selection across views is planned).">arena
-        <select id="cArena" disabled style="background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:3px 6px;font-family:var(--mono);font-size:11px"></select>
-        <button class="pill" id="cArenaLock" style="padding:2px 7px;font-size:11px" title="Arena selection is locked — click to unlock (changing it alters what geometry gets streamed to the hardware)">🔒</button>
-      </label>
+      <span class="dim" style="font-size:11px" title="Bench geometry (stream frames, ISP progress map, paste validation, FicTrac) comes from the SESSION rig — the shared, locked selector in the top bar (#135). The Console no longer has its own arena picker.">arena ← session rig (top bar)</span>
       <span class="ca-acts">
         <button class="pill" id="cExpandAll">Expand all</button>
         <button class="pill" id="cCollapseAll">Collapse all</button>
@@ -2069,6 +2077,49 @@
             </select>
             <button class="cmenu-item" data-cmd="setpanelmode" style="width:auto" title="SET_PANEL_DISPLAY_MODE (0x1B)">Set</button>
             <button class="cmenu-item" data-cmd="getpanelmode" style="width:auto" title="GET_PANEL_DISPLAY_MODE (0x1C)">Get</button>
+          </div>
+          <div class="cmenu-sep" title="Rig-declared controller I/O roles + power-on defaults (rig YAML io: block, #135). Applied automatically at connect; the role selectors are SESSION-LOCAL overrides — they never edit the rig YAML. Greyed roles need firmware that doesn't exist yet. Names match the board's BNC silkscreen.">Rig I/O — session roles</div>
+          <div class="cmenu-row">
+            <label title="The BNC silkscreened 'Digital IO 1 (5V)' on the controller (J3; rig io: port 1 = 0xAA channel 1)">Digital IO 1</label>
+            <select id="cIoRoleDio1" title="'Digital IO 1 (5V)' role — session-local override of the rig's io: declaration">
+              <option value="off">off</option>
+              <option value="in_trigger" disabled title="Needs io_ext firmware (0xC2 capability bit 5) — enables automatically when the connected controller advertises it.">in_trigger</option>
+              <option value="out_programmable">out_programmable</option>
+              <option value="out_debug_framescan" disabled title="Needs io_ext firmware (0xC2 capability bit 5) — enables automatically when the connected controller advertises it.">out_debug_framescan</option>
+            </select>
+            <span class="dim" id="cIoDefDio1" title="rig default for this port"></span>
+          </div>
+          <div class="cmenu-row">
+            <label title="The BNC silkscreened 'Digital IO 2 (5V)' on the controller (J4; rig io: port 2 = 0xAA channel 2). With the J30 shunt installed this BNC is also the hardware trigger route to the panels' EINT net (panel display modes triggered/gated).">Digital IO 2</label>
+            <select id="cIoRoleDio2" title="'Digital IO 2 (5V)' role — session-local override of the rig's io: declaration">
+              <option value="off">off</option>
+              <option value="in_trigger" disabled title="Needs io_ext firmware (0xC2 capability bit 5) — enables automatically when the connected controller advertises it.">in_trigger</option>
+              <option value="out_programmable">out_programmable</option>
+              <option value="out_debug_framescan" disabled title="Needs io_ext firmware (0xC2 capability bit 5) — enables automatically when the connected controller advertises it.">out_debug_framescan</option>
+            </select>
+            <span class="dim" id="cIoDefDio2" title="rig default for this port"></span>
+          </div>
+          <div class="cmenu-row">
+            <label title="The BNC silkscreened 'Analog Out (0-5V)' on the controller (J27, MCP4725 DAC, 0xA0)">Analog Out</label>
+            <select id="cIoRoleAo" title="'Analog Out (0-5V)' role — session-local override of the rig's io: declaration">
+              <option value="off">off</option>
+              <option value="programmable">programmable</option>
+              <option value="frame_number" disabled title="Needs io_ext firmware (0xC2 capability bit 5) — enables automatically when the connected controller advertises it.">frame_number</option>
+            </select>
+            <span class="dim" id="cIoDefAo" title="rig default (volts at connect)"></span>
+          </div>
+          <div class="cmenu-row">
+            <label title="The BNCs silkscreened 'Analog In 1 (±10V)' / 'Analog In 2 (±10V)' on the controller (Mode-4 closed-loop samples Analog In 1 / AIN0)">Analog In</label>
+            <select id="cIoRoleAi" title="Analog-in role — session-local override of the rig's io: declaration">
+              <option value="off">off</option>
+              <option value="in" disabled title="Mode-4 closed-loop sampling exists and GET_ANALOG_IN (0xA4) now reads both ±10V channels (fw branch feat/dio-roles-ao-modes), but the front-end calibration is TBD — needs bench validation before the Studio drives it.">in (bench-pending)</option>
+            </select>
+            <span class="dim" id="cIoDefAi"></span>
+          </div>
+          <div class="cmenu-row">
+            <button class="cmenu-item" data-cmd="cioapply" style="width:auto" title="Apply the rig's power-on I/O defaults now, using the session roles above (roles via SET_DIO_ROLE 0xAC on io_ext firmware; DO via 0xAA, AO via 0xA0/0xA3). Runs automatically at connect; each applied value is logged.">Apply rig defaults</button>
+            <button class="cmenu-item" data-cmd="cioget" style="width:auto" title="GET_DIO_ROLE 0xAD — log both ports' current roles + live pin levels (the BNC level in input roles; needs io_ext firmware)">Read roles</button>
+            <span class="dim" id="cIoRigSrc"></span>
           </div>
         </div>
       </div>
@@ -2122,7 +2173,7 @@
       <div class="crow"><span class="lbl">params</span>
         <label>mode <select id="cMode"><option value="2">2 open-loop</option><option value="3">3 show-frame</option><option value="4">4 closed-loop</option></select></label>
         <label>pat idx <input id="cPat" type="number" min="1" value="1" style="width:56px" title="1-based SD index"></label>
-        <label>rate <input id="cRate" type="number" value="30" style="width:54px"></label>
+        <label title="Frame-advance rate in Hz: −32768–32767. Negative plays Mode 2 in REVERSE (G4-style count-down; needs fw ≥ 2026-06-25 / ee74c33 — older fw treats it as a huge forward rate). Sign ignored in Modes 3/4.">rate <input id="cRate" type="number" min="-32768" max="32767" value="30" style="width:54px"></label>
         <label>gain <input id="cGain" type="number" value="0" style="width:48px"></label>
         <label>init <input id="cInit" type="number" value="0" style="width:48px" title="mode-3 start frame (SET_FRAME_POSITION 0x70)"></label>
         <label>dur (s) <input id="cDur" type="number" min="0" step="0.1" value="0" style="width:48px" title="host-timed auto-stop: sends STOP_DISPLAY after this many seconds; 0 = run until Stop"></label>
@@ -2195,14 +2246,18 @@
       </details>
 
       <details class="cgroup">
-        <summary class="gh">hardware I/O <span class="op">· 0x1B/0x1C · 0xA0 · 0xAA (G6)</span><span class="sum" id="cIoSum">A0 – · DO –</span></summary>
+        <summary class="gh">hardware I/O <span class="op">· 0x1B/0x1C · 0xA0 · 0xA4 · 0xAA (G6)</span><span class="sum" id="cIoSum">AO – · DIO –</span></summary>
         <div class="cbody">
-          <div class="crow"><span class="lbl">analog out</span><input id="cAoMv" type="number" value="0" style="width:64px"><span class="dim">mV (0–5000)</span>
+          <div class="crow"><span class="lbl" title="The BNC silkscreened 'Analog Out (0-5V)' on the controller board (J27)">analog out</span><input id="cAoMv" type="number" value="0" style="width:64px" title="Analog Out level in millivolts (board BNC 'Analog Out (0-5V)')"><span class="dim">mV (0–5000)</span>
             <button class="pill" data-cmd="caoset" title="SET_AO_VOLTAGE 0xA0">Set</button>
             <button class="pill" data-cmd="caoget" title="GET_AO_VOLTAGE 0xA1">Get</button>
             <span class="dim" id="cAoRead"></span></div>
-          <div class="crow" style="margin-bottom:0"><span class="lbl">digital out</span>
-            <select id="cDoCh" style="width:64px"><option value="1">DO1</option><option value="2">DO2</option></select>
+          <div class="crow"><span class="lbl" title="The BNCs silkscreened 'Analog In 1 (±10V)' / 'Analog In 2 (±10V)' (J28/J29). Front-end calibration is TBD — treat readings as bench diagnostics, and note reading-vs-meter pairs for the calibration record.">analog in</span>
+            <button class="pill" data-cmd="caiget" title="GET_ANALOG_IN 0xA4 — read both ±10V inputs (needs io_ext firmware)">Read</button>
+            <span class="dim" id="cAiRead">—</span>
+            <span class="dim" style="font-size:10.5px">±10V front-end · uncalibrated</span></div>
+          <div class="crow" style="margin-bottom:0"><span class="lbl" title="The BNCs silkscreened 'Digital IO 1 (5V)' / 'Digital IO 2 (5V)' on the controller board, driven as TTL outputs (channel number == BNC label number)">digital io</span>
+            <select id="cDoCh" style="width:110px" title="Which BNC to drive — names match the board silkscreen"><option value="1">Digital IO 1</option><option value="2">Digital IO 2</option></select>
             <span class="seg2"><button id="cDoLow" class="on" data-cmd="cdolow">LOW</button><button id="cDoHigh" data-cmd="cdohigh">HIGH</button></span>
             <button class="pill" data-cmd="cdoset" title="SET_DIGITAL_OUT 0xAA">Set</button>
             <button class="pill" data-cmd="cdoget" title="GET_DIGITAL_OUT 0xAB">Get</button></div>
@@ -2311,7 +2366,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.3 | 2026-07-02 23:29 ET · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint) · URL state r/w (#107) · Edit 💾 Save</footer>
+<footer id="footer">Arena Studio v0.4 | 2026-07-03 14:55 ET · session rig (top bar, locked) + mismatch chip + ?rig= + rig io: power-on defaults incl. roles via SET_DIO_ROLE/SET_AO_MODE on io_ext firmware, capability-gated (#135; I/O names match the board silkscreen — Digital IO 1/2, ports 1-based) · negative frame_rate = Mode-2 reverse (int16, fw #4) · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint) · URL state r/w (#107) · Edit 💾 Save</footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -2339,7 +2394,7 @@
 <script>
 'use strict';
 (function () {
-    const TOOL_VERSION = 'Arena Studio v0.3';
+    const TOOL_VERSION = 'Arena Studio v0.4';
     const $ = (id) => document.getElementById(id);
     const Wire = window.ArenaWireG6;
     const RunLog = window.RunLog;
@@ -2353,6 +2408,12 @@
         importMode: false,
         firmware: null,
         currentDoc: null, // {filename, sha256, source, experiment, rig:{name,arenaConfig}}
+        // THE session (bench) rig — single source of truth shared by Run/Edit/
+        // Console (#135). {name, arenaConfig, explicit}. `explicit` = the user
+        // unlocked-and-picked it or it arrived via ?rig= (encoded to the URL);
+        // false = merely derived from the loaded protocol (not encoded).
+        // Owned by the module block (setSessionRig); read everywhere.
+        currentRig: null,
         activeRunLog: null,
         TOOL_VERSION: TOOL_VERSION
     };
@@ -2470,14 +2531,28 @@
 
     function updateDeviceLine() {
         const el = $('deviceLine');
-        const doc = Studio.currentDoc;
-        const arena = doc && doc.rig ? doc.rig.arenaConfig : null;
-        const rig = doc && doc.rig ? doc.rig.name : null;
+        // The device line shows the SESSION rig's arena (#135) — the geometry
+        // that stream/ISP/paste actually target — plus firmware once connected.
+        // The loaded protocol's own rig stays visible in the provenance panel.
+        const rig = Studio.currentRig;
         const fw = Studio.firmware;
-        let html = '<b>' + (arena || '—') + '</b>';
-        if (rig) html += ' · <b>' + rig + '</b>';
+        let html = '<b>' + ((rig && rig.arenaConfig) || '—') + '</b>';
         if (fw) html += '<span class="fw"> · fw ' + fw + '</span>';
         el.innerHTML = html;
+        // Mismatch chip: session rig ≠ loaded protocol's rig — surface, never
+        // silently reconcile (#135). Both must be known for a mismatch to mean
+        // anything (a local rig YAML outside the registry has name=filename).
+        const chip = $('rigMismatch');
+        if (chip) {
+            const docRig = Studio.currentDoc && Studio.currentDoc.rig ? Studio.currentDoc.rig.name : null;
+            const mismatch = !!(rig && rig.name && docRig && rig.name !== docRig);
+            chip.style.display = mismatch ? 'inline-block' : 'none';
+            if (mismatch) {
+                chip.title = 'Session (bench) rig "' + rig.name + '" ≠ loaded protocol rig "' + docRig +
+                    '". Bench geometry (stream/ISP/paste/FicTrac) follows the session rig; the protocol document is unchanged. ' +
+                    'Unlock the rig selector to reconcile, or load a matching protocol.';
+            }
+        }
     }
 
     // A never-saved doc (New protocol / Reset skeleton) has no on-disk artifact
@@ -2525,6 +2600,9 @@
                 const info = Wire.decodeControllerInfo(resp);
                 if (info) {
                     Studio.firmware = 'v' + info.version;
+                    // Capability names (e.g. 'io_ext') — gates the rig-I/O
+                    // role apply-path + Console readouts per connection.
+                    Studio.capabilities = info.capabilities || [];
                     // Physical-setup identity (Teensy unique ID → Ethernet MAC);
                     // null until the firmware appends it to the 0xC2 reply.
                     Studio.controllerId = info.mac || null;
@@ -2578,7 +2656,10 @@
         if (Studio._urlSuppress || !window.StudioUrlState) return;
         const q = window.StudioUrlState.encodeApp({
             mode: Studio.mode,
-            protocolKey: Studio.currentDoc && Studio.currentDoc.protocolKey
+            protocolKey: Studio.currentDoc && Studio.currentDoc.protocolKey,
+            // #135: only an EXPLICIT session-rig selection is shareable; a rig
+            // derived from the loaded protocol is redundant with `p` (clean URL).
+            rigKey: Studio.currentRig && Studio.currentRig.explicit ? Studio.currentRig.name : null
         });
         // Load-bearing dedup: re-clicks and per-mutation syncs must not stack
         // history entries (or burn Safari's ~100/30s history-call budget).
@@ -2925,19 +3006,41 @@
             const resp = await send(Wire.encodeGetAoVoltage(), 'GET_AO_VOLTAGE 0xA1');
             const mv = resp && Wire.decodeAoVoltage ? Wire.decodeAoVoltage(resp) : null;
             $('cAoRead').textContent = mv != null ? mv + ' mV' : '';
-            $('cIoSum').textContent = 'A0 ' + (mv != null ? mv : '–') + ' mV';
+            $('cIoSum').textContent = 'AO ' + (mv != null ? mv : '–') + ' mV';
         },
         cdolow: (e) => segPick(e, 'cDoLow', 'cDoHigh'),
         cdohigh: (e) => segPick(e, 'cDoHigh', 'cDoLow'),
         cdoset: () => {
             const ch = num('cDoCh');
             const state = $('cDoHigh').classList.contains('on') ? 1 : 0;
-            send(Wire.encodeSetDigitalOut(ch, state), 'SET_DIGITAL_OUT 0xAA DO' + ch + ' ' + (state ? 'HIGH' : 'LOW'));
+            // "Digital IO n" = the board's BNC silkscreen; channel == label number.
+            send(Wire.encodeSetDigitalOut(ch, state), 'SET_DIGITAL_OUT 0xAA Digital IO ' + ch + ' ' + (state ? 'HIGH' : 'LOW'));
         },
         cdoget: async () => {
             const resp = await send(Wire.encodeGetDigitalOut(), 'GET_DIGITAL_OUT 0xAB');
             const d = resp && Wire.decodeResponse(resp);
-            if (d && d.ok && d.payload.length >= 2) $('cIoSum').textContent = 'DO1 ' + d.payload[0] + ' · DO2 ' + d.payload[1];
+            if (d && d.ok && d.payload.length >= 2) $('cIoSum').textContent = 'DIO1 ' + d.payload[0] + ' · DIO2 ' + d.payload[1];
+        },
+        // io_ext reads (0xA4 / 0xAD) — guarded: pre-io_ext firmware treats
+        // unknown opcodes as errors AND raises a CE glyph on the arena.
+        caiget: async () => {
+            if (!Studio.capabilities || !Studio.capabilities.includes('io_ext')) {
+                clog('analog in: controller lacks io_ext (0xC2 bit 5) — needs fw feat/dio-roles-ao-modes or later', 'warn');
+                return;
+            }
+            const resp = await send(Wire.encodeGetAnalogIn(), 'GET_ANALOG_IN 0xA4');
+            const a = resp && Wire.decodeAnalogIn(resp);
+            if (a) $('cAiRead').textContent = 'AI1 ' + a.ain1Mv + ' mV · AI2 ' + a.ain2Mv + ' mV';
+        },
+        cioget: async () => {
+            if (!Studio.capabilities || !Studio.capabilities.includes('io_ext')) {
+                clog('dio roles: controller lacks io_ext (0xC2 bit 5) — needs fw feat/dio-roles-ao-modes or later', 'warn');
+                return;
+            }
+            const resp = await send(Wire.encodeGetDioRole(), 'GET_DIO_ROLE 0xAD');
+            const ports = resp && Wire.decodeDioRole(resp);
+            if (ports) clog('  ' + ports.map((p) =>
+                'Digital IO ' + p.port + ': ' + p.role + ' · ' + (p.level ? 'HIGH' : 'LOW')).join(' — '), 'info');
         },
         // Controller ▾ menu
         info: async () => {
@@ -2945,6 +3048,7 @@
             const info = resp && Wire.decodeControllerInfo(resp);
             if (info) {
                 Studio.firmware = 'v' + info.version;
+                Studio.capabilities = info.capabilities || [];
                 Studio.controllerId = info.mac || Studio.controllerId || null;
                 if ($('pvCtl')) $('pvCtl').textContent = Studio.controllerId || '— (needs fw with MAC in 0xC2)';
                 Studio.refreshState();
@@ -2963,6 +3067,8 @@
         setrate: () => send(Wire.encodeSetRefreshRate(num('cRrHz')), 'SET_REFRESH_RATE 0x16 ' + num('cRrHz') + ' Hz'),
         getrate: async () => { const r = await send(Wire.encodeGetRefreshRate(), 'GET_REFRESH_RATE 0x17'); const v = r && Wire.decodeRefreshRate(r); if (v != null) $('cRrHz').value = String(v); },
         sysreset: () => guardDestructive(() => { if (confirm('SYSTEM_RESET (0x01) reboots the controller firmware. Continue?')) send(Wire.encodeSystemReset(), 'SYSTEM_RESET 0x01'); }),
+        // Rig I/O (#135) — reapply the rig's power-on defaults (module-block hook)
+        cioapply: () => { if (Studio.applyRigIo) Studio.applyRigIo({ manual: true }); else clog('rig io: module block not loaded', 'err'); },
         // raw hex
         crawsend: () => {
             const parts = $('cRawHex').value.trim().split(/[\s,]+/).filter(Boolean).map((h) => parseInt(h, 16));
@@ -3031,6 +3137,11 @@
     // connection — the hardcoded defaults (SPI 20 MHz / 1000 Hz / persist / 0 mV)
     // are guesses and can mislead the bench.
     async function initFromController() {
+        // Rig io: power-on defaults FIRST (#135) — module-block hook; the GETs
+        // below then read back the applied values (e.g. AO shows the 5 V idle).
+        // Optional-guarded: if the module block failed to load (stale-cache
+        // gotcha), connect/bench ops must still work — defaults just don't apply.
+        if (Studio.applyRigIo) { try { await Studio.applyRigIo(); } catch (_) { /* logged inside */ } }
         const q = async (bytes) => { try { return await session.send(bytes, { timeoutMs: 2000 }); } catch (_) { return null; } };
         const got = [];
         const rr = Wire.decodeRefreshRate(await q(Wire.encodeGetRefreshRate()));
@@ -3040,7 +3151,7 @@
         const pm = Wire.decodePanelDisplayMode(await q(Wire.encodeGetPanelDisplayMode()));
         if (pm != null) { $('cPanelMode').value = String(pm); got.push('panel mode ' + (Wire.PANEL_DISPLAY_MODE_NAMES[pm] || pm)); }
         const mv = Wire.decodeAoVoltage(await q(Wire.encodeGetAoVoltage()));
-        if (mv != null) { $('cAoMv').value = String(mv); $('cIoSum').textContent = 'A0 ' + mv + ' mV'; got.push('A0 ' + mv + ' mV'); }
+        if (mv != null) { $('cAoMv').value = String(mv); $('cIoSum').textContent = 'AO ' + mv + ' mV'; got.push('AO ' + mv + ' mV'); }
         // Persistent SD firmware state — "the arena is loaded with <release>"
         // (handoff §5); the footer version field carries the release tag.
         const fi = Wire.decodeFirmwareInfo(await q(Wire.encodeGetFirmwareInfo()));
@@ -3504,7 +3615,8 @@ import {
     createPluginEntry,
     mapRigPluginToBuiltin,
     deriveRigPlugins,
-    diffRigVsProtocol
+    diffRigVsProtocol,
+    parseRigIo
 } from './js/plugin-registry.js';
 import {
     createStagingBuffer,
@@ -3552,10 +3664,13 @@ function rigInfoForPath(rigPath) {
     const hit = (rigIndex || []).find((r) => String(r.path).split('/').pop() === base);
     return hit ? { name: hit.name, arenaConfig: hit.arena } : { name: base.replace(/\.ya?ml$/i, ''), arenaConfig: null };
 }
-// Console arena/rig selector — bench geometry, independent of a loaded protocol.
-async function populateArenaSelect() {
+// Session (bench) rig selector — THE shared rig across Run/Edit/Console (#135),
+// rendered once in the top bar. Locked by default; explicit selections
+// (unlock + pick, or an incoming ?rig=) are mirrored to the URL and never
+// silently overridden by a protocol load — the mismatch chip surfaces instead.
+async function populateSessionRig() {
     await ensureRigIndex();
-    const sel = $('cArena');
+    const sel = $('sessionRig');
     if (!sel) return;
     sel.innerHTML = '';
     (rigIndex || []).forEach((r) => {
@@ -3565,37 +3680,206 @@ async function populateArenaSelect() {
         o.dataset.arena = r.arena || '';
         sel.appendChild(o);
     });
-    sel.addEventListener('change', () => {
-        const opt = sel.selectedOptions[0];
-        Studio.consoleArena = opt ? { name: opt.value, arenaConfig: opt.dataset.arena } : null;
-        updateIspShowUI(); // the batch progress map needs a 20-panel layout
-    });
+    sel.addEventListener('change', () => setSessionRig(sel.value, { explicit: true }));
     // Locked by default — changing the bench arena is a deliberate, rare act
-    // (it silently changes stream/ISP geometry). Programmatic follow of the
-    // loaded protocol's rig (selectConsoleArena) still works while locked.
-    // One shared cross-view selection is #135.
-    const lockBtn = $('cArenaLock');
+    // (it silently changes stream/ISP geometry; one-click changes caused
+    // near-misses at the bench). Programmatic follow of the loaded protocol's
+    // rig (setSessionRig, derived) still works while locked.
+    const lockBtn = $('sessionRigLock');
     if (lockBtn) lockBtn.addEventListener('click', () => {
         sel.disabled = !sel.disabled;
         lockBtn.textContent = sel.disabled ? '🔒' : '🔓';
         lockBtn.title = sel.disabled
-            ? 'Arena selection is locked — click to unlock (changing it alters what geometry gets streamed to the hardware)'
-            : 'Arena selection UNLOCKED — pick the bench arena, then click to re-lock';
+            ? 'Session rig is locked — click to unlock (changing it alters what geometry gets streamed to the hardware)'
+            : 'Session rig UNLOCKED — pick the bench rig, then click to re-lock';
     });
-    if (rigIndex && rigIndex[0]) Studio.consoleArena = { name: rigIndex[0].name, arenaConfig: rigIndex[0].arena };
-    updateIspShowUI();
+    if (rigIndex && rigIndex[0]) setSessionRig(rigIndex[0].name, { explicit: false });
 }
-// Point the console arena selector at a rig name (called when a protocol loads).
-function selectConsoleArena(rigName) {
-    const sel = $('cArena');
-    if (!sel || !rigName) return;
-    const opt = Array.from(sel.options).find((o) => o.value === rigName);
-    if (opt) {
-        sel.value = rigName;
-        Studio.consoleArena = { name: opt.value, arenaConfig: opt.dataset.arena };
-        updateIspShowUI();
+// Point the session rig at a rig name. `explicit` marks a user/URL choice
+// (encoded to the URL); a derived follow (protocol load) never overrides an
+// explicit choice — updateDeviceLine raises the mismatch chip instead.
+function setSessionRig(rigName, opts) {
+    const o = opts || {};
+    const sel = $('sessionRig');
+    if (!sel || !rigName) return false;
+    const opt = Array.from(sel.options).find((x) => x.value === rigName);
+    if (!opt) return false;
+    const cur = Studio.currentRig;
+    if (!o.explicit && cur && cur.explicit && cur.name !== rigName) {
+        Studio.refreshState(); // keep the bench choice; the chip shows the disagreement
+        return false;
     }
+    sel.value = rigName;
+    Studio.currentRig = {
+        name: opt.value,
+        arenaConfig: opt.dataset.arena || null,
+        explicit: o.explicit ? true : !!(cur && cur.explicit)
+    };
+    invalidateRigIo();
+    renderRigIoMenu();
+    updateIspShowUI(); // the batch progress map needs a 20-panel layout
+    Studio.refreshState(); // device line + mismatch chip
+    Studio.updateUrl({ push: false }); // rig identity → replace, never push (#107 rules)
+    return true;
 }
+
+// ---- rig io: — controller I/O roles + power-on defaults (#135 addendum) ----
+// The io: block lives in the rig YAML (index.json only carries name/arena), so
+// it's fetched lazily per session rig and cached. parseRigIo is tolerant: a
+// rig without an io: block parses to all-off and applyRigIo is a no-op.
+let rigIo = { name: null, promise: null };
+function invalidateRigIo() {
+    rigIo = { name: null, promise: null };
+}
+function fetchRigIo() {
+    const name = Studio.currentRig && Studio.currentRig.name;
+    if (!name) return Promise.resolve(null);
+    if (rigIo.name === name && rigIo.promise) return rigIo.promise;
+    const entry = (rigIndex || []).find((r) => r.name === name);
+    const p = (async () => {
+        if (!entry || !entry.path) return null;
+        try {
+            const res = await fetch(entry.path, { cache: 'no-store' });
+            if (!res.ok) return null;
+            return parseRigIo(parseRigYAMLText(await res.text()));
+        } catch (_) {
+            return null; // malformed rig YAML → treat as no io: block
+        }
+    })();
+    rigIo = { name: name, promise: p };
+    return p;
+}
+// io_ext capability (0xC2 bit 5): the connected firmware supports
+// SET_DIO_ROLE/GET_DIO_ROLE/SET_AO_MODE/GET_ANALOG_IN. Set at connect.
+function hasIoExt() {
+    return Array.isArray(Studio.capabilities) && Studio.capabilities.includes('io_ext');
+}
+// Enable/disable the capability-gated role options to match the CONNECTED
+// firmware (never version-guessing). AI 'in' stays disabled regardless —
+// the ±10V front-end calibration is TBD (bench).
+function updateRigIoGating() {
+    const on = hasIoExt();
+    const gate = (selId, value, title) => {
+        const sel = $(selId);
+        if (!sel) return;
+        const opt = Array.from(sel.options).find((o) => o.value === value);
+        if (!opt) return;
+        opt.disabled = !on;
+        opt.title = on ? title
+            : 'Needs io_ext firmware (0xC2 capability bit 5) — connect a controller running feat/dio-roles-ao-modes or later.';
+    };
+    gate('cIoRoleDio1', 'in_trigger', 'Input role — on Digital IO 2 this is the EINT trigger route (J30); pulse-semantics bench validation pending.');
+    gate('cIoRoleDio2', 'in_trigger', 'Input role — the EINT trigger route to the panels (J30 shunt); pulse-semantics bench validation pending.');
+    gate('cIoRoleDio1', 'out_debug_framescan', 'Scope envelope: HIGH exactly while each frame\'s SPI transmission runs (bench-verified).');
+    gate('cIoRoleDio2', 'out_debug_framescan', 'Scope envelope: HIGH exactly while each frame\'s SPI transmission runs. NOTE: with the J30 shunt installed this also pulses the panels\' EINT net.');
+    gate('cIoRoleAo', 'frame_number', 'DAC tracks the SD-pattern frame position, 0 V = frame 0 .. 5 V = last frame (bench-verified).');
+}
+// Sync the Controller ▾ "Rig I/O" rows to the session rig: role selects get
+// the rig-declared roles (they stay session-local overrides until the rig
+// changes again), dim annotations show the declared power-on defaults.
+async function renderRigIoMenu() {
+    if (!$('cIoRoleDio1')) return;
+    const forRig = Studio.currentRig && Studio.currentRig.name;
+    const io = (await fetchRigIo()) || parseRigIo(null); // null fetch → all off
+    if ((Studio.currentRig && Studio.currentRig.name) !== forRig) return; // superseded
+    $('cIoRoleDio1').value = io.dio[0].role;
+    $('cIoRoleDio2').value = io.dio[1].role;
+    $('cIoRoleAo').value = io.ao.role;
+    $('cIoRoleAi').value = io.ai.role;
+    $('cIoDefDio1').textContent = io.dio[0].role === 'out_programmable' ? 'default ' + (io.dio[0].default ? 'HIGH' : 'LOW') : '';
+    $('cIoDefDio2').textContent = io.dio[1].role === 'out_programmable' ? 'default ' + (io.dio[1].default ? 'HIGH' : 'LOW') : '';
+    $('cIoDefAo').textContent = io.ao.role === 'programmable' && io.ao.default != null ? 'default ' + io.ao.default + ' V' : '';
+    $('cIoDefAi').textContent = '';
+    $('cIoRigSrc').textContent = forRig ? 'from rig: ' + forRig : '';
+    updateRigIoGating();
+}
+// Apply the rig's power-on I/O defaults over the live connection (DO via
+// SET_DIGITAL_OUT 0xAA, AO via SET_AO_VOLTAGE 0xA0), honoring session-local
+// role overrides from the Controller ▾ menu. Runs once per connection
+// (initFromController) and on demand ("Apply rig defaults"); every applied
+// value is logged, fw-gated roles are logged and never sent.
+Studio.applyRigIo = async function (opts) {
+    const clog = Studio.clog || Studio.rawLog;
+    const manual = !!(opts && opts.manual);
+    if (!Studio.session || !Studio.session.connected) {
+        if (manual) clog('connect first', 'err');
+        return;
+    }
+    const io = await fetchRigIo();
+    if (!io) {
+        if (manual) clog('rig io: no rig YAML readable for the session rig — nothing to apply', 'warn');
+        return;
+    }
+    (io.warnings || []).forEach((w) => clog('rig io: ' + w, 'warn'));
+    const roleOf = (id, fallback) => {
+        const el = $(id);
+        return el && el.value ? el.value : fallback;
+    };
+    updateRigIoGating(); // capabilities are known once connected
+    const ext = hasIoExt();
+    const applied = [];
+    for (const d of io.dio) {
+        const r = roleOf(d.port === 1 ? 'cIoRoleDio1' : 'cIoRoleDio2', d.role);
+        const ch = d.port; // io: port == wire channel == board "Digital IO n (5V)" label
+        if (r === 'off') continue; // off = DON'T TOUCH (keeps fw boot roles, e.g. port 2 in_trigger)
+        if (ext) {
+            // Explicit role first (SET_DIO_ROLE 0xAC), then the level for outputs.
+            try {
+                await Studio.session.send(Wire.encodeSetDioRole(ch, r), { timeoutMs: 2000 });
+                if (r === 'out_programmable') {
+                    await Studio.session.send(Wire.encodeSetDigitalOut(ch, d.default), { timeoutMs: 2000 });
+                    applied.push('Digital IO ' + ch + '←' + (d.default ? 'HIGH' : 'LOW'));
+                } else {
+                    applied.push('Digital IO ' + ch + '→' + r);
+                }
+            } catch (e) {
+                clog('rig io: Digital IO ' + ch + ' role "' + r + '" failed: ' + (e.message || e), 'err');
+            }
+        } else if (r === 'out_programmable') {
+            // Pre-io_ext firmware drives outputs directly (0xAA auto-promotes).
+            try {
+                await Studio.session.send(Wire.encodeSetDigitalOut(ch, d.default), { timeoutMs: 2000 });
+                applied.push('Digital IO ' + ch + '←' + (d.default ? 'HIGH' : 'LOW'));
+            } catch (e) {
+                clog('rig io: Digital IO ' + ch + ' default failed: ' + (e.message || e), 'err');
+            }
+        } else {
+            clog('rig io: Digital IO ' + ch + ' role "' + r + '" not applied — controller lacks io_ext (0xC2 bit 5)', 'warn');
+        }
+    }
+    const aoRole = roleOf('cIoRoleAo', io.ao.role);
+    if (ext && aoRole === 'frame_number') {
+        try {
+            await Studio.session.send(Wire.encodeSetAoMode(1), { timeoutMs: 2000 });
+            applied.push('Analog Out→frame_number');
+        } catch (e) {
+            clog('rig io: AO frame_number failed: ' + (e.message || e), 'err');
+        }
+    } else if (aoRole === 'frame_number') {
+        clog('rig io: AO role "frame_number" not applied — controller lacks io_ext (0xC2 bit 5)', 'warn');
+    } else if (aoRole === 'programmable' && io.ao.default != null) {
+        const mv = Math.round(io.ao.default * 1000);
+        try {
+            // On io_ext firmware, clear a possibly-stale frame_number mode first
+            // (0xA0 is refused while it's active); idempotent when already 0.
+            if (ext) await Studio.session.send(Wire.encodeSetAoMode(0), { timeoutMs: 2000 });
+            await Studio.session.send(Wire.encodeSetAoVoltage(mv), { timeoutMs: 2000 });
+            applied.push('Analog Out←' + io.ao.default + ' V');
+            if ($('cAoMv')) $('cAoMv').value = String(mv);
+            if ($('cIoSum')) $('cIoSum').textContent = 'AO ' + mv + ' mV';
+        } catch (e) {
+            clog('rig io: AO default failed: ' + (e.message || e), 'err');
+        }
+    }
+    if (roleOf('cIoRoleAi', io.ai.role) === 'in') {
+        clog('rig io: AI "in" not applied — Mode-4 front-end calibration TBD (bench)', 'warn');
+    }
+    if (applied.length) {
+        clog('rig io defaults applied (' + (Studio.currentRig && Studio.currentRig.name) + '): ' + applied.join(' · '), 'info');
+    } else if (manual) {
+        clog('rig io: nothing to apply (all roles off / no defaults declared)', 'info');
+    }
+};
 
 // ---- metadata controlled vocabularies ----
 async function loadVocab(path, key) {
@@ -3776,7 +4060,7 @@ Studio.onSdListing = function (names) {
     if (!Array.isArray(names)) return;
     const m = {
         source: 'sd',
-        arenaConfig: (Studio.consoleArena && Studio.consoleArena.arenaConfig) || 'G6_2x10',
+        arenaConfig: (Studio.currentRig && Studio.currentRig.arenaConfig) || 'G6_2x10',
         set_id: 'SD card',
         patterns: {}
     };
@@ -3816,7 +4100,7 @@ function wirePatPicker() {
             }
             const manifestFile = files.find((f) => f.name === 'MANIFEST.txt');
             if (!manifestFile) { cPatStatus('no MANIFEST.txt in that folder (previews loaded anyway)'); return; }
-            const m = manifestFromTxt(PS.parseManifestTxt(await manifestFile.text()), (Studio.consoleArena && Studio.consoleArena.arenaConfig) || 'G6_2x10');
+            const m = manifestFromTxt(PS.parseManifestTxt(await manifestFile.text()), (Studio.currentRig && Studio.currentRig.arenaConfig) || 'G6_2x10');
             m.source = 'manifest';
             Studio.patternSet = m;
             cPatStatus('loaded · ' + Object.keys(m.patterns).length + ' patterns' + (m.set_id ? ' · ' + m.set_id : ''));
@@ -3836,7 +4120,7 @@ const FONT = {
     R: [6, 5, 6, 5, 5], L: [4, 4, 4, 4, 7], U: [5, 5, 5, 5, 7], D: [6, 5, 5, 5, 6]
 };
 function activeArenaGeom() {
-    const cfg = Studio.consoleArena && Studio.consoleArena.arenaConfig;
+    const cfg = Studio.currentRig && Studio.currentRig.arenaConfig;
     const arena = cfg ? arenaForConfig(cfg) : null;
     const rc = (arena && arena.num_rows) || 2;
     const cc = (arena && arena.num_cols) || 10;
@@ -3900,7 +4184,7 @@ function renderStreamThumb(patArrayBuffer, hostId) {
     host.innerHTML = '';
     try {
         const parsed = PatParser.parsePatFile(patArrayBuffer);
-        const sampled = PP.samplePreviewFrames(parsed, arenaForConfig((Studio.consoleArena && Studio.consoleArena.arenaConfig) || 'G6_2x10'), {
+        const sampled = PP.samplePreviewFrames(parsed, arenaForConfig((Studio.currentRig && Studio.currentRig.arenaConfig) || 'G6_2x10'), {
             renderIcon: generatePatternIcon,
             iconOpts: { width: 48, height: 48, backgroundColor: '#141a20', innerRadiusRatio: 0.4, padding: 2, showGaps: false, showOutlines: false }
         });
@@ -3917,7 +4201,7 @@ Studio.setStreamDuty = (d) => { streamDuty = d; };
 async function streamGrid(grid, gs, label) {
     const clog = Studio.clog || Studio.rawLog;
     if (!Studio.session || !Studio.session.connected) { clog('connect first', 'err'); return false; }
-    if (!streamable()) { clog('stream: needs a 20-panel arena (e.g. G6_2x10) — set it in the arena picker', 'err'); return false; }
+    if (!streamable()) { clog('stream: needs a 20-panel arena (e.g. G6_2x10) — unlock the session rig selector in the top bar', 'err'); return false; }
     let built;
     try { built = buildStreamFrame(grid, gs); } catch (e) { clog('stream build failed: ' + (e.message || e), 'err'); return false; }
     renderStreamThumb(built.patArrayBuffer);
@@ -4475,7 +4759,10 @@ Studio.syncFromEditor = async function (info) {
     $('pvRig').textContent = doc.rig.name || '—';
     $('pvFw').textContent = Studio.firmware || '(connect)';
     renderSequence(exp);
-    if (info.isLoad && doc.rig.name) selectConsoleArena(doc.rig.name);
+    // Derived follow (#135): a load points the session rig at the protocol's
+    // rig — unless the user/URL picked one explicitly, in which case the
+    // bench choice stands and updateDeviceLine raises the mismatch chip.
+    if (info.isLoad && doc.rig.name) setSessionRig(doc.rig.name, { explicit: false });
     Studio.refreshState();
 };
 
@@ -4875,7 +5162,7 @@ async function initFromUrl() {
     Studio._urlSuppress = true;
     try {
         await populateMetaDatalists();
-        await populateArenaSelect();
+        await populateSessionRig();
         wirePatPicker();
         loadBuiltinPatternSet();
         let allowedKeys = [];
@@ -4887,7 +5174,10 @@ async function initFromUrl() {
                 allowedKeys = protoIndex.map((p) => p.key);
             }
         } catch (_) { /* offline — no committed protocols */ }
-        const { state, warnings } = window.StudioUrlState.decode(location.search, { allowedKeys });
+        const { state, warnings } = window.StudioUrlState.decode(location.search, {
+            allowedKeys,
+            allowedRigs: (rigIndex || []).map((r) => r.name) // populateSessionRig loaded it
+        });
         // history.state marks the AUTHORING browser's own refresh (pasted or
         // shared links arrive with null state) — honor its mode over the
         // decoded one, so refreshing in Edit stays in Edit despite the
@@ -4913,6 +5203,10 @@ async function initFromUrl() {
                 }
             }
         }
+        // ?rig= (#135): the per-setup bookmark. Applied AFTER the ?p= load so
+        // an explicit rig wins for the SESSION value (the protocol keeps its
+        // own rig — a disagreement shows the mismatch chip, never a rewrite).
+        if (state.rig) setSessionRig(state.rig, { explicit: true });
         if (state.mode && state.mode !== 'run') Studio.setMode(state.mode);
     } finally {
         Studio._urlSuppress = false;

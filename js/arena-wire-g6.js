@@ -68,8 +68,12 @@ const ArenaWireG6 = (function () {
         GET_DIAG_OUTPUT: 0xc4, // returns current g_dbg_on state (0/1)
         SET_AO_VOLTAGE: 0xa0, // [03 A0 mv_lo mv_hi] set analog output (BNC J27) 0–5000 mV
         GET_AO_VOLTAGE: 0xa1, // [01 A1] returns last commanded AO level as uint16 LE mV
+        SET_AO_MODE: 0xa3, // [02 A3 mode] 0=programmable | 1=frame_number (io_ext fw)
+        GET_ANALOG_IN: 0xa4, // [01 A4] returns Analog In 1+2 as two int16 LE mV (io_ext fw)
         SET_DIGITAL_OUT: 0xaa, // [03 AA ch state] DO1 (ch=1, J3/D37) or DO2 (ch=2, J4/D35)
         GET_DIGITAL_OUT: 0xab, // [01 AB] returns current state of DO1 and DO2 as two bytes
+        SET_DIO_ROLE: 0xac, // [03 AC port role] "Digital IO 1/2 (5V)" role (io_ext fw)
+        GET_DIO_ROLE: 0xad, // [01 AD] returns [role1, level1, role2, level2] (io_ext fw)
         SET_FRAME_POSITION: 0x70, // Mode 3: host-commanded frame index
         // Panel firmware / ISP (g6_03-controller.md § Panel firmware update).
         SET_FIRMWARE_FILE: 0xe0, // [0xE0, len64 LE, data…] upload image → /firmware/panel.bin; reply u32 LE CRC-32
@@ -89,7 +93,7 @@ const ArenaWireG6 = (function () {
     // Display modes (trial-params `mode` byte). 5 = stream is set via a
     // different command and is not encodable here.
     const MODES = {
-        OPEN_LOOP: 2, // host-free frame advance at frame_rate
+        OPEN_LOOP: 2, // host-free frame advance at frame_rate (negative = reverse)
         SHOW_FRAME: 3, // host sets the frame via SET_FRAME_POSITION
         CLOSED_LOOP: 4 // analog-in × gain, computed on the controller
     };
@@ -107,7 +111,11 @@ const ArenaWireG6 = (function () {
         [1, 'v2_local_storage'],
         [2, 'mode_1_tsi'],
         [3, 'v3_triggered'],
-        [4, 'v3_gated']
+        [4, 'v3_gated'],
+        // Extended I/O command set (#135): SET_DIO_ROLE 0xAC / GET_DIO_ROLE
+        // 0xAD / SET_AO_MODE 0xA3 / GET_ANALOG_IN 0xA4 — hosts detect the
+        // DIO-role machinery by this bit, not by firmware-version guessing.
+        [5, 'io_ext']
     ];
 
     // ───────────────────────── validation helpers ─────────────────────────
@@ -146,6 +154,19 @@ const ArenaWireG6 = (function () {
             throw new RangeError(name + ' must be -128..127 (int8), got ' + value);
         }
         return value & 0xff;
+    }
+
+    // Validate a signed int16 and return [lo, hi] little-endian two's
+    // complement. e.g. -2 -> [0xFE, 0xFF]. Used for trial-params frame_rate,
+    // which firmware reads as int16 (fw #4, ee74c33: negative = Mode-2
+    // reverse). NOTE this also REJECTS 32768..65535 — since the firmware went
+    // signed, those unsigned values would silently alias to reverse rates.
+    function i16le(value, name) {
+        requireInt(value, name);
+        if (value < -32768 || value > 32767) {
+            throw new RangeError(name + ' must be -32768..32767 (int16), got ' + value);
+        }
+        return [value & 0xff, (value >> 8) & 0xff];
     }
 
     // Validate a trial-params display mode. The firmware only accepts 2/3/4 and
@@ -201,7 +222,9 @@ const ArenaWireG6 = (function () {
      * @param {object} p
      * @param {number} [p.mode=2]       display mode (2 open / 3 show-frame / 4 closed)
      * @param {number} [p.patternId=1]  1-based pattern id (Nth .pat in /patterns)
-     * @param {number} [p.frameRate=0]  frame-advance rate in Hz (Mode 2)
+     * @param {number} [p.frameRate=0]  frame-advance rate in Hz, int16 — negative
+     *                                  plays Mode 2 in REVERSE (G4-style count-down;
+     *                                  fw ee74c33+); sign ignored in Modes 3/4
      * @param {number} [p.gain=0]       signed int8 velocity gain (×10 fps/V in Mode 4)
      * @param {number} [p.initPos=0]    initial frame index (0-based)
      */
@@ -214,7 +237,7 @@ const ArenaWireG6 = (function () {
             throw new RangeError('patternId must be >= 1 (1-based), got ' + patternId);
         }
         const pat = u16le(patternId, 'patternId');
-        const rate = u16le(p.frameRate === undefined ? 0 : p.frameRate, 'frameRate');
+        const rate = i16le(p.frameRate === undefined ? 0 : p.frameRate, 'frameRate');
         const gain = int8Byte(p.gain === undefined ? 0 : p.gain, 'gain');
         const init = u16le(p.initPos === undefined ? 0 : p.initPos, 'initPos');
         // mode, pat(2), rate(2), gain, init(2), reserved(3) = 11 param bytes.
@@ -513,8 +536,9 @@ const ArenaWireG6 = (function () {
         return frame(OPCODES.GET_AO_VOLTAGE); // 01 A1
     }
 
-    // set-digital-out (0xAA) — drive DO1 (BNC J3, D37) or DO2 (BNC J4, D35) HIGH/LOW.
-    // channel: 1 = DO1 (J3), 2 = DO2 (J4)
+    // set-digital-out (0xAA) — drive a "Digital IO n (5V)" BNC HIGH/LOW as a TTL output.
+    // channel: 1 = "Digital IO 1 (5V)" (J3, D37), 2 = "Digital IO 2 (5V)" (J4, D35) —
+    // channel number == board silkscreen number == rig io: port number.
     // state: true/1 = HIGH, false/0 = LOW
     function encodeSetDigitalOut(channel, state) {
         if (channel !== 1 && channel !== 2)
@@ -526,6 +550,48 @@ const ArenaWireG6 = (function () {
     // Response payload: [do1_state, do2_state], each 0 (LOW) or 1 (HIGH).
     function encodeGetDigitalOut() {
         return frame(OPCODES.GET_DIGITAL_OUT); // 01 AB
+    }
+
+    // ── io_ext command set (#135; controllers advertising capability bit 5) ──
+    // DIO role wire codes — the shared vocabulary with the rig YAML io: block
+    // (js/plugin-registry.js RIG_IO_ROLES) and the firmware's DioRole enum.
+    const DIO_ROLE_CODES = { off: 0, in_trigger: 1, out_programmable: 2, out_debug_framescan: 3 };
+    const DIO_ROLE_NAMES = ['off', 'in_trigger', 'out_programmable', 'out_debug_framescan'];
+
+    // set-dio-role (0xAC) — configure a "Digital IO n (5V)" BNC's role.
+    // port: 1|2 (board silkscreen number == rig io: port == 0xAA channel).
+    // role: a DIO_ROLE_CODES name string or its numeric code 0..3.
+    function encodeSetDioRole(port, role) {
+        if (port !== 1 && port !== 2) throw new RangeError('port must be 1 or 2, got ' + port);
+        const code = typeof role === 'string' ? DIO_ROLE_CODES[role] : role;
+        if (!Number.isInteger(code) || code < 0 || code > 3) {
+            throw new RangeError(
+                'role must be 0..3 or one of ' + DIO_ROLE_NAMES.join('/') + ', got ' + role
+            );
+        }
+        return frame(OPCODES.SET_DIO_ROLE, [port, code]); // 03 AC port role
+    }
+
+    // get-dio-role (0xAD) — read both ports' roles + live pin levels (the BNC
+    // level, through the translator, when the port is in an input role).
+    function encodeGetDioRole() {
+        return frame(OPCODES.GET_DIO_ROLE); // 01 AD
+    }
+
+    // set-ao-mode (0xA3) — 0/'programmable' (0xA0 levels + 0xA2 LUT) or
+    // 1/'frame_number' (DAC tracks the SD-pattern frame position, 0–5 V
+    // normalized; 0xA0/0xA2 are refused by firmware while active).
+    function encodeSetAoMode(mode) {
+        const code = mode === 'programmable' ? 0 : mode === 'frame_number' ? 1 : mode;
+        if (code !== 0 && code !== 1) {
+            throw new RangeError('mode must be 0/programmable or 1/frame_number, got ' + mode);
+        }
+        return frame(OPCODES.SET_AO_MODE, [code]); // 02 A3 mode
+    }
+
+    // get-analog-in (0xA4) — read both "Analog In n (±10V)" BNCs.
+    function encodeGetAnalogIn() {
+        return frame(OPCODES.GET_ANALOG_IN); // 01 A4
     }
 
     // ───────────────────────────── decoders ───────────────────────────────
@@ -674,6 +740,32 @@ const ArenaWireG6 = (function () {
         return r.payload[0] | (r.payload[1] << 8);
     }
 
+    // get-dio-role (0xAD) reply: [role1, level1, role2, level2]. Returns one
+    // entry per port with the role NAME (the rig io:/RIG_IO_ROLES vocabulary);
+    // an unknown future role code is reported as 'role<code>'.
+    function decodeDioRole(resp) {
+        const r = asResponse(resp);
+        if (!r || !r.ok || r.payload.length < 4) return null;
+        const p = r.payload;
+        const name = (code) => DIO_ROLE_NAMES[code] || 'role' + code;
+        return [
+            { port: 1, role: name(p[0]), roleCode: p[0], level: p[1] ? 1 : 0 },
+            { port: 2, role: name(p[2]), roleCode: p[2], level: p[3] ? 1 : 0 }
+        ];
+    }
+
+    // get-analog-in (0xA4) reply: two int16 LE mV (±10V front-end, calibration
+    // TBD — bench diagnostic values, not precision reads).
+    function decodeAnalogIn(resp) {
+        const r = asResponse(resp);
+        if (!r || !r.ok || r.payload.length < 4) return null;
+        const i16 = (lo, hi) => {
+            const u = lo | (hi << 8);
+            return u >= 0x8000 ? u - 0x10000 : u;
+        };
+        return { ain1Mv: i16(r.payload[0], r.payload[1]), ain2Mv: i16(r.payload[2], r.payload[3]) };
+    }
+
     // set-firmware-file (0xE0) reply: uint32 LE CRC-32 of the stored image.
     function decodeSetFirmwareFileResponse(resp) {
         const r = asResponse(resp);
@@ -764,6 +856,12 @@ const ArenaWireG6 = (function () {
         encodeGetAoVoltage,
         encodeGetDigitalOut,
         encodeSetDigitalOut,
+        DIO_ROLE_CODES,
+        DIO_ROLE_NAMES,
+        encodeSetDioRole,
+        encodeGetDioRole,
+        encodeSetAoMode,
+        encodeGetAnalogIn,
 
         // Decoders
         decodeResponse,
@@ -779,6 +877,8 @@ const ArenaWireG6 = (function () {
         decodeSetPatternFilenameResponse,
         decodeAoVoltage,
         decodeDigitalOut,
+        decodeDioRole,
+        decodeAnalogIn,
         decodeSetFirmwareFileResponse,
         decodeFirmwareInfo,
         decodeProgramPanelResponse

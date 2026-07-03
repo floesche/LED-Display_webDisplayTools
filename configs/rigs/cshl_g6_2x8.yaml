@@ -24,3 +24,21 @@ controller:
 # No external plugins (no camera/backlight/temperature).
 plugins: {}
 # Note: AO (analog-out) is a controller-native command, not a rig plugin (LAB-80/81/82).
+
+# Controller I/O roles + power-on defaults (#135) — see cshl_g6_2x10.yaml for
+# the full schema comments. All off = nothing driven at connect.
+io:
+  dio: # ports 1/2 = board BNCs "Digital IO 1 (5V)" / "Digital IO 2 (5V)"
+    # Course defaults (2026-07-03): IO1 = SPI frame-transmission debug
+    # envelope; IO2 off (fw boots it as the EINT trigger route).
+    - port: 1
+      role: out_debug_framescan # off | in_trigger | out_programmable | out_debug_framescan
+      default: 0
+    - port: 2
+      role: off
+      default: 0
+  ai:
+    role: off # off | in (bench-pending: Mode-4 front-end calibration TBD)
+  ao:
+    role: programmable # off | programmable (0xA0) | frame_number (bench-pending)
+    default: 5.0 # volts at connect — this hardware idles at 5 V

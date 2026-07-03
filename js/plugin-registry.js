@@ -68,14 +68,18 @@ var CONTROLLER_COMMANDS = {
                 integer: true,
                 label: 'Frame index'
             },
+            // int16 on the wire (fw ee74c33+, fw issue #4): negative plays
+            // Mode 2 in REVERSE (G4-style count-down); sign ignored in Modes
+            // 3/4. Max is 32767, NOT 65535 — since the firmware went signed,
+            // larger unsigned values would silently alias to reverse rates.
             frame_rate: {
                 type: 'number',
                 required: true,
                 default: 60,
-                min: 0,
-                max: 65535,
+                min: -32768,
+                max: 32767,
                 integer: true,
-                label: 'Frame rate (Hz)'
+                label: 'Frame rate (Hz, − = reverse)'
             },
             gain: {
                 type: 'number',
@@ -132,8 +136,8 @@ var CONTROLLER_COMMANDS = {
     setAnalogOut: {
         label: 'Set Analog Out (G6)',
         description:
-            'Drive BNC J27 (MCP4725 DAC) to a DC level. G6 controller only ' +
-            '(SET_AO_VOLTAGE 0xA0).',
+            'Drive the "Analog Out (0-5V)" BNC (J27, MCP4725 DAC) to a DC level. ' +
+            'G6 controller only (SET_AO_VOLTAGE 0xA0).',
         params: {
             mv: {
                 type: 'number',
@@ -149,16 +153,17 @@ var CONTROLLER_COMMANDS = {
     setDigitalOut: {
         label: 'Set Digital Out (G6)',
         description:
-            'Drive DO1 (BNC J3) or DO2 (BNC J4) TTL output HIGH/LOW. G6 ' +
-            'controller only (SET_DIGITAL_OUT 0xAA).',
+            'Drive the "Digital IO 1 (5V)" or "Digital IO 2 (5V)" BNC (board ' +
+            'silkscreen names; J3/J4) HIGH/LOW as a TTL output. G6 controller ' +
+            'only (SET_DIGITAL_OUT 0xAA; channel number == BNC label number).',
         params: {
             channel: {
                 type: 'select',
                 required: true,
                 default: 1,
                 options: [
-                    { value: 1, label: 'DO1 (J3)' },
-                    { value: 2, label: 'DO2 (J4)' }
+                    { value: 1, label: 'Digital IO 1 (5V)' },
+                    { value: 2, label: 'Digital IO 2 (5V)' }
                 ],
                 label: 'Channel'
             },
@@ -1027,6 +1032,113 @@ function diffRigVsProtocol(derivedPlugins, experimentPlugins) {
 }
 
 // ════════════════════════════════════════════════════
+// Rig I/O config (#135 addendum): controller I/O roles + power-on defaults
+// ════════════════════════════════════════════════════
+
+// Role vocabularies for the rig YAML `io:` block. `fwGated` names the roles
+// current controller firmware cannot do yet — the schema is authored now; the
+// Studio greys these out with a tooltip naming the dependency, and never
+// applies them at connect.
+var RIG_IO_ROLES = {
+    dio: ['off', 'in_trigger', 'out_programmable', 'out_debug_framescan'],
+    ai: ['off', 'in'],
+    ao: ['off', 'programmable', 'frame_number'],
+    fwGated: {
+        dio: ['in_trigger', 'out_debug_framescan'],
+        ai: ['in'],
+        ao: ['frame_number']
+    }
+};
+
+function _rigIoRole(raw, allowed, label, warnings) {
+    if (raw == null) return 'off';
+    var role = String(raw).trim().toLowerCase();
+    if (allowed.indexOf(role) !== -1) return role;
+    warnings.push('unknown ' + label + ' role "' + raw + '" — treated as off');
+    return 'off';
+}
+
+/**
+ * Parse a rig YAML's `io:` block (G6 controller I/O roles + power-on defaults).
+ *
+ * Tolerant by design (same contract as deriveRigPlugins): a null/partial
+ * `rigData` or missing `io:` block yields everything off/0; malformed entries
+ * degrade to off with a warning string — never throws.
+ *
+ * Port numbering is 1-BASED, matching the controller board's BNC silkscreen
+ * ("Digital IO 1 (5V)" / "Digital IO 2 (5V)") AND the SET_DIGITAL_OUT (0xAA)
+ * wire channel — one number everywhere, no off-by-one to remember. (An early
+ * #135 sketch used 0-based ports; adjusted 2026-07-03 against the physical
+ * board before anything shipped.)
+ *
+ * @param {object} rigData - parsed rig YAML (e.g. from parseRigYAMLText)
+ * @returns {{ dio: Array, ai: object, ao: object, warnings: string[] }}
+ *   dio = exactly two entries (ports 1 and 2 == silkscreen == 0xAA channel):
+ *   { port, role, default(0|1) }. ai = { role }. ao = { role, default } with
+ *   `default` in VOLTS (nullable; wire 0xA0 takes mV) — some hardware expects
+ *   a 5 V idle, so an authored default is applied at connect.
+ */
+function parseRigIo(rigData) {
+    var result = {
+        dio: [
+            { port: 1, role: 'off', default: 0 },
+            { port: 2, role: 'off', default: 0 }
+        ],
+        ai: { role: 'off' },
+        ao: { role: 'off', default: null },
+        warnings: []
+    };
+    if (!rigData || typeof rigData !== 'object') return result;
+    var io = rigData.io;
+    if (!io || typeof io !== 'object' || Array.isArray(io)) return result;
+
+    var dioList = Array.isArray(io.dio) ? io.dio : [];
+    for (var i = 0; i < dioList.length; i++) {
+        var entry = dioList[i] && typeof dioList[i] === 'object' ? dioList[i] : null;
+        if (!entry) continue;
+        var port = Number(entry.port);
+        if (port !== 1 && port !== 2) {
+            result.warnings.push(
+                'ignored dio entry with port "' +
+                    entry.port +
+                    '" (ports are 1 and 2, matching the board\'s "Digital IO 1/2 (5V)" BNC labels)'
+            );
+            continue;
+        }
+        var slot = result.dio[port - 1];
+        slot.role = _rigIoRole(entry.role, RIG_IO_ROLES.dio, 'dio port ' + port, result.warnings);
+        // default is outputs-only; clamp anything truthy-numeric/boolean to 0|1.
+        if (entry.default != null)
+            slot.default = entry.default === true || Number(entry.default) === 1 ? 1 : 0;
+    }
+
+    if (io.ai != null) {
+        var ai = typeof io.ai === 'object' && !Array.isArray(io.ai) ? io.ai : { role: io.ai };
+        result.ai.role = _rigIoRole(ai.role, RIG_IO_ROLES.ai, 'ai', result.warnings);
+    }
+
+    if (io.ao != null && typeof io.ao === 'object' && !Array.isArray(io.ao)) {
+        result.ao.role = _rigIoRole(io.ao.role, RIG_IO_ROLES.ao, 'ao', result.warnings);
+        if (io.ao.default != null) {
+            var volts = Number(io.ao.default);
+            if (!isFinite(volts)) {
+                result.warnings.push('ignored non-numeric ao default "' + io.ao.default + '"');
+            } else {
+                if (volts < 0 || volts > 5) {
+                    result.warnings.push(
+                        'ao default ' + volts + ' V clamped to 0–5 V (0xA0 range)'
+                    );
+                    volts = Math.min(5, Math.max(0, volts));
+                }
+                result.ao.default = volts;
+            }
+        }
+    }
+
+    return result;
+}
+
+// ════════════════════════════════════════════════════
 // Exports
 // ════════════════════════════════════════════════════
 
@@ -1050,7 +1162,9 @@ var PluginRegistry = {
     getV3CommandParams: getV3CommandParams,
     mapRigPluginToBuiltin: mapRigPluginToBuiltin,
     deriveRigPlugins: deriveRigPlugins,
-    diffRigVsProtocol: diffRigVsProtocol
+    diffRigVsProtocol: diffRigVsProtocol,
+    RIG_IO_ROLES: RIG_IO_ROLES,
+    parseRigIo: parseRigIo
 };
 
 // Browser global
@@ -1084,6 +1198,8 @@ export {
     getV3CommandParams,
     mapRigPluginToBuiltin,
     deriveRigPlugins,
-    diffRigVsProtocol
+    diffRigVsProtocol,
+    RIG_IO_ROLES,
+    parseRigIo
 };
 export default PluginRegistry;

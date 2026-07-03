@@ -91,6 +91,40 @@ checkBytes('encodeSetAoVoltage(5000)', Wire.encodeSetAoVoltage(5000), '03 a0 88 
 checkBytes('encodeSetDigitalOut(1,1)', Wire.encodeSetDigitalOut(1, 1), '03 aa 01 01');
 checkBytes('encodeSetDigitalOut(2,0)', Wire.encodeSetDigitalOut(2, 0), '03 aa 02 00');
 
+console.log('\n=== io_ext command set (0xAC/0xAD/0xA3/0xA4) — fw feat/dio-roles-ao-modes ===');
+checkBytes(
+    'encodeSetDioRole(1, framescan)',
+    Wire.encodeSetDioRole(1, 'out_debug_framescan'),
+    '03 ac 01 03'
+);
+checkBytes('encodeSetDioRole(2, 1) numeric', Wire.encodeSetDioRole(2, 1), '03 ac 02 01');
+checkBytes('encodeGetDioRole', Wire.encodeGetDioRole(), '01 ad');
+checkBytes('encodeSetAoMode(frame_number)', Wire.encodeSetAoMode('frame_number'), '02 a3 01');
+checkBytes('encodeSetAoMode(0)', Wire.encodeSetAoMode(0), '02 a3 00');
+checkBytes('encodeGetAnalogIn', Wire.encodeGetAnalogIn(), '01 a4');
+checkThrows('dio role port 0 throws (1-based)', () => Wire.encodeSetDioRole(0, 2));
+checkThrows('dio role 4 throws', () => Wire.encodeSetDioRole(1, 4));
+checkThrows('dio role bad name throws', () => Wire.encodeSetDioRole(1, 'sideways'));
+checkThrows('ao mode 2 throws', () => Wire.encodeSetAoMode(2));
+// decodeDioRole: [role1=out_programmable, HIGH, role2=in_trigger, LOW]
+{
+    const d = Wire.decodeDioRole(Uint8Array.from([0x06, 0x00, 0xad, 0x02, 0x01, 0x01, 0x00]));
+    check('decodeDioRole port1 role', d[0].role, 'out_programmable');
+    check('decodeDioRole port1 level', d[0].level, 1);
+    check('decodeDioRole port2 role', d[1].role, 'in_trigger');
+    check('decodeDioRole port2 is port 2', d[1].port, 2);
+    checkBool(
+        'decodeDioRole rejects status!=0',
+        Wire.decodeDioRole(Uint8Array.from([0x06, 0x01, 0xad, 0x02, 0x01, 0x01, 0x00])) === null
+    );
+}
+// decodeAnalogIn: int16 LE pair — -7263 mV = 0xE3A1, +1234 mV = 0x04D2.
+{
+    const a = Wire.decodeAnalogIn(Uint8Array.from([0x06, 0x00, 0xa4, 0xa1, 0xe3, 0xd2, 0x04]));
+    check('decodeAnalogIn ain1 signed', a.ain1Mv, -7263);
+    check('decodeAnalogIn ain2', a.ain2Mv, 1234);
+}
+
 console.log('\n=== trial-params (0x08) — golden vectors from play_pattern.py ===');
 // Mode 2, pattern 1, 30 fps, init 0 — the canonical golden vector.
 checkBytes(
@@ -126,6 +160,22 @@ checkBytes(
     Wire.encodeTrialParams({ mode: 3, patternId: 300, initPos: 513 }),
     '0c 08 03 2c 01 00 00 00 01 02 00 00 00'
 );
+// NEGATIVE frame_rate = Mode-2 REVERSE (fw reads int16 since ee74c33, fw #4).
+// -2 Hz -> int16 LE FE FF — the two's-complement must-pin case for the rate.
+checkBytes(
+    'trial mode2 rate -2 (reverse) -> FE FF',
+    Wire.encodeTrialParams({ mode: 2, patternId: 1, frameRate: -2, initPos: 0 }),
+    '0c 08 02 01 00 fe ff 00 00 00 00 00 00'
+);
+// int16 boundaries: -30 -> E2 FF (G4-ish reverse rate), 32767 -> FF 7F, -32768 -> 00 80.
+checkBytes(
+    'trial mode2 rate -30 -> E2 FF',
+    Wire.encodeTrialParams({ mode: 2, patternId: 1, frameRate: -30 }),
+    '0c 08 02 01 00 e2 ff 00 00 00 00 00 00'
+);
+check('rate 32767 lo byte', Wire.encodeTrialParams({ frameRate: 32767 })[5], 0xff);
+check('rate 32767 hi byte', Wire.encodeTrialParams({ frameRate: 32767 })[6], 0x7f);
+check('rate -32768 hi byte', Wire.encodeTrialParams({ frameRate: -32768 })[6], 0x80);
 // Length byte is always 0x0C (12 bytes follow: cmd + 11 params); total = 13 B.
 check('trial frame total length', Wire.encodeTrialParams().length, 13);
 check('trial length byte', Wire.encodeTrialParams()[0], 0x0c);
@@ -134,6 +184,15 @@ console.log('\n=== encoder range validation (throws) ===');
 checkThrows('gain -129 throws', () => Wire.encodeTrialParams({ gain: -129 }));
 checkThrows('gain 128 throws', () => Wire.encodeTrialParams({ gain: 128 }));
 checkThrows('patternId 70000 throws', () => Wire.encodeTrialParams({ patternId: 70000 }));
+// frame_rate is int16 now: 32768..65535 would ALIAS to reverse rates on the
+// signed firmware — must throw, not silently encode (they were legal as u16).
+checkThrows('rate 32768 throws (would alias to reverse)', () =>
+    Wire.encodeTrialParams({ frameRate: 32768 })
+);
+checkThrows('rate 65535 throws (was legal as u16)', () =>
+    Wire.encodeTrialParams({ frameRate: 65535 })
+);
+checkThrows('rate -32769 throws', () => Wire.encodeTrialParams({ frameRate: -32769 }));
 checkThrows('frame position -1 throws', () => Wire.encodeSetFramePosition(-1));
 checkThrows('frame position 70000 throws', () => Wire.encodeSetFramePosition(70000));
 checkThrows('non-integer mhz throws', () => Wire.encodeSetSpiClock(20.5));
@@ -245,6 +304,16 @@ check(
         Uint8Array.from([0x0a, 0x00, 0xc2, 0x02, 0x11, 0x04, 0xe9, 0xe5, 0xab, 0xcd, 0x12])
     ).mac,
     '04:E9:E5:AB:CD:12'
+);
+// Capability bit 5 = io_ext (SET_DIO_ROLE 0xAC / GET_DIO_ROLE 0xAD /
+// SET_AO_MODE 0xA3 / GET_ANALOG_IN 0xA4) — fw feat/dio-roles-ao-modes
+// advertises 0x23; hosts detect the DIO-role machinery by this bit.
+check(
+    'decodeControllerInfo io_ext capability (0x23)',
+    Wire.decodeControllerInfo(Uint8Array.from([0x04, 0x00, 0xc2, 0x01, 0x23])).capabilities.join(
+        ','
+    ),
+    'g6_mode,v2_local_storage,io_ext'
 );
 
 // SPI clock reply: [len=4, status=0, echo=0xC6, 20, 0] -> 20 MHz.
