@@ -17,26 +17,28 @@ reference code, and same-origin dev artifacts committed alongside.
   Pages shares the `reiserlab.github.io` origin with this site, so `fetch()` is same-origin. (Same
   pattern as `flasher/flasher.js` `FW_BASE`.)
 - The ISP-image publishing was added in firmware-repo **PR #17** (`release-isp-images` branch).
-  Until it merges *and* a tag is cut, the live Pages catalog has **no** `isp_file` entries — use the
+  Until it merges *and* a tag is cut, the live Pages catalog has **no** `bin` entries — use the
   dev artifacts in §3.
 
 ## 2. Catalog schema (manifest.json)
 
-Top level: `version` (release tag), `commit`, `built`, `artifacts[]`. Each artifact:
+Top level: `version` (release tag), `commit`, `built`, `artifacts[]`. Each artifact is one
+*selectable build* — UF2 and ISP `.bin` are two optional nested dicts on the SAME entry, not
+separate list entries:
 
 | field | meaning |
 |---|---|
 | `rev` | hardware revision, `v0.2.1` / `v0.3.1` |
 | `variant` | `production` \| `bcmtest` \| future |
 | `label` | human label for dropdowns |
-| `file`, `sha256` | UF2 (BOOTSEL/WebUSB flashing — the existing flasher's food) |
 | `usb_product` | expected USB product string post-flash (`G6 Panel v0.3` / `v0.2`) |
-| `default` | true on exactly one entry |
-| **`isp_file`, `isp_sha256`** | **the footered ISP image — Arena Studio's food.** Production entries only. |
+| `default` | true on exactly one entry that HAS a `uf2` (the WebUSB flasher's initial selection) |
+| **`uf2`: `{file, sha256}`** | UF2 (BOOTSEL/WebUSB flashing — the existing flasher's food). Optional. |
+| **`bin`: `{file, sha256}`** | **the footered ISP image — Arena Studio's food.** Optional. |
 
-`isp_file` = raw flash image + 32-byte trailer `{magic[8]="G6PANFW\0", version[16]=release tag,
+`bin.file` = raw flash image + 32-byte trailer `{magic[8]="G6PANFW\0", version[16]=release tag,
 crc32 (zlib, u32 LE), size (u32 LE)}`. The arena controller validates this footer before flashing
-("bad footer magic" = wrong/unfootered file). Verify `isp_sha256` after fetch before pushing.
+("bad footer magic" = wrong/unfootered file). Verify `bin.sha256` after fetch before pushing.
 
 ## 3. Dev artifacts (committed here, same-origin — develop against these today)
 
@@ -49,7 +51,7 @@ manifest, 4 entries):
 - `g6-panel-v0.{3,2}.1-isp-fleet-dd7d3f9.bin` — the build the whole arena runs today (PR #15).
 
 Point your dev fetch at `flasher/firmware/manifest-dev.json`; flip to the Pages URL when PR #17 +
-a release tag land. Entries with `"file": null` are ISP-only (no UF2 staged).
+a release tag land. Entries with no `uf2` key are ISP-only (no UF2 staged).
 
 ## 4. The push flow (wire level — all encoders/decoders exist in `js/arena-wire-g6.js`)
 
@@ -102,4 +104,4 @@ timeout, always verify after program.
 | Merged production firmware (two-PIO+ISP) | firmware repo **PR #15** (open; fleet already runs it) |
 | Progress-bar/smiley firmware | branch `isp-progress-display` (23d66af; USB-validated, arena ISP demo pending) |
 | Dev artifacts + this doc | merged (webDisplayTools PR #134) |
-| Arena Studio fetch/push UI | ✅ **shipped 2026-07-02** — `arena_studio.html` Console → panel-firmware tile → Choose… modal: consumes BOTH manifests (published Pages + `manifest-dev.json`, refreshed per open), verifies `isp_sha256` post-fetch, validates the G6PANFW footer, checks the 0xE0 stored-CRC against a local crc32 before any flash, 240 s program timeouts, on-SD footer version shown at connect. Single + batch (retry-once, per-panel report, blink progress map) included. |
+| Arena Studio fetch/push UI | ✅ **shipped 2026-07-02** — `arena_studio.html` Console → panel-firmware tile → Choose… modal: consumes BOTH manifests (published Pages + `manifest-dev.json`, refreshed per open), verifies `bin.sha256` post-fetch, validates the G6PANFW footer, checks the 0xE0 stored-CRC against a local crc32 before any flash, 240 s program timeouts, on-SD footer version shown at connect. Single + batch (retry-once, per-panel report, blink progress map) included. |

@@ -3102,7 +3102,7 @@
     // "Official" ISP images come from TWO schema-identical manifests (see
     // docs/development/arena-studio-isp-firmware-push-handoff.md):
     //   1. The firmware repo's PUBLISHED Pages manifest.json — refreshed every
-    //      time the modal opens; production entries carry isp_file/isp_sha256
+    //      time the modal opens; entries carry a nested bin: {file, sha256}
     //      once a panel-fw-v* release is tagged (fetch from Pages, NEVER from
     //      Release assets — those send no CORS headers).
     //   2. flasher/firmware/manifest-dev.json on THIS site (same-origin,
@@ -3189,7 +3189,7 @@
                 const res = await fetch(entry.file, { cache: 'no-store' });
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const data = new Uint8Array(await res.arrayBuffer());
-                // Published entries carry isp_sha256 — refuse a corrupt/truncated
+                // Published entries carry bin.sha256 — refuse a corrupt/truncated
                 // fetch outright (a bad image bricks nothing, but wastes a flash).
                 if (entry.sha256) {
                     const got = await sha256HexOf(data);
@@ -3212,16 +3212,17 @@
         return row;
     }
     // Map one manifest's artifacts into chooser rows. Both manifests share the
-    // release schema: production entries carry isp_file/isp_sha256 (footered
-    // <slug>-isp.bin next to the manifest; the footer's version field is the
-    // release tag). Legacy fallback: an artifact whose `file` is itself a .bin.
+    // release schema: entries with a nested "bin": {file, sha256} carry the
+    // footered ISP image (<slug>.bin next to the manifest; the footer's
+    // version field is the release tag). A bin-only entry (no "uf2") is
+    // fine — it just means no UF2 was staged for that build.
     function manifestEntries(man, base, sourceNote) {
         return ((man && man.artifacts) || [])
-            .filter((a) => a.isp_file || /\.bin$/i.test(a.file || ''))
+            .filter((a) => a.bin)
             .map((a) => ({
-                label: a.label || a.isp_file || a.file,
-                file: base + '/' + (a.isp_file || a.file),
-                sha256: a.isp_file ? a.isp_sha256 : a.sha256,
+                label: a.label || a.bin.file,
+                file: base + '/' + a.bin.file,
+                sha256: a.bin.sha256,
                 isDefault: !!a.default,
                 note: sourceNote + (a.rev ? ' · ' + a.rev : '')
             }));
