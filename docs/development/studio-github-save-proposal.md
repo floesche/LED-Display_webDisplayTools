@@ -101,34 +101,52 @@ once against the site registry, parameterize it later.
   guard; `repo`/`p`/`rig` params validated by shape and by registry membership
   (same belt-and-suspenders as `isSafePath` today).
 
-## Portability: protocols ↔ pattern sets must be matched (unsolved — decide early)
+## Portability: protocols ↔ pattern sets (direction settled 2026-07-03 — colocate per protocol)
 
 A protocol alone is **not portable**. v3 protocols reference patterns **by
 filename** (`pattern:` in trialParams), and at run time the Studio resolves
-name → SD index from the live SD listing (SD-first picker). So a shared
-protocol only runs — and only runs *correctly* — if the target arena's SD card
-holds pattern files with the same names **and the same content**. The failure
-modes differ in severity: a missing name refuses to run (annoying); a same-name
-file with different content **silently shows the wrong stimulus** (worse —
-invalidates the experiment without any error).
+name → SD index from the live SD listing (SD-first picker). A shared protocol
+only runs — and only runs *correctly* — if the target card holds files with
+the same names **and the same content**: a missing name refuses to run
+(annoying); a same-name file with different content **silently shows the wrong
+stimulus** (invalidates the experiment without any error).
 
-What needs figuring out during review (it shapes the v1 template layout, so it
-can't wait for v3):
+**Repo layout (user-proposed, adopted): each protocol carries its own patterns
+directory** — `protocols/looming_v3.yaml` + `protocols/looming_v3_patterns/`.
+Colocation IS the link:
 
-- **A durable protocol → pattern-set link.** The template repo co-locates
-  `patterns/`, but nothing records *which* set a protocol needs. Candidates: a
-  `pattern_set:` reference in the protocol (or in `protocols/index.json`)
-  naming a set whose manifest carries **per-file sha256** (grow the existing
-  `MANIFEST.txt` or a sidecar `manifest.json`).
-- **A Studio preflight check.** Before the run gate opens on a
-  registry/repo-loaded protocol: compare the SD listing + per-pattern 0x88
-  info (frame count / grayscale / size) against the manifest; full content
-  verification is possible via 0x84 bulk download + hash (slow — maybe
-  spot-check or on-demand). Mismatch → visible warning naming the files.
-- **A "fix it" flow.** The Console already batch-uploads folders to SD — so
-  the remedy can be one action: fetch the set from the repo, batch-upload,
-  re-verify. (Run-log meta should record the verified set hash alongside the
-  protocol sha — the run log then certifies the *pair*.)
+- No manifest indirection for linkage; referential integrity is a **static
+  lint** — every `pattern:` name must resolve inside the sibling dir —
+  checkable in CI and at protocol load, no SD needed.
+- Share/fork = copy two paths; one commit updates both; and identical `.pat`
+  content across protocols is the **same git blob**, so repo storage is free.
+- Divergence-proof by design: another protocol editing *its* copy of a shared
+  pattern can never change this protocol's stimulus (a reproducibility
+  feature, not waste).
+
+**The one remaining problem: packing multiple protocols onto one SD card.**
+Flat namespace + name-based resolution means two protocols with same-named,
+different-content patterns clobber each other. The invariant to enforce: **on
+a card, filename → content must be one-to-one.** Options:
+
+- **(b) Content-addressed SD names — recommended.** Upload as
+  `<name>.<sha8>.pat`. The Studio already controls the on-card name (the
+  upload + rename 0x83 path) and already owns name→index resolution, so
+  protocol names resolve via the sibling dir's hashes → SD name → index — no
+  firmware change. Collisions impossible by construction; shared content
+  dedupes to one file; **preflight collapses to a listing check** (the name
+  certifies the content — no over-the-wire hashing); run-log meta records the
+  hashed names, certifying the protocol+set **pair**. Costs: suffixed names in
+  the raw Console picker (cosmetic — display can strip), and a firmware
+  filename-length sanity check (current names are already long).
+- (a) SD subdirectory per protocol — cleanest *if* firmware pattern ops accept
+  paths (the card already has dirs: `/firmware/panel.bin`); needs a fw check.
+- (c) Flat names + card-level manifest + collision prompts at upload — works
+  on any firmware but pushes the problem into UX.
+
+**"Fix it" flow** (any option): the Console already batch-uploads folders — so
+the remedy is one action: fetch the protocol's `_patterns/` from the repo,
+batch-upload (hashing names en route under (b)), re-verify via listing.
 
 ## Open questions (answer during review)
 
@@ -139,6 +157,7 @@ can't wait for v3):
    work lives in user repos? (assumed yes)
 4. Is the repo association per-browser (localStorage) only, or encoded into
    shared URLs by default (`?repo=` on every share)?
-5. Pattern-set linkage: reference per-protocol or per-index-entry? Hash
-   granularity (per-file vs per-set)? How strict is the preflight before a
-   *recorded* run — warn or block?
+5. SD packing: confirm content-addressed names (option b) vs firmware
+   subdirectories (option a — needs a fw capability check); suffix format
+   (`<name>.<sha8>.pat`?); and how strict the preflight is before a *recorded*
+   run — warn or block?
