@@ -26,7 +26,21 @@ Associate a Studio session with a **per-user (or per-lab) GitHub repo** that
 holds that user's protocol YAMLs, pattern sets, and rig configs. Save =
 commit/PR there; later, load and share from there.
 
-## Proposal — three thin phases
+## Proposal — three thin phases (plus a v0 that needs no GitHub at all)
+
+### v0 — "Open from library…" picker (site-only; the missing registry door)
+
+Today the URL is the **only** way to load a registry protocol — File ▾ Open and
+the Run view's button are local-file pickers, so even a byte-identical local
+copy loads as `local` with no provenance. Fix: an **Open from library…** entry
+(File ▾ + beside Run's "Open protocol") listing `protocols/index.json` by
+`label`, loading via the same path `initFromUrl` uses —
+`Studio.loadProtocol(text, name, 'committed', {key})` — so `?p=` and the
+provenance key follow automatically. The Edit view's demo fixtures join the
+same list (either promoted into the registry or shown as a second "demos"
+group), which also closes the "editing a demo shows no `?p=`" seam. This
+picker is the UI slot v2 later re-points at a user repo's index — build it
+once against the site registry, parameterize it later.
 
 ### v1 — save to *my* repo (one focused session)
 
@@ -87,6 +101,35 @@ commit/PR there; later, load and share from there.
   guard; `repo`/`p`/`rig` params validated by shape and by registry membership
   (same belt-and-suspenders as `isSafePath` today).
 
+## Portability: protocols ↔ pattern sets must be matched (unsolved — decide early)
+
+A protocol alone is **not portable**. v3 protocols reference patterns **by
+filename** (`pattern:` in trialParams), and at run time the Studio resolves
+name → SD index from the live SD listing (SD-first picker). So a shared
+protocol only runs — and only runs *correctly* — if the target arena's SD card
+holds pattern files with the same names **and the same content**. The failure
+modes differ in severity: a missing name refuses to run (annoying); a same-name
+file with different content **silently shows the wrong stimulus** (worse —
+invalidates the experiment without any error).
+
+What needs figuring out during review (it shapes the v1 template layout, so it
+can't wait for v3):
+
+- **A durable protocol → pattern-set link.** The template repo co-locates
+  `patterns/`, but nothing records *which* set a protocol needs. Candidates: a
+  `pattern_set:` reference in the protocol (or in `protocols/index.json`)
+  naming a set whose manifest carries **per-file sha256** (grow the existing
+  `MANIFEST.txt` or a sidecar `manifest.json`).
+- **A Studio preflight check.** Before the run gate opens on a
+  registry/repo-loaded protocol: compare the SD listing + per-pattern 0x88
+  info (frame count / grayscale / size) against the manifest; full content
+  verification is possible via 0x84 bulk download + hash (slow — maybe
+  spot-check or on-demand). Mismatch → visible warning naming the files.
+- **A "fix it" flow.** The Console already batch-uploads folders to SD — so
+  the remedy can be one action: fetch the set from the repo, batch-upload,
+  re-verify. (Run-log meta should record the verified set hash alongside the
+  protocol sha — the run log then certifies the *pair*.)
+
 ## Open questions (answer during review)
 
 1. Default mental model: **per-user** repo or **per-lab** repo? (changes the
@@ -96,3 +139,6 @@ commit/PR there; later, load and share from there.
    work lives in user repos? (assumed yes)
 4. Is the repo association per-browser (localStorage) only, or encoded into
    shared URLs by default (`?repo=` on every share)?
+5. Pattern-set linkage: reference per-protocol or per-index-entry? Hash
+   granularity (per-file vs per-set)? How strict is the preflight before a
+   *recorded* run — warn or block?
