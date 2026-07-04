@@ -261,8 +261,9 @@ async function flashBlocks(pb, blocks, onProgress) {
 //   1. LOCAL_BUILDS below — UF2s committed under flasher/firmware/ and served
 //      from THIS site (same-origin, no CORS, no network). These appear first.
 //   2. The firmware repo's GitHub Pages manifest.json (FW_BASE) — the published
-//      build CATALOG: artifacts[] = { rev, variant, label, file, sha256,
-//      usb_product, default }, plus top-level version / commit / built.
+//      build CATALOG: artifacts[] = { rev, variant, label, usb_product, default,
+//      uf2: {file, sha256}, bin: {file, sha256} } — uf2/bin are each optional
+//      (a bin-only entry has no uf2). We only ever look at `uf2` here.
 // The dropdown is populated straight from the merged list, so new published
 // builds still appear automatically.
 let firmware = { version: null, commit: '', built: '', builds: [], byFile: {} };
@@ -308,7 +309,22 @@ async function resolveFirmware() {
         if (!res.ok) throw new Error(`manifest.json HTTP ${res.status}`);
         const m = await res.json();
         meta = { version: m.version || '(unknown)', commit: m.commit || '', built: m.built || '' };
-        remote = m.artifacts || [];
+        // Only entries with a "uf2" build are WebUSB-flashable — a "bin"-only
+        // entry is an ISP-footer image for the arena controller's over-SPI
+        // reflashing (parseUF2 would reject a raw .bin), so it's excluded.
+        // Flatten uf2.{file,sha256} to the top level to match the rest of
+        // this file's build-object shape (and LOCAL_BUILDS below).
+        remote = (m.artifacts || [])
+            .filter((a) => a.uf2)
+            .map((a) => ({
+                rev: a.rev,
+                variant: a.variant,
+                label: a.label,
+                usb_product: a.usb_product,
+                default: a.default,
+                file: a.uf2.file,
+                sha256: a.uf2.sha256
+            }));
     } catch (e) {
         log(`Remote catalog unavailable (${e.message}); showing local builds only.`, 'status-err');
     }
