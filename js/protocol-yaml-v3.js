@@ -635,9 +635,21 @@ function collectExportWarnings(experiment, arenaGeneration) {
         const declaredAnchors = [];
         const varsNode = experiment._doc.get('variables', true);
         if (varsNode && Array.isArray(varsNode.items)) {
-            for (const pair of varsNode.items) {
-                if (pair.value && pair.value.anchor) {
-                    declaredAnchors.push(pair.value.anchor);
+            for (const item of varsNode.items) {
+                if (!item) continue;
+                // Sequence-style (`- &anchor 5`, the documented shape + every
+                // fixture): the item node carries `.anchor` directly.
+                if (item.anchor) {
+                    declaredAnchors.push(item.anchor);
+                    continue;
+                }
+                // Mapping-style (`key: &anchor 5`): the Pair's VALUE node carries
+                // it. Guard that .value is a NODE, not a primitive — a scalar
+                // string's `.anchor` is the deprecated String.prototype.anchor
+                // method, which produced a bogus "[native code]" unused-anchor
+                // warning for string-valued sequence anchors.
+                if (item.value && typeof item.value === 'object' && item.value.anchor) {
+                    declaredAnchors.push(item.value.anchor);
                 }
             }
         }

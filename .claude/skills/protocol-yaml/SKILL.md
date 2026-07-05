@@ -68,8 +68,69 @@ it does NOT advance the protocol clock. Only `wait` commands do. Therefore:
 | 3 | position / host-stepped | `frame_index` (start frame); frames driven by `setPositionX` or the **FicTrac closed loop** (web) | `frame_rate: 0`, `gain: 0` |
 | 4 | analog closed-loop | `gain`, `frame_index` | `frame_rate: 0` (MATLAB/analog rig path) |
 
-Other controller commands: `allOn`, `allOff`, `stopDisplay`, `setPositionX`
-(Mode-3 frame jump), and G6-only `setAnalogOut` / `setDigitalOut`.
+`frame_index` is **0-based** (`0` = the first frame). `duration` is in **seconds** —
+plain wall-clock, no upper bound enforced (60–300 s trials are fine).
+
+## FicTrac closed loop (Mode 3)
+
+A closed-loop trial is a `trialParams` (mode 3) that loads the pattern + start frame,
+then a `startClosedLoop` / `stopClosedLoop` pair around the `wait` that holds it — FicTrac
+streams frames for the wait's duration. Declare a `fictrac` plugin. Shape:
+
+```yaml
+- name: "closed_loop_stim"
+  commands:
+    - type: "controller"
+      command_name: "trialParams"
+      pattern: "G6_2x10_grating_20px"
+      pattern_ID: 2
+      duration: *cl_dur
+      mode: 3
+      frame_index: 0
+      frame_rate: 0        # mode 3: fixed 0
+      gain: 0              # mode 3: fixed 0
+    - type: "controller"
+      command_name: "startClosedLoop"
+    - type: "wait"
+      duration: *cl_dur    # FicTrac drives frames for this long (same anchor)
+    - type: "controller"
+      command_name: "stopClosedLoop"
+```
+
+## Other controller commands
+
+`allOn`, `allOff`, `stopDisplay`, `setPositionX` (Mode-3 frame jump), and the **G6-only**
+`setAnalogOut` / `setDigitalOut`. The I/O commands take these exact fields (units matter):
+
+```yaml
+    - type: "controller"
+      command_name: "setAnalogOut"
+      mv: 2500              # MILLIVOLTS (0–5000 = 0–5 V); 0 to clear
+    - type: "controller"
+      command_name: "setDigitalOut"
+      channel: 1            # 1-based — matches the board BNC silkscreen "Digital IO 1/2"
+      state: 1             # 0 or 1 (int, not true/false)
+```
+
+These are instantaneous (like plugin commands) — they don't advance the clock. G6-only:
+on non-G6 hardware they're rejected by the controller. A common pattern is a
+`setDigitalOut … state: 1` before a trial and a `state: 0` after (in a trailing `wait`
+window — that's a legitimate "waits exceed display" case).
+
+## Full block example
+
+A sequence entry is either a bare condition name or a block (define referenced conditions
+in `conditions:`):
+
+```yaml
+experiment:
+  - "baseline"                       # bare reference
+  - name: "main_block"
+    trials: ["stim_a", "stim_b"]     # array of condition names, run in order
+    repetitions: 3                   # whole block repeats 3×
+    intertrial: "blank"              # a condition run between trials (optional)
+  - "shutdown"
+```
 
 ## Patterns (made in the web Pattern Designer — only sizing/naming matters here)
 

@@ -1373,6 +1373,45 @@ console.log('\n--- Suite 17: collectExportWarnings (soft-warn gate) ---');
 }
 
 {
+    // Regression: SEQUENCE-style variables (the documented shape + every fixture)
+    // with a STRING-valued anchor. The unused-anchor scan used to read
+    // pair.value.anchor, which on a scalar string hit String.prototype.anchor
+    // and produced a bogus "&function anchor() { [native code] }" warning even
+    // for a referenced anchor. Both anchors here are referenced → zero warnings.
+    const yaml =
+        [
+            'version: 3',
+            'experiment_info: {name: x}',
+            'rig: "/tmp/r.yaml"',
+            'variables:',
+            '  - &pat_name "G6_2x10_grating_20px"',
+            '  - &dur 4',
+            'experiment: [foo]',
+            'conditions:',
+            '  - name: foo',
+            '    commands:',
+            '      - type: controller',
+            '        command_name: trialParams',
+            '        pattern: *pat_name',
+            '        pattern_ID: 2',
+            '        duration: *dur',
+            '        mode: 2',
+            '        frame_index: 0',
+            '        frame_rate: 5',
+            '        gain: 0',
+            '      - type: wait',
+            '        duration: *dur'
+        ].join('\n') + '\n';
+    const exp = parseV3Protocol(yaml);
+    const { warnings } = collectExportWarnings(exp);
+    const anchorWarns = warnings.filter((w) => w.kind === 'unused-anchor');
+    checkTrue('warn: sequence-style string anchor not falsely flagged',
+        anchorWarns.length === 0);
+    checkTrue('warn: no [native code] garbage anchor name',
+        !warnings.some((w) => String(w.name || '').includes('native code')));
+}
+
+{
     // Plugin used but not declared in plugins:
     const yaml =
         [
