@@ -34,6 +34,13 @@ history lives here. Newest first. (Per-session engineering detail stays in
 - Footer link now points at the **GitHub repo** (this release-notes file lives there
   under docs/development/). The Pattern Designer lost its orange top banner — it has
   the same one-line version/date/GitHub footer as the other tools now.
+- **Build pattern set… knows the course repo** (#150): a "Course repo" source lists the
+  shared `patterns/` library and this protocol's `_patterns/` folder; **Add referenced**
+  seeds the set from the protocol's own pattern names (unresolved names reported loudly);
+  **Commit set → repo** direct-commits the set into `protocols/<bench>/<name>_patterns/`
+  with the Promote-style guard (identical files skipped, a different file under an
+  existing name refused) and refreshes the W badges live. This is the one-click
+  library → colocation path.
 - **Studio ⇄ Designer are first-class neighbors**: an always-visible
   "Pattern Designer ↗" in the Studio's top bar and "Arena Studio ↗" in the Designer's
   header. The links reuse each other's tab — clicking focuses the existing tab instead

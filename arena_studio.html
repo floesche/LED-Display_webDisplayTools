@@ -2626,7 +2626,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.7 | 2026-07-05 13:40 ET · Edit toolbar + Settings diet · Console tool rail · ? Help mode · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
+<footer id="footer">Arena Studio v0.7 | 2026-07-05 13:47 ET · Edit toolbar + Settings diet · Console tool rail · ? Help mode · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -11394,6 +11394,7 @@ async function initFromUrl() {
             const srcrow = el('div', { class: 'ps-srcrow' },
                 el('span', { style: 'color:var(--text-dim);' }, 'Source:'),
                 mkRadio('builtin', 'Built-in library'),
+                mkRadio('repo', 'Course repo'),
                 mkRadio('remote', 'Another repo'),
                 mkRadio('local', 'Local files'),
                 baseUrlInput, loadRemoteBtn, localBtn, fileInput);
@@ -11414,14 +11415,20 @@ async function initFromUrl() {
             const blocked = el('div', { class: 'ps-blocked' });
 
             // footer
+            const addRefBtn = el('button', { class: 'header-btn',
+                title: 'Add every pattern this protocol references (resolved from the current source); unresolved names are reported',
+                onClick: psAddReferenced }, 'Add referenced');
             const addAllBtn = el('button', { class: 'header-btn', title: 'Add every valid available pattern',
                 onClick: psAddAllValid }, 'Add all valid');
             const clearBtn = el('button', { class: 'header-btn', title: 'Remove all selected patterns',
                 onClick: psClearSelected }, 'Clear');
             const status = el('span', { class: 'ps-status' });
+            const commitBtn = el('button', { class: 'header-btn',
+                title: 'Direct-commit the set into this protocol\'s _patterns/ folder in the course repo (identical files skipped; a different file under an existing name refuses)',
+                onClick: psCommitToRepo }, 'Commit set → repo');
             const exportBtn = el('button', { class: 'header-btn primary', title: 'Export the bundle as a ZIP to copy onto the SD card',
                 onClick: psExport }, 'Export ZIP ⬇');
-            const foot = el('div', { class: 'ps-foot' }, addAllBtn, clearBtn, status, exportBtn);
+            const foot = el('div', { class: 'ps-foot' }, addRefBtn, addAllBtn, clearBtn, status, commitBtn, exportBtn);
 
             const modal = el('div', { class: 'ps-modal' }, head, srcrow, body, blocked, foot);
             const backdrop = el('div', { class: 'ps-modal-backdrop', id: 'patternSetModal' }, modal);
@@ -11429,7 +11436,8 @@ async function initFromUrl() {
             document.body.appendChild(backdrop);
 
             psEl = { backdrop, arenaSpan, srcrow, body, blocked, foot, baseUrlInput, loadRemoteBtn,
-                fileInput, localBtn, search, availList, selList, status, exportBtn, addAllBtn, clearBtn };
+                fileInput, localBtn, search, availList, selList, status, exportBtn, addAllBtn, clearBtn,
+                addRefBtn, commitBtn };
             return psEl;
         }
 
@@ -11507,13 +11515,65 @@ async function initFromUrl() {
             psState.available = [];
             psSyncSourceUI();
             psRenderSelected();
-            if (kind === 'builtin') psLoadLibrary();
+            if (kind === 'builtin' || kind === 'repo') psLoadLibrary();
             else psRenderAvailable();
+        }
+
+        // The protocol's colocated _patterns/ dir in the course repo — the
+        // "Commit set → repo" destination. Repo-opened docs use their own path;
+        // otherwise it mirrors saveViaDirectCommit (bench id + slugged name).
+        function psProtoDir() {
+            const doc = window.Studio.currentDoc;
+            const cs = window.Studio.courseSettings();
+            try {
+                if (doc && doc.repoRef && doc.repoRef.path && cs.repo && doc.repoRef.repo === cs.repo.full) {
+                    return doc.repoRef.path.replace(/\.ya?ml$/i, '') + '_patterns';
+                }
+            } catch (_) { /* fall through */ }
+            if (!cs.repo || !cs.benchId || !doc || !doc.filename) return null;
+            if (window.Studio.isUntitledDoc && window.Studio.isUntitledDoc(doc)) return null;
+            return 'protocols/' + cs.benchId + '/' + GH.slug(doc.filename.replace(/\.ya?ml$/i, '')) + '_patterns';
+        }
+
+        // Course-repo source (#150): shared patterns/ + the current protocol's
+        // _patterns/, listed via the Contents API (no MANIFEST needed).
+        // Geometry is validated on Add (ingest), same as every other source.
+        async function psLoadRepo() {
+            const cs = window.Studio.courseSettings();
+            const token = ghToken();
+            psEl.availList.innerHTML = '';
+            psState.available = [];
+            if (!cs.repo || !token) {
+                psEl.availList.appendChild(el('div', { class: 'ps-empty' },
+                    'Sign in to GitHub and set the course repo (File ▾) to browse it.'));
+                return;
+            }
+            psEl.availList.appendChild(el('div', { class: 'ps-empty' }, 'Listing ' + cs.repo.full + ' …'));
+            const dirs = [{ dir: 'patterns', sub: 'patterns/' }];
+            const proto = psProtoDir();
+            if (proto) dirs.push({ dir: proto, sub: proto.split('/').pop() + '/' });
+            const logi = (n) => (window.Studio.sdLogicalName ? window.Studio.sdLogicalName(n) : String(n).replace(/\.pat$/i, ''));
+            for (const d of dirs) {
+                try {
+                    const res = await GH.run(fetch, GH.reqGetContents(cs.repo.owner, cs.repo.name, d.dir, null, token));
+                    if (res.ok && Array.isArray(res.data)) {
+                        res.data
+                            .filter((f) => f && f.type === 'file' && /\.pat$/i.test(f.name))
+                            .forEach((f) => psState.available.push({
+                                name: logi(f.name), sourceName: f.name,
+                                meta: null, valid: true, reason: null,
+                                url: null, repoPath: f.path, sub: d.sub, bytes: null
+                            }));
+                    }
+                } catch (_) { /* missing dir is normal */ }
+            }
+            psRenderAvailable();
         }
 
         // Load the Available list from a MANIFEST.txt (built-in or remote).
         async function psLoadLibrary() {
             if (psState.source === 'local') { psRenderAvailable(); return; }
+            if (psState.source === 'repo') { await psLoadRepo(); return; }
             const folder = psArenaFolder(psState.arenaConfig);
             const url = psBaseUrl() + '/patterns/' + folder + '/MANIFEST.txt';
             psEl.availList.innerHTML = '';
@@ -11591,7 +11651,7 @@ async function initFromUrl() {
                     title: !entry.valid ? (entry.reason || 'invalid') : (added ? 'Already added' : 'Add to the set'),
                     onClick: () => psAdd(entry)
                 }, added ? '✓ added' : '+ Add');
-                const info = entry.valid ? psMetaStr(entry.meta) : (entry.reason || 'invalid');
+                const info = entry.valid ? (psMetaStr(entry.meta) || entry.sub || '') : (entry.reason || 'invalid');
                 const badge = el('span', {
                     class: 'ps-badge ' + (entry.valid ? 'ok' : 'bad'),
                     title: entry.valid ? 'Matches the arena' : (entry.reason || '')
@@ -11607,6 +11667,16 @@ async function initFromUrl() {
             if (!entry.valid || psIsAdded(entry)) return;
             try {
                 let bytes = entry.bytes;
+                if (!bytes && entry.repoPath) {
+                    // course-repo entry — RAW media type (Contents JSON omits >1MB bodies)
+                    const cs = window.Studio.courseSettings();
+                    const r = await GH.runBytes(fetch,
+                        GH.reqGetContentsRaw(cs.repo.owner, cs.repo.name, entry.repoPath, null, ghToken()));
+                    if (!r.ok) throw new Error('HTTP ' + r.status);
+                    const u8 = r.bytes;
+                    bytes = (u8.byteOffset === 0 && u8.byteLength === u8.buffer.byteLength)
+                        ? u8.buffer : u8.slice().buffer;
+                }
                 if (!bytes && entry.url) {
                     const resp = await fetch(entry.url, { cache: 'no-store' });
                     if (!resp.ok) throw new Error('HTTP ' + resp.status);
@@ -11670,6 +11740,105 @@ async function initFromUrl() {
             const invalid = set ? set.items.filter((it) => !it.valid).length : 0;
             psEl.status.textContent = n + ' selected' + (invalid ? ' · ' + invalid + ' invalid' : (n ? ' · all valid' : ''));
             psEl.exportBtn.disabled = n === 0 || invalid > 0;
+            if (psEl.commitBtn) {
+                const dir = psProtoDir();
+                psEl.commitBtn.disabled = n === 0 || invalid > 0 || !dir;
+                psEl.commitBtn.title = dir
+                    ? 'Direct-commit the set to ' + dir + '/ in the course repo (identical files skipped; a different file under an existing name refuses)'
+                    : 'Save the protocol to the course repo first — the set commits into its _patterns/ folder (needs sign-in + bench id)';
+            }
+        }
+
+        // "Add referenced" (#150): seed the set from the protocol's pattern names,
+        // resolved against the CURRENT source's Available list. Unresolved names
+        // are reported loudly (typo, or not in this source — switch and retry).
+        async function psAddReferenced() {
+            if (!experiment) { showError('No protocol', 'Open a protocol first.'); return; }
+            const wanted = new Set();
+            for (const c of experiment.conditions || []) {
+                const tp = RunnerLib.findTrialParams(c);
+                if (tp && tp.pattern) wanted.add(String(tp.pattern));
+            }
+            if (!wanted.size) { showError('No pattern references', 'This protocol has no trialParams pattern names.'); return; }
+            const logi = (n) => (window.Studio.sdLogicalName ? window.Studio.sdLogicalName(n) : String(n).replace(/\.pat$/i, ''));
+            const missing = [];
+            for (const want of wanted) {
+                const entry = psState.available.find((a) => a.name === want || logi(a.sourceName) === logi(want));
+                if (!entry) { missing.push(want); continue; }
+                if (entry.valid && !psIsAdded(entry)) await psAdd(entry);
+            }
+            if (missing.length) {
+                showError('Not in this source',
+                    'Unresolved pattern name(s):\n  ' + missing.join('\n  ') +
+                    '\n\nSwitch the source (course repo / built-in / local) and Add referenced again, or fix the reference in the protocol.');
+            }
+        }
+
+        function psBytesEqual(a, b) {
+            const ua = a instanceof Uint8Array ? a : new Uint8Array(a);
+            const ub = b instanceof Uint8Array ? b : new Uint8Array(b);
+            if (ua.length !== ub.length) return false;
+            for (let i = 0; i < ua.length; i++) if (ua[i] !== ub[i]) return false;
+            return true;
+        }
+
+        // "Commit set → repo" (#150): direct-commit the built set into the
+        // protocol's colocated _patterns/ folder — plain logical filenames (no
+        // NNN_ prefix), Promote-style guard: identical files are skipped, a
+        // DIFFERENT file under an existing name refuses. W badges refresh live.
+        async function psCommitToRepo() {
+            const cs = window.Studio.courseSettings();
+            const token = ghToken();
+            if (!token || !cs.repo) { showError('Not signed in', 'Sign in to GitHub and set the course repo (File ▾) first.'); return; }
+            const dir = psProtoDir();
+            if (!dir) { showError('No destination', 'Save the protocol to the course repo first — the set commits next to its YAML (needs a bench id).'); return; }
+            let bundle;
+            try { bundle = window.PatternSet.buildBundle(psState.set); }
+            catch (e) { showError('Set not exportable', e.message || String(e)); return; }
+            const logi = (n) => (window.Studio.sdLogicalName ? window.Studio.sdLogicalName(n) : String(n).replace(/\.pat$/i, ''));
+            const files = bundle.patterns.map((p) => ({ name: logi(p.name) + '.pat', bytes: p.bytes }));
+            const ok = await confirmModal({
+                title: 'Commit ' + files.length + ' pattern(s) to the repo?',
+                body: 'Direct-commits the set to ' + cs.repo.full + '/' + dir + '/. Identical files are skipped; a DIFFERENT file under an existing name is refused (bump the name instead).',
+                confirmLabel: 'Commit'
+            });
+            if (!ok) return;
+            let done = 0, skipped = 0;
+            const refused = [];
+            for (const f of files) {
+                const path = dir + '/' + f.name;
+                psEl.status.textContent = 'committing ' + (done + 1) + '/' + files.length + ' — ' + f.name + '…';
+                try {
+                    const cur = await GH.run(fetch, GH.reqGetContents(cs.repo.owner, cs.repo.name, path, null, token));
+                    if (cur.ok && cur.data && cur.data.sha) {
+                        const raw = await GH.runBytes(fetch, GH.reqGetContentsRaw(cs.repo.owner, cs.repo.name, path, null, token));
+                        if (raw.ok && psBytesEqual(raw.bytes, f.bytes)) { skipped++; done++; continue; }
+                        refused.push(f.name + ' — a DIFFERENT file already exists at ' + path);
+                        done++; continue;
+                    }
+                    const res = await GH.directCommit(fetch, {
+                        owner: cs.repo.owner, repo: cs.repo.name, token: token, path: path,
+                        message: 'pattern set: ' + f.name + ' → ' + dir + '/ via Build Pattern Set',
+                        contentBytes: f.bytes instanceof Uint8Array ? f.bytes : new Uint8Array(f.bytes)
+                    });
+                    if (!res.ok) throw new Error(res.error || ('HTTP ' + res.status));
+                    done++;
+                } catch (err) {
+                    refused.push(f.name + ' — ' + (err && err.message ? err.message : err));
+                    done++;
+                }
+            }
+            psEl.status.textContent = (files.length - refused.length) + '/' + files.length + ' committed to ' + dir + '/' +
+                (skipped ? ' (' + skipped + ' identical skipped)' : '');
+            if (refused.length) showError('Some patterns were NOT committed', refused.join('\n'));
+            // Refresh the colocated listing so W badges flip live.
+            try {
+                const protoPath = dir.replace(/_patterns$/, '') + '.yaml';
+                if (typeof registerRepoPatternPreviews === 'function') {
+                    await registerRepoPatternPreviews({ owner: cs.repo.owner, name: cs.repo.name, full: cs.repo.full }, protoPath, token);
+                }
+            } catch (_) { /* best-effort */ }
+            if (experiment && !importMode) renderLibrary();
         }
 
         async function psClearSelected() {
