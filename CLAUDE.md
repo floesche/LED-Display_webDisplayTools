@@ -242,7 +242,46 @@ fix flows to every page automatically; two hand-written HTML pages never will.
   `Studio._urlSuppress`. URL writing is NOT a protocol mutation — never route
   it through `pushUndo`. Any NEW shareable state must flow through
   `encodeApp()` + `Studio.updateUrl` (never hand-build `location.search`).
+- **Console v6 layout (v0.6):** left rail of 7 tool panels (`data-panel` =
+  patterns/trial/step/test/io/fw/fictrac) + bench strip + always-visible resizable log;
+  the SD/library **listing IS the pattern picker** (row click drives the hidden `cPatName`).
+  GOTCHA: connected SD rows carry RAW filenames in `data-name` while picker options key
+  LOGICAL names — always normalize row↔option comparisons through `Studio.sdLogicalName`
+  (offline mirrored rows use option values, so offline tests pass without it).
+- **Open lands in Edit:** `Studio.loadProtocol(text, name, source, opts)` switches to Edit
+  after a successful load unless `opts.landIn === 'run'` (only the `initFromUrl` `?p=`/
+  `?repo=` loads pass that). Never re-add an unconditional force-to-Run.
+- **? Help mode:** top-bar `?` toggles `body.helpmode`; a managed tooltip shows curated
+  `data-help` text (applied from the `HELP` map in the v6 glue classic script — extend the
+  map, don't scatter attributes) and suppresses the native engineer `title=` while shown.
+  Content rule: end-user voice, shipped features only, no opcodes/issue refs/design history.
+  Per-view "first steps" cards are created by `helpCard()` in the same script.
+- **Footer is ONE line** (version + ET timestamp + a couple of keywords + release-notes
+  link); the changelog lives in `docs/development/arena-studio-release-notes.md` — add an
+  entry there for user-visible changes.
 - Bump the footer version/timestamp on every edit; never Prettier the HTML.
+
+## Pattern Designer (`pattern_editor.html`)
+
+Renamed from "Pattern Editor" (v0.10, 2026-07-04); the FILENAME stays `pattern_editor.html`
+(bookmarks/links). It shares the Studio's GitHub settings via same-origin storage
+(`studio_gh_pat` in sessionStorage/localStorage, `studio_gh_repo` + `studio_bench_id` in
+localStorage) — no auth UI of its own. Repo layout: free-standing patterns in `patterns/`
+(shared library) or protocol-colocated `protocols/<bench-id>/<proto>_patterns/`.
+
+- **URL state:** `?arena=<config>` (validated via `getConfig`, applies + LOCKS the arena
+  selector) and `?repo=owner/name` (validated via `StudioUrlState.isSafeRepo`, session-only
+  override — never written to localStorage). Written back via `updateUrlState()`
+  (replaceState) on arena change / pattern load. The Studio's top-bar **Patterns ↗** link
+  builds this URL at click time from `Studio.currentRig.arenaConfig` + the stored repo.
+- **File ops:** LOAD ▾ menu = Open local file… / Open from Library… (site
+  `patterns/<config-lowercase>/MANIFEST.txt` via `window.PatternSet.parseManifestTxt`) /
+  Open from Repo… (two-step picker: `patterns/` + every `*_patterns/` dir under
+  `protocols/<bench-id>|shared/`). All three sources funnel into `loadPatternBuffer()`.
+  ⇪ Save to Repo… = destination modal (library vs protocol) → `GH.directCommit` with an
+  exists-check overwrite confirm.
+- Classic deps added for this: `js/pattern-set.js`, `js/studio-url-state.js` (both
+  dual-export; same files the Studio loads).
 
 ## CI/CD Validation
 
