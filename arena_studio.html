@@ -2493,7 +2493,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.5 | 2026-07-04 18:13 ET · course data pipeline: repo/bench-id settings (visible-but-locked in all views, GitHub sign-in/out; Repo defaults to reiserlab/cshl-2026-course, overridable) + direct commit (protocols/&lt;bench-id&gt;/ + runlogs/&lt;bench-id&gt;/), universal bridge run-logging (gated recorded runs, run_metadata line, auto-commit of the exported JSONL), course roster.yaml + genotypes.yaml + dynamic source links (load on sign-in, no arena needed), MAC cross-check chip, missing-pattern preflight (block) + name-mismatch warning, SD pattern names matched by logical name (NNN_ index prefix + .pat tolerated, so one card holds several protocols' sets), Console SD Upload ▾ (single pattern or whole set — from local file/folder, library, or course repo, picked by protocol; uploaded bytes feed picker previews, so "Load set…" is retired; per-file confirm log + settle pause + 1 retry for reliability), manual "⇪ Push log" to re-commit a run log the auto-commit skipped/failed (with a screen-greying upload modal that holds the exact error on failure; export timeout now names a stale bridge build), io_ext caps resolved before the rig-I/O apply (no first-connect race) + role options re-gate on GET_CONTROLLER_INFO + "Apply I/O roles" honors session overrides, File ▾ in all views (Open pickers everywhere; write/settings Edit-only), Console Debug ▾ + Controller ▾ advanced (panel mode / rig I/O) locked by default, Run view has a FicTrac bridge strip (connect + live counts mirrored from the Console, one shared connection; closed-loop indicator pulses green while active; gain/config stay in Console; runner-driven closed-loop now applies FicTrac frames — the shared-bridge apply gate allows apply while a run is in flight, not only when the Console stepper is loaded), a live elapsed/estimated-total run timer under the step counter, and hides the per-condition "▶ Test" buttons during a run, Run-view log is capped at 40vh (bottom-anchored, never squeezes the launch card + sequence; sequence takes the flexible middle) and Notes defaults roomy (~38vh, meta-panel scrolls), Open from library/course repo pickers, promote-to-shared with hash guard, ?repo= links · session rig (top bar, locked) + mismatch chip + ?rig= + rig io: power-on defaults incl. roles via SET_DIO_ROLE/SET_AO_MODE on io_ext firmware, capability-gated (#135; I/O names match the board silkscreen — Digital IO 1/2, ports 1-based) · negative frame_rate = Mode-2 reverse (int16, fw #4) · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint) · URL state r/w (#107) · Edit 💾 Save</footer>
+<footer id="footer">Arena Studio v0.6 | 2026-07-05 17:21 ET · Console pattern preview falls back to a live 0x84 fetch (patByteSource) for any connected SD-card pattern not already in memory, not just session-uploaded/built-in ones (issue #16 firmware fix made this safe) · course data pipeline: repo/bench-id settings (visible-but-locked in all views, GitHub sign-in/out; Repo defaults to reiserlab/cshl-2026-course, overridable) + direct commit (protocols/&lt;bench-id&gt;/ + runlogs/&lt;bench-id&gt;/), universal bridge run-logging (gated recorded runs, run_metadata line, auto-commit of the exported JSONL), course roster.yaml + genotypes.yaml + dynamic source links (load on sign-in, no arena needed), MAC cross-check chip, missing-pattern preflight (block) + name-mismatch warning, SD pattern names matched by logical name (NNN_ index prefix + .pat tolerated, so one card holds several protocols' sets), Console SD Upload ▾ (single pattern or whole set — from local file/folder, library, or course repo, picked by protocol; uploaded bytes feed picker previews, so "Load set…" is retired; per-file confirm log + settle pause + 1 retry for reliability), manual "⇪ Push log" to re-commit a run log the auto-commit skipped/failed (with a screen-greying upload modal that holds the exact error on failure; export timeout now names a stale bridge build), io_ext caps resolved before the rig-I/O apply (no first-connect race) + role options re-gate on GET_CONTROLLER_INFO + "Apply I/O roles" honors session overrides, File ▾ in all views (Open pickers everywhere; write/settings Edit-only), Console Debug ▾ + Controller ▾ advanced (panel mode / rig I/O) locked by default, Run view has a FicTrac bridge strip (connect + live counts mirrored from the Console, one shared connection; closed-loop indicator pulses green while active; gain/config stay in Console; runner-driven closed-loop now applies FicTrac frames — the shared-bridge apply gate allows apply while a run is in flight, not only when the Console stepper is loaded), a live elapsed/estimated-total run timer under the step counter, and hides the per-condition "▶ Test" buttons during a run, Run-view log is capped at 40vh (bottom-anchored, never squeezes the launch card + sequence; sequence takes the flexible middle) and Notes defaults roomy (~38vh, meta-panel scrolls), Open from library/course repo pickers, promote-to-shared with hash guard, ?repo= links · session rig (top bar, locked) + mismatch chip + ?rig= + rig io: power-on defaults incl. roles via SET_DIO_ROLE/SET_AO_MODE on io_ext firmware, capability-gated (#135; I/O names match the board silkscreen — Digital IO 1/2, ports 1-based) · negative frame_rate = Mode-2 reverse (int16, fw #4) · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint) · URL state r/w (#107) · Edit 💾 Save</footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -2521,7 +2521,7 @@
 <script>
 'use strict';
 (function () {
-    const TOOL_VERSION = 'Arena Studio v0.5';
+    const TOOL_VERSION = 'Arena Studio v0.6';
     const $ = (id) => document.getElementById(id);
     const Wire = window.ArenaWireG6;
     const RunLog = window.RunLog;
@@ -4586,9 +4586,21 @@ const PP = window.PatPreview;
 const BUILTIN_BASE = './patterns/g6_2x10/';
 Studio.patternSet = null;
 const webPreviewBySdName = new Map(); // filename → () => Promise<ArrayBuffer>
-function patByteSource(sd) {
+// `idx` (1-based SD index) is the fallback path: a pattern already on the card
+// from a prior session has no cached source above, so fetch it live via 0x84
+// — the controller's GET_PATTERN_FILE handler is chunked/non-blocking with a
+// bounded stall recovery (issue #16), so this is safe on fixed firmware (an
+// older controller can still wedge the link here). Same call the SD table's
+// Download button already makes.
+function patByteSource(sd, idx) {
     const f = webPreviewBySdName.get(sd);
-    return f ? f() : Promise.reject(new Error('no local copy of ' + sd));
+    if (f) return f();
+    if (!Studio.session || !Studio.session.connected || idx == null) {
+        return Promise.reject(new Error('no local copy of ' + sd));
+    }
+    return Studio.session
+        .sendBulkRead(Wire.encodeGetPatternFile(idx), { timeoutMs: 60000 })
+        .then((u8) => u8.buffer);
 }
 let patPreviewCache = {};
 
@@ -4718,13 +4730,14 @@ async function renderPatThumb(name) {
     const m = Studio.patternSet;
     const p = m && m.patterns[name];
     if (!p || !PP || !host) return;
-    host.title = webPreviewBySdName.has(p.sd_name)
+    const canFetchLive = Studio.session && Studio.session.connected && p.index != null;
+    host.title = webPreviewBySdName.has(p.sd_name) || canFetchLive
         ? 'Pattern preview (hover a multi-frame pattern to animate)'
-        : 'No preview — this pattern is on the SD card but its bytes were not seen this session (upload it via Upload ▾, or open its course-repo protocol, for a thumbnail)';
+        : 'No preview — connect to the controller for a live thumbnail, or upload the set / open its course-repo protocol';
     try {
         let sampled = patPreviewCache[name];
         if (!sampled) {
-            const ab = await patByteSource(p.sd_name);
+            const ab = await patByteSource(p.sd_name, p.index);
             const parsed = PatParser.parsePatFile(ab);
             sampled = PP.samplePreviewFrames(parsed, arenaForConfig(m.arenaConfig), {
                 renderIcon: generatePatternIcon,
@@ -4827,8 +4840,9 @@ Studio.onSdListing = function (names) {
 function wirePatPicker() {
     const sel = $('cPatName');
     if (sel) sel.addEventListener('change', () => applyPatPick(sel.value));
-    // (Pattern-set previews now come from device memory → Upload ▾, which
-    // registers uploaded bytes as preview sources — see Studio.registerUploadedPreviews.)
+    // (Pattern-set previews prefer in-memory bytes — Upload ▾ registers those,
+    // see Studio.registerUploadedPreviews — and fall back to a live 0x84 fetch
+    // via patByteSource for any other connected SD-card pattern.)
 }
 
 // ---- stream frame (host-streamed test figures) — ported from arena_console ----
