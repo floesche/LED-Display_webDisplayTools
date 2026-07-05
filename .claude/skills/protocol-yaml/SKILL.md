@@ -68,8 +68,15 @@ it does NOT advance the protocol clock. Only `wait` commands do. Therefore:
 | 3 | position / host-stepped | `frame_index` (start frame); frames driven by `setPositionX` or the **FicTrac closed loop** (web) | `frame_rate: 0`, `gain: 0` |
 | 4 | analog closed-loop | `gain`, `frame_index` | `frame_rate: 0` (MATLAB/analog rig path) |
 
-`frame_index` is **0-based** (`0` = the first frame). `duration` is in **seconds** —
-plain wall-clock, no upper bound enforced (60–300 s trials are fine).
+`frame_index` is **0-based** (`0` = the first frame). `duration` is in **seconds** as a
+**float** — fractional and sub-second are fine (`0.1`, `0.25`, `1.5`), preserved exactly
+through parse/save; no whole-second quantization and no upper bound (60–300 s trials are
+fine too). Caveat: the web runner is **host-timed** (`setTimeout`, ms resolution) until the
+firmware enforces trial duration (FW#4), so it's soft real-time — very short trials
+(≲ ~50 ms) and backgrounded tabs will jitter. `frame_rate` sets frame cadence on the
+controller; `duration`/`wait` sets how long the host lets the trial run. (Note: a
+MATLAB/G4 executor historically quantized duration to 0.1 s ticks — that's an executor
+convention, not a YAML rule; confirm the target if a protocol will also run under MATLAB.)
 
 ## FicTrac closed loop (Mode 3)
 
