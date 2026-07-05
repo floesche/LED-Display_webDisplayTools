@@ -66,6 +66,10 @@
   body.editmode .chip.lock{display:none}
   .doc-summary{color:var(--dim);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   @media (max-width:1399px){.doc-summary{display:none}}
+  /* v6: the summary moved onto the Run sequence card — always visible there */
+  .seqlist .doc-summary,
+  .seqlist h3 .doc-summary{display:inline;margin-left:10px;font-weight:400;text-transform:none;letter-spacing:0}
+  @media (max-width:1399px){.seqlist .doc-summary{display:inline}}
   .run-inline{font-size:11px;color:var(--accent);display:none;align-items:center;gap:6px}
   body.running .run-inline{display:flex}
   .run-inline.rec{color:var(--rec);font-weight:700}
@@ -102,7 +106,15 @@
   body.ghauth .gh-who{display:inline}
   body.ghauth .gh-signout{display:inline}
   .gh-check{display:flex;align-items:center;gap:8px;cursor:pointer;color:var(--text)}
-  .gh-check input{accent-color:var(--accent)}
+  /* Custom-drawn checkbox: the native disabled checkbox ignores accent-color and
+     goes nearly invisible when the kiosk lock disables it — draw it ourselves so
+     a checked "Commit directly" stays readable green even while locked. */
+  .gh-check input{appearance:none;-webkit-appearance:none;width:15px;height:15px;margin:0;flex:0 0 auto;
+    border:1.5px solid var(--border);border-radius:4px;background:var(--surface);cursor:pointer;position:relative}
+  .gh-check input:checked{background:var(--accent);border-color:var(--accent)}
+  .gh-check input:checked::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;
+    justify-content:center;font-size:11px;font-weight:800;line-height:1;color:#0f1419}
+  .gh-check input:disabled{cursor:not-allowed}
   body:not(.ghauth) .gh-check{opacity:.45;cursor:not-allowed}
   .gh-dest{font-size:10.5px;color:var(--dim);margin-top:5px;padding-left:2px}
   .gh-row label{flex:0 0 62px;color:var(--dim)}
@@ -1758,6 +1770,101 @@
         .ps-foot .ps-status { color: var(--text-dim); margin-left: auto; }
         .ps-empty { color: var(--text-dim); font-style: italic; padding: 1rem; text-align: center; }
         .ps-blocked { padding: 2.5rem 1rem; text-align: center; color: #e3a008; line-height: 1.6; }
+  /* ===== v6 SLICE — Console rail + compact panels =====
+     Reuses main's tokens + real primitives (.pill/.cmenu/.cgroup/.crow/.seg2/
+     .thumb/.sdtable/.clog). Adds only rail/stage/panel/bench-strip/log
+     containers. Scoped to .console-view so Run/Edit are untouched. */
+  .console-view{padding:8px 12px;overflow:hidden}
+  .console-view #consoleFields{flex:1 1 auto;min-height:0;overflow:hidden}
+  .console-view .bench-strip{flex:0 0 auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .console-view .bench-strip .cmenubar{margin-bottom:0}
+  .console-view .v6-cap{font-size:11px}
+  .console-view .busy-chip{display:none;font-size:11px;font-weight:600;color:var(--warn);border:1px solid rgba(227,160,8,.55);background:rgba(227,160,8,.08);border-radius:20px;padding:2px 10px}
+  .console-view .busy-chip.show{display:inline-block}
+  .console-view .btn-benchstop{background:transparent;border:2px solid var(--danger);color:var(--danger);font-weight:700;border-radius:7px;padding:4px 14px;font-size:12px;font-family:var(--head);cursor:pointer}
+  .console-view .btn-benchstop:hover{background:rgba(255,82,82,.1)}
+  /* Panels take natural height; the log fills the space below them (resizable).
+     flex:0 0 auto — log CONTENT must never squeeze the panels (only the drag
+     divider changes the split); the max-height cap keeps the strip + a usable
+     log visible even with every panel open (rail/stage scroll internally). */
+  .console-main{flex:0 0 auto;display:flex;min-height:96px;max-height:calc(100% - 160px)}
+  .console-view .rail{flex:0 0 152px;display:flex;flex-direction:column;gap:6px;border-right:1px solid var(--border);padding:8px;overflow:auto}
+  .console-view .rail-h{font-size:9.5px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim);padding:0 3px 2px}
+  .console-view .rail-btn{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);font-size:11.5px;text-align:left;font-family:var(--mono);cursor:pointer}
+  .console-view .rail-btn:hover{border-color:var(--accent)}
+  .console-view .rail-btn.sel{border-color:var(--accent);background:rgba(0,230,118,.08)}
+  .console-view .rail-btn .sub{font-size:9px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:126px}
+  .console-view .stage{flex:1 1 auto;overflow:auto;padding:2px 2px 2px 10px;display:flex;flex-direction:column;gap:6px}
+  .console-view .panel{border:1px solid var(--border);border-radius:10px;background:var(--surface);display:none}
+  .console-view .panel.open{display:block}
+  .console-view .panel-h{display:flex;align-items:center;gap:8px;padding:5px 11px;border-bottom:1px solid var(--border)}
+  .console-view .panel-title{font-family:var(--head);font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text);cursor:help;border-bottom:1px dotted var(--dim);padding-bottom:1px}
+  .console-view .panel-x{background:transparent;border:0;color:var(--dim);font-size:13px;padding:0 4px;cursor:pointer;line-height:1}
+  .console-view .panel-x:hover{color:var(--text)}
+  .console-view .panel-b{padding:6px 11px}
+  .console-view .panel-b .crow{margin-bottom:7px}
+  .console-view .panel-b .crow:last-child{margin-bottom:0}
+  .console-view .rt{margin-left:auto;display:flex;gap:6px;align-items:center}
+  .console-view .pchip{display:inline-flex;align-items:center;gap:6px;padding:2px 8px 2px 3px;border:1px dashed var(--border);border-radius:6px;background:var(--surface2);font-size:11.5px;white-space:nowrap}
+  .console-view .pchip .thumb{width:20px;height:20px}
+  .console-view .tf.dimf{opacity:.32}
+  .console-view .crow label.pat-hidden{display:none}
+  /* Patterns: the listing IS the picker (left); big preview + info (right) */
+  .console-view .pat2col{display:flex;gap:14px;align-items:flex-start}
+  .console-view .pat-left{flex:1 1 auto;min-width:0}
+  .console-view .pat-left #cSdCount{display:none}
+  .console-view .pat-right{flex:0 0 216px;display:flex;flex-direction:column;gap:6px;align-items:center;text-align:center;border-left:1px solid var(--border);padding-left:14px}
+  .console-view .pat-preview{width:190px;height:140px;background:var(--surface2)}
+  .console-view .pat-infoline{font-size:11px;color:var(--dim)}
+  .console-view .pat-hidden-sel{display:none}
+  .console-view .pat-left .sdtable{max-height:150px}
+  .console-view #cSdBody tr{cursor:pointer}
+  .console-view #cSdBody tr:hover td{background:var(--surface)}
+  .console-view #cSdBody tr.sel td{background:rgba(0,230,118,.12);color:var(--text)}
+  .console-view #cSdBody tr.sel td:first-child{color:var(--accent);font-weight:700}
+  .console-view #cSdBody tr.sel td:first-child::after{content:' ▸';color:var(--accent)}
+  .console-view .panel-b .sdtable{max-height:150px}
+  /* draggable divider + always-visible log that fills the space below the panels */
+  .console-view .log-resizer{flex:0 0 9px;cursor:ns-resize;position:relative;background:var(--surface)}
+  .console-view .log-resizer::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:40px;height:3px;border-radius:2px;background:var(--border)}
+  .console-view .log-resizer:hover::after{background:var(--accent)}
+  .console-view .status-strip{flex:0 0 auto;display:flex;align-items:center;gap:9px;padding:4px 10px;border-top:1px solid var(--border);background:var(--surface)}
+  /* flex-basis 0 (NOT auto): the log's content size must never influence the
+     layout — it scrolls inside whatever space is left below the panels. */
+  .console-view .log-drawer{flex:1 1 0;display:flex;flex-direction:column;min-height:90px;padding:6px 2px 2px}
+  .console-view .log-drawer .clog{flex:1 1 0;height:auto;min-height:0}
+  body.clogHidden .console-view .log-drawer,body.clogHidden .console-view .log-resizer{display:none}
+  /* top-bar link to the Pattern Designer (an <a> dressed as a ribbon button) */
+  a.pd-link{text-decoration:none;display:inline-flex;align-items:center;white-space:nowrap}
+  /* ===== v6 Settings diet: read-only rows, rig chips, Advanced… details ===== */
+  .edit-view .set-ro{font-size:0.82rem;color:var(--text);padding:3px 0}
+  .edit-view .set-ro.set-ok{color:var(--accent)}
+  .edit-view .set-ro.set-warn{color:#e3a008}
+  .edit-view .set-ro.set-dim{color:var(--text-dim);font-style:italic}
+  .edit-view .set-chip{display:inline-block;border:1px solid var(--border);border-radius:20px;
+    padding:1px 9px;margin:0 4px 4px 0;font-size:0.74rem;color:var(--text);background:var(--surface)}
+  .edit-view .set-hint{font-size:0.7rem;color:var(--text-dim);margin-top:2px}
+  .edit-view details.settings-advanced{margin-top:0.6rem;border-top:1px solid var(--border);padding-top:0.45rem}
+  .edit-view details.settings-advanced>summary{cursor:pointer;font-size:0.8rem;color:var(--text-dim);
+    user-select:none;list-style-position:inside}
+  .edit-view details.settings-advanced>summary:hover{color:var(--text)}
+  .edit-view .settings-advanced-body{margin-top:0.5rem}
+  .edit-view .settings-plugins{margin-top:0.6rem}
+  /* ===== ? Help mode — plain-language hover explanations + first-steps cards ===== */
+  .help-btn{background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:50%;
+    width:26px;height:26px;flex:0 0 auto;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--head);line-height:1;padding:0}
+  .help-btn:hover{border-color:#2b74a8;color:var(--text)}
+  body.helpmode .help-btn{background:#2b74a8;border-color:#2b74a8;color:#eaf5ff}
+  #helpTip{position:fixed;z-index:3000;max-width:340px;background:#0c2233;border:1px solid #2b74a8;color:#dbeeff;
+    border-radius:8px;padding:8px 11px;font-size:12px;line-height:1.5;pointer-events:none;display:none;
+    box-shadow:0 6px 18px rgba(0,0,0,.5);font-family:var(--mono)}
+  .help-card{display:none;flex:0 0 auto;border:1px solid #2b74a8;background:rgba(43,116,168,.09);border-radius:10px;
+    padding:9px 34px 9px 13px;margin:0 0 8px;font-size:12.5px;line-height:1.6;color:var(--text);position:relative}
+  body.helpmode .help-card{display:block}
+  body.helpmode .help-card.dismissed{display:none}
+  .help-card b{color:#9fd4ff}
+  .help-card .help-x{position:absolute;top:6px;right:8px;background:transparent;border:0;color:var(--dim);cursor:pointer;font-size:13px;line-height:1}
+  .help-card .help-x:hover{color:var(--text)}
 </style>
 </head>
 <body>
@@ -1772,7 +1879,9 @@
   </label>
   <span class="chip rig-mismatch" id="rigMismatch" style="display:none" title="Session (bench) rig differs from the loaded protocol's rig: field — the bench geometry wins for Console/stream operations; the protocol still runs with its own rig. Unlock the rig selector to reconcile, or load a matching protocol.">⚠ bench ≠ protocol</span>
   <span class="chip rig-mismatch" id="benchMacChip" style="display:none" title="The connected controller's MAC (0xC2) does not match the course roster's entry for this bench id — the wrong bench id would namespace saves/run-logs under another bench. See instructor.">⚠ bench ≠ roster</span>
-  <span class="arena" id="deviceLine" title="Arena geometry of the SESSION rig (left) — what stream/ISP/paste operations target. Firmware appears only when connected (from GET_CONTROLLER_INFO 0xC2)."><b>—</b></span>
+  <!-- v6 top-bar diet: device line hidden (arena+fw now on the status-dot
+       hover); still written by updateDeviceLine so nothing depends on absence. -->
+  <span class="arena" id="deviceLine" hidden><b>—</b></span>
 
   <span class="sep-v"></span>
 
@@ -1781,8 +1890,11 @@
   <span class="chip edited">● edited</span>
   <span class="chip untitled-chip">unsaved</span>
   <span class="chip lock" title="Read-only in Run mode — switch to ✎ Edit to change it">🔒</span>
-  <span id="docSummary" class="doc-summary"></span>
-  <span class="plug-hover" id="plugHover" title="Plugins this protocol declares. backlight / camera / temperature are SKIPPED by the web runner; a fictrac plugin is EXECUTED (closed-loop Mode 3).">⚡ Plugins · 0</span>
+  <!-- v6 top-bar diet: the ⚡ Plugins chip is hidden (declared plugins live in
+       Settings → rig provides + Advanced; run-time skipped/executed lines show
+       in the run log). Still written — see the sync code. The doc summary span
+       moved onto the Run view's sequence card. -->
+  <span class="plug-hover" id="plugHover" hidden>⚡ Plugins · 0</span>
 
   <span class="spacer"></span>
   <span class="run-inline" id="runInline"><span id="runInlineTxt">▸ running…</span><span class="bar"><i id="runInlineBar"></i></span></span>
@@ -1792,11 +1904,16 @@
     <button class="ribbon-btn" id="fileMenuBtn">File ▾</button>
     <div class="menu">
       <button id="fmNew" class="edit-only">New protocol</button>
-      <button id="fmOpen">Open… (Import YAML)</button>
-      <button id="fmOpenLibrary" title="Pick a committed protocol from this site's own registry (protocols/index.json)">Open from library…</button>
-      <button id="fmOpenCourse" title="List this bench's saves (protocols/&lt;bench-id&gt;/) and promoted shared protocols (protocols/shared/) in the course-data repo">Open from course repo…</button>
+      <button id="fmOpen" title="Open a protocol .yaml from this computer">Open local file…</button>
+      <button id="fmOpenLibrary" title="Pick a committed protocol from this site's own registry (protocols/index.json)">Open from Library…</button>
+      <button id="fmOpenCourse" title="List this bench's saves (protocols/&lt;bench-id&gt;/) and promoted shared protocols (protocols/shared/) in the course-data repo">Open from Repo…</button>
+      <button id="fmOpenDemo" class="edit-only" title="Load a bundled demo protocol to explore — same list the designer's Load demo ▾ used to hold">Open demo…</button>
       <button id="fmSave" class="edit-only">Save → local file</button>
+      <button id="fmSaveCopy" class="edit-only" title="Download a regenerated copy (*_roundtrip.yaml) for diffing/MATLAB checks — does NOT mark the protocol saved">Save copy (download)…</button>
       <button id="fmPromote" class="edit-only" title="Copy this bench's saved protocol (+ its _patterns/) to protocols/shared/ in the course repo — blocked if a DIFFERENT file already exists under the same name">Promote to shared (course)…</button>
+      <div class="sep"></div>
+      <button id="fmCopyConditions" class="edit-only" title="Copy conditions from a second protocol YAML into this one — brings their anchors and plugins along">Copy conditions from another protocol…</button>
+      <button id="fmReset" class="edit-only" title="Clear everything to a blank minimum-valid v3 skeleton (reversible with Undo)">Reset protocol…</button>
       <div class="sep"></div>
       <div class="gh-block gh-locked" id="ghBlock">
         <div class="gh-row">
@@ -1816,6 +1933,9 @@
     </div>
   </div>
 
+  <a class="ribbon-btn pd-link" id="pdLink" href="pattern_editor.html" target="_blank" rel="opener"
+     title="Open the Pattern Designer in a new tab — hands over this session's arena + repo; your GitHub sign-in carries over">Patterns ↗</a>
+
   <div class="seg" id="modeSeg">
     <button class="on" data-mode="run">▶ Run</button>
     <button data-mode="edit">✎ Edit</button>
@@ -1824,11 +1944,14 @@
 
   <button class="connect" id="connectBtn" title="Pick the arena's serial port and open it (115200 baud)">Connect</button>
 
+  <button class="help-btn" id="helpBtn" title="Help — turn on, then hover any control for a plain-language explanation">?</button>
+
   <div class="gear" id="gearMenu">
     <button class="gear-btn" id="gearBtn" title="Tools · Diagnostics">⚙</button>
     <div class="menu">
       <div class="sep"></div>
       <a href="index.html">↗ All tools</a>
+      <a href="pattern_editor.html">↗ Pattern Designer</a>
       <a href="experiment_designer_v3.html">↗ v3 Experiment Designer</a>
       <a href="arena_console.html">↗ Arena Console</a>
     </div>
@@ -1895,7 +2018,7 @@
       </div>
 
       <div class="card seqlist">
-        <h3>Sequence · test any single condition ▶</h3>
+        <h3>Sequence · test any single condition ▶ <span id="docSummary" class="doc-summary"></span></h3>
         <div id="seqBody"><span class="dim">Open a protocol (📂 Open) to see its sequence.</span></div>
       </div>
 
@@ -1985,9 +2108,13 @@
         <div class="header-spacer"></div>
         <button id="undoBtn" class="header-btn" disabled title="Undo last edit (Ctrl+Z)">↶ Undo</button>
         <button id="redoBtn" class="header-btn" disabled title="Redo (Ctrl+Y)">↷ Redo</button>
-        <button id="resetBtn" class="header-btn" disabled title="Clear everything to a blank minimum-valid v3 skeleton (reversible with Undo)">⟲ Reset</button>
-        <button id="settingsToggle" class="header-btn" title="Show/hide experiment metadata, rig, and plugins">Settings ▾</button>
-        <select id="demoSelect" class="header-btn" title="Load a bundled demo YAML to explore">
+        <!-- v6 toolbar diet: everything below the fold is HIDDEN, not removed —
+             the wiring, §6 gating, and import-mode locks all key off these ids,
+             and the File ▾ menu items proxy-click them (guarded on .disabled).
+             Toolbar = tabs · ● edited · ↶ ↷ · Settings. Save = File ▾ / Ctrl+S. -->
+        <button id="resetBtn" class="header-btn" disabled hidden title="Clear everything to a blank minimum-valid v3 skeleton (reversible with Undo)">⟲ Reset</button>
+        <button id="settingsToggle" class="header-btn" title="Show/hide experiment settings — name, experimenter, rig, pattern set">Settings ▾</button>
+        <select id="demoSelect" class="header-btn" hidden title="Load a bundled demo YAML to explore">
             <option value="">Load demo ▾</option>
             <option value="tests/fixtures/v3_g6_2x10_smoke.yaml">g6_2x10_smoke — all 4 patterns + every arena command (run on G6)</option>
             <option value="tests/fixtures/v3_g6_io_bench.yaml">g6_io_bench — analog/digital out, no pattern/SD (run on G6)</option>
@@ -2004,14 +2131,14 @@
             <option value="tests/fixtures/v3_plugin_config.yaml">plugin_config — inline plugin config</option>
         </select>
         <input type="file" id="edFileInput" accept=".yaml,.yml" style="display: none;">
-        <button id="newBtn" class="header-btn" title="Start a new protocol from scratch (loads a minimum-valid v3 skeleton you can edit)">＋ New</button>
-        <button id="importBtn" class="header-btn primary" title="Load a v3 protocol YAML file">Import YAML</button>
+        <button id="newBtn" class="header-btn" hidden title="Start a new protocol from scratch (loads a minimum-valid v3 skeleton you can edit)">＋ New</button>
+        <button id="importBtn" class="header-btn primary" hidden title="Load a v3 protocol YAML file">Import YAML</button>
         <input type="file" id="importFromInput" accept=".yaml,.yml" style="display: none;">
-        <button id="importFromBtn" class="header-btn" disabled title="Copy conditions from a second v3 YAML into this one (brings their anchors + plugins along)">Import from YAML…</button>
-        <button id="patternSetBtn" class="header-btn" title="Build an SD-card pattern set (bundle) for this rig's arena — pick patterns, order them, export a ZIP to copy onto the SD card">Pattern Set…</button>
-        <button id="edSaveBtn" class="header-btn primary" disabled title="Save the protocol — writes a local .yaml (or opens a GitHub PR when signed in with the PR box checked), marks it saved, and unlocks recorded experiment runs. Same action as File ▾ → Save.">💾 Save</button>
-        <button id="exportBtn" class="header-btn" disabled title="Download a regenerated copy (*_roundtrip.yaml) for diffing/MATLAB checks — does NOT mark the protocol saved; use 💾 Save for that">Export YAML</button>
-        <a href="experiment_designer_v3_quickstart.html" target="_blank" class="header-btn" style="text-decoration: none; display: inline-flex; align-items: center;" title="Open the v3 Experiment Designer quick-start guide in a new tab">Quick Start</a>
+        <button id="importFromBtn" class="header-btn" disabled hidden title="Copy conditions from a second v3 YAML into this one (brings their anchors + plugins along)">Import from YAML…</button>
+        <button id="patternSetBtn" class="header-btn" hidden title="Build an SD-card pattern set (bundle) for this rig's arena — pick patterns, order them, export a ZIP to copy onto the SD card">Pattern Set…</button>
+        <button id="edSaveBtn" class="header-btn primary" disabled hidden title="Save the protocol — writes a local .yaml (or opens a GitHub PR when signed in with the PR box checked), marks it saved, and unlocks recorded experiment runs. Same action as File ▾ → Save.">💾 Save</button>
+        <button id="exportBtn" class="header-btn" disabled hidden title="Download a regenerated copy (*_roundtrip.yaml) for diffing/MATLAB checks — does NOT mark the protocol saved; use File ▾ → Save for that">Export YAML</button>
+        <!-- Quick Start link relocated to the ? Help mode first-steps card -->
     </div>
 
     <!-- Editing banner -->
@@ -2158,18 +2285,9 @@
   <!-- CONSOLE view — bench surface, shares the one connection -->
   <div class="console-view" id="consoleView">
     <fieldset id="consoleFields" style="border:0;padding:0;margin:0" disabled>
-    <div class="console-caption">
-      <span style="font-family:var(--head);text-transform:uppercase;letter-spacing:.6px;font-size:11px">⛭ Console — bench surface</span>
-      <span class="ic" title="The Console drives the arena directly over the live connection, independent of the loaded protocol. Connect (top bar) to enable it. Uncommon queries/settings live in the Controller ▾ / Debug ▾ menus.">i</span>
-      <span class="dim" id="consoleHint">connect to enable</span>
-      <span class="dim" style="font-size:11px" title="Bench geometry (stream frames, ISP progress map, paste validation, FicTrac) comes from the SESSION rig — the shared, locked selector in the top bar (#135). The Console no longer has its own arena picker.">arena ← session rig (top bar)</span>
-      <span class="ca-acts">
-        <button class="pill" id="cExpandAll">Expand all</button>
-        <button class="pill" id="cCollapseAll">Collapse all</button>
-      </span>
-    </div>
 
-    <!-- Restored Controller ▾ / Debug ▾ dropdown menus (uncommon controls) -->
+    <!-- v6 bench strip: menus + always-on essentials -->
+    <div class="bench-strip">
     <div class="cmenubar">
       <div class="cmenu" data-cmenu id="ctlMenu">
         <button class="cmenu-btn" title="Controller queries (run on demand)">Controller ▾</button>
@@ -2256,66 +2374,42 @@
             <button class="cmenu-item" data-cmd="setrate" style="width:auto" title="SET_REFRESH_RATE (0x16)">Set</button>
             <button class="cmenu-item" data-cmd="getrate" style="width:auto" title="GET_REFRESH_RATE (0x17)">Get</button>
           </div>
+          <div class="cmenu-sep">Send raw hex</div>
+          <div class="cmenu-row"><input id="cRawHex" type="text" placeholder="01 C2" title="Raw hex bytes to send verbatim (e.g. 01 C2)"><button class="cmenu-item" data-cmd="crawsend" style="width:auto" title="Send the raw hex bytes to the controller">Send</button></div>
           <div class="cmenu-sep">Danger</div>
           <button class="cmenu-item" data-cmd="sysreset" title="SYSTEM_RESET (0x01) — ack then reboot the controller firmware">Reset controller</button>
         </div>
       </div>
       <span class="spacer"></span>
     </div>
-
-    <!-- ESSENTIALS: display (always visible) -->
-    <div class="cgroup inline">
-      <div class="gh">display</div>
-      <div class="crow">
-        <button class="pill" data-cmd="callon" title="ALL_ON (0xFF)">All on</button>
-        <button class="pill" data-cmd="calloff" title="ALL_OFF (0x00)">All off</button>
-        <button class="pill" data-cmd="cstop" title="STOP_DISPLAY (0x30)">Stop</button>
-        <span class="dim" style="font-size:10.5px;margin-left:6px">ALL_ON 0xFF · ALL_OFF 0x00 · STOP 0x30</span>
-      </div>
+      <span class="dim" id="consoleHint">connect to enable</span>
+      <span class="dim v6-cap" title="Bench geometry (stream frames, ISP progress map, paste validation, FicTrac) comes from the SESSION rig — the shared, locked selector in the top bar (#135).">arena ← session rig</span>
+      <span class="busy-chip" id="cBusyChip"></span>
+      <span class="spacer"></span>
+      <button class="pill" data-cmd="callon" title="Turn every LED on (ALL_ON)">All on</button>
+      <button class="pill" data-cmd="calloff" title="Turn every LED off (ALL_OFF)">All off</button>
+      <button class="btn-benchstop" data-cmd="cstop" title="Stop the display (STOP_DISPLAY) — always available">■ STOP</button>
     </div>
 
-    <!-- pattern + trial params -->
-    <div class="cgroup">
-      <div class="gh">pattern + trial params <span class="op">· TRIAL_PARAMS 0x08 · GET_PATTERN_INFO 0x88 · by name → SD idx</span></div>
-      <div class="crow"><span class="lbl">pattern</span>
-        <select id="cPatName" style="min-width:190px" title="Pattern by name — from the SD listing when connected (else the built-in library); drives the SD index sent in trial params. Upload patterns via device memory → Upload ▾."></select>
-        <span class="thumb" id="cPatThumb" title="Pattern preview (hover a multi-frame pattern to animate)"></span>
-        <span class="dim" id="cPatSetStatus">loading built-in library…</span>
+    <div class="console-main">
+      <div class="rail" id="cRail">
+        <div class="rail-h">tools</div>
+        <div class="rail-btn sel" data-panel="patterns" role="button" tabindex="0" title="Patterns on the card — the listing is the picker; add, download, delete">Patterns<span class="sub" id="cSdSum">SD —</span></div>
+        <div class="rail-btn sel" data-panel="trial" role="button" tabindex="0" title="Run the selected pattern on the arena (modes 2/3/4)">Arena Trial<span class="sub">modes 2/3/4</span></div>
+        <div class="rail-btn sel" data-panel="step" role="button" tabindex="0" title="Show single frames of the selected pattern (mode 3)">Step frames<span class="sub">mode 3</span></div>
+        <div class="rail-btn sel" data-panel="test" role="button" tabindex="0" title="Test figures + one-off frames">Test display<span class="sub">GS16</span></div>
+        <div class="rail-btn" data-panel="io" role="button" tabindex="0" title="Analog / digital BNCs on the controller">I/O<span class="sub" id="cIoSum">AO – · DIO –</span></div>
+        <div class="rail-btn" data-panel="fw" role="button" tabindex="0" title="Program the panels’ firmware">Panel firmware<span class="sub" id="cFwSum">flash · verify</span></div>
+        <div class="rail-btn sel" data-panel="fictrac" role="button" tabindex="0" title="Closed loop from the FicTrac bridge">FicTrac<span class="sub" id="cFtSum">ws · idle</span></div>
       </div>
-      <div class="crow"><span class="lbl">info</span>
-        <span class="dim" id="cPatInfo" title="GET_PATTERN_INFO (0x88) — refreshes automatically when the pattern selection or pat idx changes">—</span>
-        <button class="pill" data-cmd="cpatinfo" title="Re-query GET_PATTERN_INFO (0x88) for the pat idx below (logged)">↻</button>
-      </div>
-      <div class="crow"><span class="lbl">params</span>
-        <label>mode <select id="cMode"><option value="2">2 open-loop</option><option value="3">3 show-frame</option><option value="4">4 closed-loop</option></select></label>
-        <label>pat idx <input id="cPat" type="number" min="1" value="1" style="width:56px" title="1-based SD index"></label>
-        <label title="Frame-advance rate in Hz: −32768–32767. Negative plays Mode 2 in REVERSE (G4-style count-down; needs fw ≥ 2026-06-25 / ee74c33 — older fw treats it as a huge forward rate). Sign ignored in Modes 3/4.">rate <input id="cRate" type="number" min="-32768" max="32767" value="30" style="width:54px"></label>
-        <label>gain <input id="cGain" type="number" value="0" style="width:48px"></label>
-        <label>init <input id="cInit" type="number" value="0" style="width:48px" title="mode-3 start frame (SET_FRAME_POSITION 0x70)"></label>
-        <label>dur (s) <input id="cDur" type="number" min="0" step="0.1" value="0" style="width:48px" title="host-timed auto-stop: sends STOP_DISPLAY after this many seconds; 0 = run until Stop"></label>
-        <button class="pill" data-cmd="ctrial" title="Send TRIAL_PARAMS (0x08); dur > 0 arms a host-timed STOP">Send trial params</button>
-      </div>
-    </div>
+      <div class="stage" id="cStage">
 
-    <!-- FOOT-GUN tier (collapsible, 2-col) -->
-    <div class="console-tier">
-      <details class="cgroup">
-        <summary class="gh">frame stepper <span class="op">· mode 3 · 0x70</span><span class="sum" id="cStepSum">frame – / –</span></summary>
-        <div class="cbody">
-          <div class="crow"><span class="lbl">frame</span>
-            <button class="pill" data-cmd="cframeload" title="Load the 'pat idx' pattern in Mode 3 (TRIAL_PARAMS mode 3, rate 0) so frame jumps + FicTrac closed-loop apply">Load (mode 3)</button>
-            <button class="pill" data-cmd="cframeprev" title="Previous frame — wraps to the last frame below 0">◀</button>
-            <input id="cFrame" type="number" value="0" style="width:56px" title="0-based frame index (SET_FRAME_POSITION 0x70)">
-            <button class="pill" data-cmd="cframego" title="Jump to this frame">Go</button>
-            <button class="pill" data-cmd="cframenext" title="Next frame — wraps to 0 past the last frame">▶</button>
-            <span class="dim" id="cStepState">not loaded · 0x70</span>
-          </div>
-        </div>
-      </details>
+        <section class="panel open" data-panel="patterns">
+          <div class="panel-h"><span class="panel-title" title="GET_FILE_COUNT 0x80 · names 0x82 · read 0x84 · delete 0x86 · write 0x8D · rename 0x83 · ZIP 0x8A · purge 0x8F">Patterns</span><span class="spacer"></span><span class="panel-x" data-close="patterns" role="button" title="Collapse to the rail">✕</span></div>
+          <div class="panel-b">
+            <div class="pat2col">
+              <div class="pat-left">
 
-      <details class="cgroup wide">
-        <summary class="gh">device memory <span class="op">· SD 0x80/0x82/0x84/0x86/0x8D · PS-RAM</span><span class="sum" id="cSdSum">SD —</span></summary>
-        <div class="cbody">
           <div class="crow">
             <span class="seg2"><button class="on" data-cmd="cmemsd">SD card</button><button data-cmd="cmempsram">PS-RAM</button></span>
             <span class="dim" id="cSdCount">—</span><span class="spacer"></span>
@@ -2324,21 +2418,22 @@
           <div class="memb" data-mem="sd">
             <div class="crow" style="margin-bottom:6px">
               <button class="pill" data-cmd="csdlist" title="GET_FILE_COUNT 0x80 + names">Refresh</button>
+              <button class="pill" data-cmd="cpatinfo" title="Re-query pattern info (GET_PATTERN_INFO 0x88) for the selected pattern">↻ info</button>
               <div class="cmenu" data-cmenu id="sdUploadMenu">
-                <button class="cmenu-btn" title="Upload pattern(s) to the SD card — a single .pat or a whole pattern set, from a local file/folder, this site's library, or the course repo (SET_PATTERN_FILE 0x8D + rename 0x83)">Upload ▾</button>
+                <button class="cmenu-btn" title="Upload pattern(s) to the SD card — a single .pat or a whole pattern set, from a local file/folder, this site's library, or the course repo (SET_PATTERN_FILE 0x8D + rename 0x83)">Add ▾</button>
                 <div class="cmenu-pop">
                   <div class="cmenu-sep">Single pattern (.pat)</div>
                   <button class="cmenu-item" data-cmd="csdup_local_file" title="Pick one .pat file from this computer and upload it">From local file…</button>
                   <button class="cmenu-item" data-cmd="csdup_lib_file" title="Pick a library protocol, then one pattern from its colocated set (needs GitHub sign-in)">From library…</button>
-                  <button class="cmenu-item" data-cmd="csdup_repo_file" title="Pick a course-repo protocol, then one pattern from its colocated set (needs GitHub sign-in + course repo)">From course repo…</button>
+                  <button class="cmenu-item" data-cmd="csdup_repo_file" title="Pick one pattern from the course repo — the shared pattern library (patterns/, where the Pattern Designer saves) or any protocol's colocated set (needs GitHub sign-in + course repo)">From course repo…</button>
                   <div class="cmenu-sep">Pattern set (folder)</div>
                   <button class="cmenu-item" data-cmd="csdup_local_folder" title="Pick a folder — every .pat inside is uploaded">From local folder…</button>
                   <button class="cmenu-item" data-cmd="csdup_lib_folder" title="Pick a library protocol — its whole colocated _patterns/ set uploads (needs GitHub sign-in)">From library…</button>
-                  <button class="cmenu-item" data-cmd="csdup_repo_folder" title="Pick a course-repo protocol — its whole colocated _patterns/ set uploads (needs GitHub sign-in + course repo)">From course repo…</button>
+                  <button class="cmenu-item" data-cmd="csdup_repo_folder" title="Upload a whole set from the course repo — a protocol's colocated _patterns/ or everything in the shared pattern library (needs GitHub sign-in + course repo)">From course repo…</button>
                 </div>
               </div>
-              <button class="pill" data-cmd="csdarchive" title="Download the whole SD as a ZIP (GET_SD_ARCHIVE 0x8A)">↙ ZIP</button>
-              <button class="pill danger" data-cmd="csdpurge" title="Delete ALL patterns (DELETE_ALL_PATTERNS 0x8F)">Purge all</button>
+              <button class="pill" data-cmd="csdarchive" title="Download the whole SD as a ZIP (GET_SD_ARCHIVE 0x8A)">Download ZIP</button>
+              <button class="pill danger" data-cmd="csdpurge" title="Delete ALL patterns (DELETE_ALL_PATTERNS 0x8F)">Purge…</button>
               <input id="cSdFile" type="file" accept=".pat" style="display:none">
               <input id="cSdFolder2" type="file" webkitdirectory directory style="display:none">
             </div>
@@ -2347,12 +2442,52 @@
           <div class="memb" data-mem="psram" hidden>
             <div class="crow" style="margin-bottom:0"><button class="pill" data-cmd="cpsram" title="PS-RAM staging status (placeholder — controller report pending)">Read PS-RAM</button><span class="dim" id="cPsramInfo">— reported by controller (placeholder)</span></div>
           </div>
-        </div>
-      </details>
+                <span id="cPatSetStatus" style="display:none"></span>
+              </div>
+              <div class="pat-right">
+                <span class="thumb pat-preview" id="cPatThumb" title="Pattern preview (hover a multi-frame pattern to animate)"></span>
+                <div class="pat-infoline"><span id="cPatInfo" title="GET_PATTERN_INFO (0x88) — frames · grayscale · dimensions of the selected pattern">—</span></div>
+              </div>
+            </div>
+            <select id="cPatName" class="pat-hidden-sel" title="Pattern picker — driven by the listing rows on the left"></select>
+          </div>
+        </section>
 
-      <details class="cgroup wide">
-        <summary class="gh">stream frame <span class="op">· STREAM_FRAME 0x32</span><span class="sum">GS16 · full-field</span></summary>
-        <div class="cbody">
+        <section class="panel open" data-panel="trial">
+          <div class="panel-h"><span class="panel-title" title="TRIAL_PARAMS 0x08 (mode 2/3/4) · STOP_DISPLAY 0x30 · start frame SET_FRAME_POSITION 0x70">Arena Trial</span><span class="spacer"></span><span class="panel-x" data-close="trial" role="button" title="Collapse to the rail">✕</span></div>
+          <div class="panel-b">
+            <div class="crow">
+              <span class="pchip" title="The pattern this trial runs — change it in Patterns"><span class="thumb"></span><b id="cTrialPatName">—</b></span>
+              <label>mode <select id="cMode"><option value="2">2 · play</option><option value="3">3 · show frame</option><option value="4">4 · closed loop</option></select></label>
+              <label class="tf" data-modes="2" title="Frames per second — negative plays in reverse (mode 2)">rate (Hz) <input id="cRate" type="number" min="-32768" max="32767" value="30" style="width:56px"></label>
+              <label class="tf" data-modes="4" title="Loop gain (mode 4)">gain <input id="cGain" type="number" value="0" style="width:50px"></label>
+              <label class="tf" data-modes="34" title="Start frame (modes 3/4) — SET_FRAME_POSITION 0x70">start <input id="cInit" type="number" value="0" style="width:50px"></label>
+              <label title="host-timed auto-stop after N s; 0 = run until Stop">auto-stop (s) <input id="cDur" type="number" min="0" step="0.1" value="0" style="width:52px"></label>
+              <label class="pat-hidden">pat idx <input id="cPat" type="number" min="1" value="1" style="width:56px" title="1-based SD index (set from the Patterns picker)"></label>
+              <span class="rt"><button class="pill go" data-cmd="ctrial" title="Send TRIAL_PARAMS (0x08); dur &gt; 0 arms a host-timed STOP">▶ Start</button><button class="pill" data-cmd="cstop" title="Stop the display (STOP_DISPLAY 0x30)">■ Stop</button></span>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel open" data-panel="step">
+          <div class="panel-h"><span class="panel-title" title="TRIAL_PARAMS 0x08 (mode 3, rate 0) · SET_FRAME_POSITION 0x70">Step frames</span><span class="spacer"></span><span class="panel-x" data-close="step" role="button" title="Collapse to the rail">✕</span></div>
+          <div class="panel-b">
+
+          <div class="crow"><span class="lbl">frame</span>
+            <button class="pill" data-cmd="cframeload" title="Load the 'pat idx' pattern in Mode 3 (TRIAL_PARAMS mode 3, rate 0) so frame jumps + FicTrac closed-loop apply">Load pattern</button>
+            <button class="pill" data-cmd="cframeprev" title="Previous frame — wraps to the last frame below 0">◀</button>
+            <input id="cFrame" type="number" value="0" style="width:56px" title="0-based frame index (SET_FRAME_POSITION 0x70)">
+            <button class="pill" data-cmd="cframego" title="Jump to this frame">Go</button>
+            <button class="pill" data-cmd="cframenext" title="Next frame — wraps to 0 past the last frame">▶</button>
+            <span class="dim" id="cStepState">not loaded · 0x70</span>
+          </div>
+          </div>
+        </section>
+
+        <section class="panel open" data-panel="test">
+          <div class="panel-h"><span class="panel-title" title="STREAM_FRAME 0x32 (host-streamed frames)">Test display</span><span class="spacer"></span><span class="panel-x" data-close="test" role="button" title="Collapse to the rail">✕</span></div>
+          <div class="panel-b">
+
           <div class="crow"><span class="lbl">depth</span>
             <span class="seg2"><button id="cGs16" class="on" data-cmd="cgs16">GS16</button><button id="cGs2" data-cmd="cgs2">GS2</button></span>
             <label>level <input id="cLevel" type="range" min="0" max="15" value="15" style="width:90px" title="GS16 brightness level (0–15) for the full-field figure"> <span class="dim" id="cLevelVal">15/15</span></label>
@@ -2369,12 +2504,13 @@
             <input id="cFileInput" type="file" accept=".bin,.pat" style="display:none">
             <span class="thumb" id="cStreamThumb" title="Streamed-frame preview"></span>
           </div>
-        </div>
-      </details>
+          </div>
+        </section>
 
-      <details class="cgroup">
-        <summary class="gh">hardware I/O <span class="op">· 0x1B/0x1C · 0xA0 · 0xA4 · 0xAA (G6)</span><span class="sum" id="cIoSum">AO – · DIO –</span></summary>
-        <div class="cbody">
+        <section class="panel" data-panel="io">
+          <div class="panel-h"><span class="panel-title" title="analog out 0xA0/0xA1 · analog in 0xA4 · digital out 0xAA/0xAB · panel mode 0x1B/0x1C (in Controller ▾)">I/O</span><span class="spacer"></span><span class="panel-x" data-close="io" role="button" title="Collapse to the rail">✕</span></div>
+          <div class="panel-b">
+
           <div class="crow"><span class="lbl" title="The BNC silkscreened 'Analog Out (0-5V)' on the controller board (J27)">analog out</span><input id="cAoMv" type="number" value="0" style="width:64px" title="Analog Out level in millivolts (board BNC 'Analog Out (0-5V)')"><span class="dim">mV (0–5000)</span>
             <button class="pill" data-cmd="caoset" title="SET_AO_VOLTAGE 0xA0">Set</button>
             <button class="pill" data-cmd="caoget" title="GET_AO_VOLTAGE 0xA1">Get</button>
@@ -2388,12 +2524,13 @@
             <span class="seg2"><button id="cDoLow" class="on" data-cmd="cdolow">LOW</button><button id="cDoHigh" data-cmd="cdohigh">HIGH</button></span>
             <button class="pill" data-cmd="cdoset" title="SET_DIGITAL_OUT 0xAA">Set</button>
             <button class="pill" data-cmd="cdoget" title="GET_DIGITAL_OUT 0xAB">Get</button></div>
-        </div>
-      </details>
+          </div>
+        </section>
 
-      <details class="cgroup wide">
-        <summary class="gh">panel firmware <span class="op">· 0xE0 upload · 0xC8 flash · 0xC9 verify · 0xE3 info</span><span class="sum" id="cFwSum">flash · verify · batch</span></summary>
-        <div class="cbody">
+        <section class="panel" data-panel="fw">
+          <div class="panel-h"><span class="panel-title" title="upload 0xE0 · flash 0xC8 · verify 0xC9 · info 0xE3">Panel firmware</span><span class="spacer"></span><span class="panel-x" data-close="fw" role="button" title="Collapse to the rail">✕</span></div>
+          <div class="panel-b">
+
           <div class="crow"><span class="lbl">.bin</span>
             <button class="pill" data-cmd="cfwpick" title="Choose a panel firmware image — official ISP builds (this site + the published catalog, refreshed on open) or a local .bin — and upload it to the controller SD (/firmware/panel.bin, 0xE0)">Choose…</button>
             <span class="dim" id="cFwName">no file</span>
@@ -2418,12 +2555,13 @@
               <tbody id="cIspReport"></tbody>
             </table>
           </div>
-        </div>
-      </details>
+          </div>
+        </section>
 
-      <details class="cgroup" id="cFtGroup">
-        <summary class="gh">fictrac bridge <span class="op">· closed-loop Mode 3 (#131)</span><span class="sum" id="cFtSum">ws · idle</span></summary>
-        <div class="cbody">
+        <section class="panel open" data-panel="fictrac" id="cFtGroup">
+          <div class="panel-h"><span class="panel-title" title="SET_FRAME_POSITION 0x70 driven from FicTrac heading (via the local bridge)">FicTrac</span><span class="spacer"></span><span class="panel-x" data-close="fictrac" role="button" title="Collapse to the rail">✕</span></div>
+          <div class="panel-b">
+
           <div class="crow"><span class="lbl">bridge</span>
             <input id="cFtUrl" type="text" value="ws://localhost:8765" style="min-width:170px" title="WebSocket URL of the local FicTrac bridge (fictrac-bridge/bridge.py)">
             <button class="pill" data-cmd="cftconn" id="cFtConnBtn">Connect</button>
@@ -2435,20 +2573,21 @@
             <label>gain <input id="cFtGain" type="number" step="0.1" value="1.8" style="width:64px" title="heading degrees per frame index (1.8 = 360°/200)"></label>
             <span id="cFtPresets" class="seg2"></span>
             <label title="Log FicTrac frames + arena commands to a JSONL file"><input type="checkbox" id="cFtLog"> log</label></div>
-        </div>
-      </details>
-
+          </div>
+        </section>
+      </div>
     </div>
 
-    <!-- raw + log — always open (exempt from Expand/Collapse all) and grows to
-         fill whatever page height the groups above leave free. -->
-    <div class="cgroup" id="cLogGroup">
-      <div class="gh">raw + log <span class="op">· hex bytes → controller · every console send/reply lands here</span></div>
-      <div class="crow"><span class="lbl">raw</span><input id="cRawHex" type="text" placeholder="hex bytes, e.g. 01 C2" style="min-width:200px" title="Raw hex bytes to send verbatim (e.g. 01 C2)">
-        <button class="pill" data-cmd="crawsend" title="Send the raw hex bytes to the controller">Send</button>
-        <span class="spacer"></span>
-        <button class="pill" data-cmd="crawclear" title="Clear the console log">Clear</button>
-        <button class="pill" data-cmd="crawcopy" title="Copy the console log to the clipboard">Copy</button></div>
+    <div class="log-resizer" id="cLogResizer" title="Drag to resize the log (snaps)"></div>
+    <!-- v6 always-visible log + status header (raw-hex moved to Debug ▾) -->
+    <div class="status-strip">
+      <span class="dim" style="font-family:var(--head);text-transform:uppercase;letter-spacing:.6px;font-size:10px">bench log</span>
+      <span class="spacer"></span>
+      <button class="pill" data-cmd="crawcopy" style="padding:2px 9px" title="Copy the console log to the clipboard">Copy</button>
+      <button class="pill" data-cmd="crawclear" style="padding:2px 9px" title="Clear the console log">Clear</button>
+      <span class="pill" id="cLogChev" role="button" style="padding:2px 9px" title="Hide / show the log">▾ hide log</span>
+    </div>
+    <div class="log-drawer">
       <div class="clog" id="cLog"><span class="l-info">connect to drive the arena directly.</span></div>
     </div>
     </fieldset>
@@ -2493,7 +2632,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.5 | 2026-07-04 13:49 ET · course data pipeline: repo/bench-id settings (visible-but-locked in all views, GitHub sign-in/out) + direct commit (protocols/&lt;bench-id&gt;/ + runlogs/&lt;bench-id&gt;/), universal bridge run-logging (gated recorded runs, run_metadata line, auto-commit of the exported JSONL), course roster.yaml + genotypes.yaml + dynamic source links (load on sign-in, no arena needed), MAC cross-check chip, missing-pattern preflight (block) + name-mismatch warning, SD pattern names matched by logical name (NNN_ index prefix + .pat tolerated, so one card holds several protocols' sets), Console SD Upload ▾ (single pattern or whole set — from local file/folder, library, or course repo, picked by protocol; uploaded bytes feed picker previews, so "Load set…" is retired; per-file confirm log + settle pause + 1 retry for reliability), manual "⇪ Push log" to re-commit a run log the auto-commit skipped/failed (with a screen-greying upload modal that holds the exact error on failure; export timeout now names a stale bridge build), io_ext caps resolved before the rig-I/O apply (no first-connect race) + role options re-gate on GET_CONTROLLER_INFO + "Apply I/O roles" honors session overrides, File ▾ in all views (Open pickers everywhere; write/settings Edit-only), Console Debug ▾ + Controller ▾ advanced (panel mode / rig I/O) locked by default, Run view has a FicTrac bridge strip (connect + live counts mirrored from the Console, one shared connection; closed-loop indicator pulses green while active; gain/config stay in Console), a live elapsed/estimated-total run timer under the step counter, and hides the per-condition "▶ Test" buttons during a run, Run-view log is capped at 40vh (bottom-anchored, never squeezes the launch card + sequence; sequence takes the flexible middle) and Notes defaults roomy (~38vh, meta-panel scrolls), Open from library/course repo pickers, promote-to-shared with hash guard, ?repo= links · session rig (top bar, locked) + mismatch chip + ?rig= + rig io: power-on defaults incl. roles via SET_DIO_ROLE/SET_AO_MODE on io_ext firmware, capability-gated (#135; I/O names match the board silkscreen — Digital IO 1/2, ports 1-based) · negative frame_rate = Mode-2 reverse (int16, fw #4) · Run + unified run-log + metadata · full Console (bench) · full three-zone Edit (embedded v3 designer + YAML tab, §6 canMutate chokepoint) · URL state r/w (#107) · Edit 💾 Save</footer>
+<footer id="footer">Arena Studio v0.7 | 2026-07-05 10:17 ET · Edit toolbar + Settings diet · Console tool rail · ? Help mode · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -2827,14 +2966,19 @@
 
     function updateDeviceLine() {
         const el = $('deviceLine');
-        // The device line shows the SESSION rig's arena (#135) — the geometry
-        // that stream/ISP/paste actually target — plus firmware once connected.
+        // v6 top-bar diet: the device line is HIDDEN — the same info lives on
+        // the status dot's hover (kept written so nothing depends on absence).
         // The loaded protocol's own rig stays visible in the provenance panel.
         const rig = Studio.currentRig;
         const fw = Studio.firmware;
         let html = '<b>' + ((rig && rig.arenaConfig) || '—') + '</b>';
         if (fw) html += '<span class="fw"> · fw ' + fw + '</span>';
         el.innerHTML = html;
+        const dot = $('statusDot');
+        if (dot) {
+            dot.title = 'Connection status (green = connected). One ArenaSession broker owns the single Web Serial port.' +
+                '\nArena: ' + ((rig && rig.arenaConfig) || '—') + (fw ? ' · firmware ' + fw : '');
+        }
         // Mismatch chip: session rig ≠ loaded protocol's rig — surface, never
         // silently reconcile (#135). Both must be known for a mismatch to mean
         // anything (a local rig YAML outside the registry has name=filename).
@@ -3922,8 +4066,8 @@
     })();
 
     // expand / collapse all
-    $('cExpandAll').addEventListener('click', () => document.querySelectorAll('.console-view details.cgroup').forEach((d) => (d.open = true)));
-    $('cCollapseAll').addEventListener('click', () => document.querySelectorAll('.console-view details.cgroup').forEach((d) => (d.open = false)));
+    $('cExpandAll') && $('cExpandAll').addEventListener('click', () => document.querySelectorAll('.console-view details.cgroup').forEach((d) => (d.open = true)));
+    $('cCollapseAll') && $('cCollapseAll').addEventListener('click', () => document.querySelectorAll('.console-view details.cgroup').forEach((d) => (d.open = false)));
 
     // ---- FicTrac bridge wiring (mirrors arena_console; uses the shared session bridge) ----
     function ftSendConfig() {
@@ -5409,7 +5553,14 @@ Studio.loadProtocol = async function (text, filename, source, opts) {
         Studio._pendingRepoRef = null;
     }
     if (!ok) return false;
-    Studio.setMode('run', { push: false }); // programmatic — part of the load, not a view nav
+    // A new doc means the previous protocol's repo pattern listing no longer
+    // applies (repo opens repopulate it via registerRepoPatternPreviews).
+    Studio.repoPatternNames = null;
+    // Opened protocols land in the EDITOR by default — inspect before running.
+    // Shared ?p=/?repo= links pass landIn:'run' (those are "here, run this"
+    // links for students; an explicit ?mode= still overrides in initFromUrl).
+    // Programmatic — part of the load, not a view nav, hence push:false.
+    Studio.setMode((opts && opts.landIn) === 'run' ? 'run' : 'edit', { push: false });
     return true;
 };
 
@@ -5732,6 +5883,53 @@ $('fmNew').addEventListener('click', () => {
     Studio.setMode('edit');
     Studio.editor.newProtocol(); // designer New: dirty-confirm + blank skeleton
 });
+// ---- File ▾ relocations (Edit-toolbar diet, wireframe v6) --------------------
+// Guarded proxies to the designer's now-HIDDEN toolbar controls: the originals
+// keep ALL the gating (§6 canMutate, import-mode locks, needs-a-doc disabled
+// state), so a disabled target means "not now" — banner instead of silent no-op.
+function fmProxy(menuId, targetId, blockedMsg) {
+    $(menuId).addEventListener('click', () => {
+        $('fileMenu').classList.remove('open');
+        const t = $(targetId);
+        if (!t || t.disabled) { Studio.showBanner(blockedMsg); return; }
+        t.click();
+    });
+}
+fmProxy('fmSaveCopy', 'exportBtn',
+    'Open a protocol first — Save copy downloads a regenerated copy of the current protocol.');
+fmProxy('fmCopyConditions', 'importFromBtn',
+    'Open a protocol first — then this copies conditions from a second YAML into it.');
+fmProxy('fmReset', 'resetBtn', 'Nothing to reset — open or create a protocol first.');
+// Open demo… — the hidden demo <select> stays the single source of the list;
+// picking re-dispatches its change (dirty-confirm + import-mode guard ride along).
+$('fmOpenDemo').addEventListener('click', () => {
+    $('fileMenu').classList.remove('open');
+    const sel = $('demoSelect');
+    if (!sel || sel.disabled) { Studio.showBanner('Demos are unavailable right now — finish the import first.'); return; }
+    const items = Array.from(sel.options)
+        .filter((o) => o.value)
+        .map((o) => {
+            const dash = o.textContent.indexOf(' — ');
+            return {
+                label: dash > 0 ? o.textContent.slice(0, dash) : o.textContent,
+                sub: dash > 0 ? o.textContent.slice(dash + 3) : '',
+                value: o.value
+            };
+        });
+    showPicker('Open a demo protocol', items, (val) => {
+        sel.value = val;
+        sel.dispatchEvent(new Event('change'));
+    });
+});
+// Ctrl+S / Cmd+S = Save while in the editor (the toolbar 💾 was dieted away;
+// the hidden edSaveBtn keeps the ONE save path and its gating).
+document.addEventListener('keydown', (e) => {
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || String(e.key).toLowerCase() !== 's') return;
+    if (Studio.mode !== 'edit') return; // only hijack the browser save dialog in the editor
+    e.preventDefault();
+    const b = $('edSaveBtn');
+    if (b && !b.disabled) b.click();
+});
 // ---- Save (local file, GitHub PR, or course-repo direct commit) ----
 const GH_OWNER = 'reiserlab';
 const GH_REPO = 'webDisplayTools';
@@ -5898,6 +6096,10 @@ Studio.saveCurrent = function () {
         Studio.showBanner('The YAML tab has unapplied edits — Apply or Revert them first.');
         return;
     }
+    // v6 Settings diet: stamp an empty date_created with today before the save
+    // serializes (the save paths below re-read editor.serialize(), so the
+    // stamped text is exactly what gets written + hashed).
+    if (Studio.editor && Studio.editor.fillDateIfEmpty) Studio.editor.fillDateIfEmpty();
     const auth = document.body.classList.contains('ghauth');
     const cs = Studio.courseSettings();
     if (auth && cs.direct && cs.repo) saveViaDirectCommit();
@@ -5986,6 +6188,13 @@ function wireCourseSettings() {
     const direct = $('ghDirect');
     const bench = $('ghBenchId');
     if (!repoIn || !direct || !bench) return;
+    // Course default: a NEVER-SET repo (key absent) seeds the course-data repo,
+    // so a fresh bench only needs sign-in. An explicit clear stores '' (present
+    // but empty) and is respected on reload — target then falls back to
+    // PR-saves on reiserlab/webDisplayTools.
+    if (localStorage.getItem('studio_gh_repo') === null) {
+        localStorage.setItem('studio_gh_repo', 'reiserlab/cshl-2026-course');
+    }
     repoIn.value = localStorage.getItem('studio_gh_repo') || '';
     direct.checked = localStorage.getItem('studio_gh_direct') === '1';
     bench.value = localStorage.getItem('studio_bench_id') || '';
@@ -5996,8 +6205,9 @@ function wireCourseSettings() {
             repoIn.value = localStorage.getItem('studio_gh_repo') || '';
             return;
         }
-        if (v) localStorage.setItem('studio_gh_repo', v);
-        else localStorage.removeItem('studio_gh_repo');
+        // '' (not removeItem): an explicit clear must survive reloads — only a
+        // never-set key gets the course-repo default seed above.
+        localStorage.setItem('studio_gh_repo', v);
         updateSaveLabel();
         // Repo changed → re-pull that repo's metadata (roster/genotypes/links).
         if (Studio.refreshCourseMeta) Studio.refreshCourseMeta();
@@ -6153,13 +6363,14 @@ $('fmOpenCourse').addEventListener('click', async () => {
     );
 });
 
-async function openFromCourseRepo(repo, path, token) {
+async function openFromCourseRepo(repo, path, token, landIn) {
     try {
         const res = await GH.runBytes(fetch, GH.reqGetContentsRaw(repo.owner, repo.name, path, null, token));
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const text = new TextDecoder().decode(res.bytes);
         const ok = await Studio.loadProtocol(text, path.split('/').pop(), 'committed', {
-            repoRef: { repo: repo.full, path: path }
+            repoRef: { repo: repo.full, path: path },
+            landIn: landIn
         });
         if (ok) registerRepoPatternPreviews(repo, path, token); // async, best-effort
     } catch (e) {
@@ -6178,17 +6389,26 @@ async function registerRepoPatternPreviews(repo, protoPath, token) {
         const res = await GH.run(fetch, GH.reqGetContents(repo.owner, repo.name, dir, null, token));
         if (!res.ok || !Array.isArray(res.data)) return;
         let n = 0;
+        const names = new Set();
         res.data
             .filter((f) => f && f.type === 'file' && /\.pat$/i.test(f.name))
             .forEach((f) => {
                 n++;
+                names.add(sdLogicalName(f.name));
                 webPreviewBySdName.set(f.name, async () => {
                     const r = await GH.runBytes(fetch, GH.reqGetContentsRaw(repo.owner, repo.name, f.path, null, token));
                     if (!r.ok) throw new Error('HTTP ' + r.status);
                     return r.bytes.buffer;
                 });
             });
-        if (n) Studio.rawLog('course repo: ' + n + ' pattern preview(s) wired from ' + dir + '/', 'info');
+        if (n) {
+            // The colocated _patterns/ set IS this protocol's web pattern set
+            // (portability model): let the Edit library's W/C badges resolve
+            // against it, then repaint — the listing arrives after the load.
+            Studio.repoPatternNames = names;
+            if (Studio.editor && Studio.editor.repaintLibrary) Studio.editor.repaintLibrary();
+            Studio.rawLog('course repo: ' + n + ' pattern preview(s) wired from ' + dir + '/', 'info');
+        }
     } catch (_) { /* no colocated patterns — fine */ }
 }
 
@@ -6208,7 +6428,16 @@ async function listProtocolsForUpload(source, token) {
         const dirs = [];
         if (cs.benchId) dirs.push('protocols/' + cs.benchId);
         dirs.push('protocols/shared');
-        const items = [];
+        // The shared pattern library leads the list: free-standing patterns not
+        // tied to any protocol (where the Pattern Designer's "Save to Repo →
+        // shared library" commits). value.dir short-circuits the protocol→
+        // _patterns/ derivation in resolveUploadPatternSet.
+        const items = [{
+            label: '📚 Shared pattern library',
+            sub: 'patterns/',
+            tooltip: 'Free-standing patterns not attached to any protocol — the Pattern Designer saves here',
+            value: { owner, repo, dir: 'patterns' }
+        }];
         for (const dir of dirs) {
             try {
                 const res = await GH.run(fetch, GH.reqGetContents(owner, repo, dir, null, token));
@@ -6243,7 +6472,9 @@ async function listProtocolsForUpload(source, token) {
 // NNN_ prefix sorts to SD scan order). fetchBytes uses the RAW media type — the
 // JSON Contents API omits `content` for files >1MB and .pat files exceed that.
 async function resolveUploadPatternSet(sel, token) {
-    const dir = sel.path.replace(/\.ya?ml$/i, '') + '_patterns';
+    // sel.dir = a direct pattern directory (the shared patterns/ library);
+    // otherwise sel.path is a protocol YAML → its colocated _patterns/ dir.
+    const dir = sel.dir || sel.path.replace(/\.ya?ml$/i, '') + '_patterns';
     const res = await GH.run(fetch, GH.reqGetContents(sel.owner, sel.repo, dir, null, token));
     if (!res.ok || !Array.isArray(res.data)) return { dir, files: [] };
     const files = res.data
@@ -6276,9 +6507,9 @@ Studio.uploadFromSource = async function (source, mode) {
         return;
     }
     if (!listing) return; // banner already shown (e.g. course repo not set)
-    const verb = mode === 'file' ? 'pick a pattern' : 'upload its pattern set';
+    const verb = mode === 'file' ? 'pick a source, then one pattern' : 'pick a source — all its patterns upload';
     showPicker(
-        'Upload from ' + srcLabel + ' — pick a protocol to ' + verb + ' (' + listing.origin + ')',
+        'Upload from ' + srcLabel + ' — ' + verb + ' (' + listing.origin + ')',
         listing.items,
         (sel) => onUploadProtocolPicked(sel, mode, srcLabel, token)
     );
@@ -6296,7 +6527,7 @@ async function onUploadProtocolPicked(sel, mode, srcLabel, token) {
     }
     if (!set.files.length) {
         $('cSdUpStatus').textContent = '';
-        Studio.showBanner('No colocated patterns for this protocol (' + set.dir + '/ is empty or missing).');
+        Studio.showBanner('No patterns found — ' + set.dir + '/ is empty or missing.');
         return;
     }
     if (mode === 'folder') {
@@ -6446,7 +6677,7 @@ async function initFromUrl() {
                 Studio.showBanner('This link opens ' + state.p + ' from ' + state.repo +
                     ' — sign in (File ▾ → GitHub), then File ▾ → "Open from course repo…" to open it.');
             } else if (rm) {
-                await openFromCourseRepo({ owner: rm[1], name: rm[2], full: state.repo }, state.p, token);
+                await openFromCourseRepo({ owner: rm[1], name: rm[2], full: state.repo }, state.p, token, 'run');
             }
         } else if (state.p) {
             const entry = protoIndex.find((p) => p.key === state.p);
@@ -6454,7 +6685,7 @@ async function initFromUrl() {
                 try {
                     const res = await fetch(entry.path, { cache: 'no-store' });
                     if (res.ok)
-                        await Studio.loadProtocol(await res.text(), entry.path.split('/').pop(), 'committed', { key: state.p });
+                        await Studio.loadProtocol(await res.text(), entry.path.split('/').pop(), 'committed', { key: state.p, landIn: 'run' });
                     else Studio.showBanner('Could not fetch protocol "' + state.p + '".');
                 } catch (e) {
                     Studio.showBanner('Protocol fetch failed: ' + e.message);
@@ -6919,13 +7150,86 @@ async function initFromUrl() {
             ''
         ].join('\n');
 
-        // New — start a protocol from scratch. Loads the blank skeleton so the
-        // user has a discoverable "create from scratch" path (previously only
-        // reachable via the demo dropdown). Blocked during import mode.
-        $('newBtn').addEventListener('click', () => {
+        // Awaitable twin of ensureBuiltinRigs (which is fire-and-forget) — the
+        // New-protocol prefill needs the list NOW. Populates the same cache.
+        async function builtinRigsAsync() {
+            if (builtinRigs !== null) return builtinRigs;
+            try {
+                const r = await fetch('./configs/rigs/index.json', { cache: 'no-store' });
+                const j = r.ok ? await r.json() : null;
+                builtinRigs = j && Array.isArray(j.rigs) ? j.rigs : [];
+            } catch (_) { builtinRigs = []; }
+            return builtinRigs;
+        }
+
+        // v6 Settings diet: NEW protocols arrive pre-filled from the SESSION rig
+        // (the MATLAB-restore ledger, wireframe v6 §2) — rig: path, the rig's
+        // enabled plugins (canonical rig keys, config-less so the rig's own
+        // config inherits), and today's date_created. OPENED protocols are never
+        // rewritten — the top-bar mismatch chip owns disagreement (#135).
+        // Best-effort: any failure falls back to the plain blank skeleton.
+        async function buildNewProtocolText() {
+            const head = [
+                'version: 3',
+                'experiment_info:',
+                '  name: "New Experiment"',
+                '  date_created: "' + todayISO() + '"',
+                '  author: ""'
+            ];
+            let rigPath = './configs/rigs/your_rig.yaml';
+            let pluginLines = ['plugins: []'];
+            let parsedRig = null;
+            try {
+                const rig = window.Studio && window.Studio.currentRig;
+                const entry = (await builtinRigsAsync()).find((r) => r && rig && r.name === rig.name);
+                if (entry && entry.path) {
+                    rigPath = entry.path;
+                    const resp = await fetch(entry.path, { cache: 'no-store' });
+                    if (resp.ok) {
+                        parsedRig = parseRigYAMLText(await resp.text());
+                        const usable = deriveRigPlugins(parsedRig).plugins
+                            .filter((p) => p.enabled && p.mapped);
+                        if (usable.length) {
+                            pluginLines = ['plugins:'];
+                            usable.forEach((p) => {
+                                const e = createPluginEntry(p.builtinName, p.key);
+                                pluginLines.push('  - name: "' + e.name + '"');
+                                pluginLines.push('    type: "' + e.type + '"');
+                                pluginLines.push('    matlab:');
+                                pluginLines.push('      class: "' + e.matlab.class + '"');
+                            });
+                        }
+                    }
+                }
+            } catch (_) { parsedRig = null; /* blank skeleton is always valid */ }
+            const text = head
+                .concat(['rig: "' + rigPath + '"'])
+                .concat(pluginLines)
+                .concat([
+                    'experiment:',
+                    '  - "setup"',
+                    'conditions:',
+                    '  - name: "setup"',
+                    '    commands:',
+                    '      - type: "wait"',
+                    '        duration: 1',
+                    ''
+                ]).join('\n');
+            return { text, parsedRig, rigPath };
+        }
+
+        // New — start a protocol from scratch, pre-filled from the session rig.
+        // Blocked during import mode.
+        $('newBtn').addEventListener('click', async () => {
             if (importMode) return;
             if (dirty && !confirm('Discard unsaved edits and start a new protocol?')) return;
-            loadYamlText(BLANK_TEMPLATE, 'untitled.yaml');
+            const pre = await buildNewProtocolText();
+            loadYamlText(pre.text, 'untitled.yaml');
+            // AFTER the load: cache the rig so Settings shows the "Rig provides"
+            // chips immediately (onRigEdit inside is a no-op — path unchanged).
+            if (pre.parsedRig) {
+                try { applyRigData(pre.parsedRig, pre.rigPath); renderSettings(); } catch (_) {}
+            }
         });
 
         $('demoSelect').addEventListener('change', async (e) => {
@@ -7205,58 +7509,174 @@ async function initFromUrl() {
                 return;
             }
 
-            // Experiment info — editable text fields (v0.13)
+            // v6 Settings diet (wireframe issue 7): the everyday view is three
+            // small sections — Experiment · Rig (read-only vs the session rig) ·
+            // Pattern set. ALL plumbing (built-in rig dropdown, rig path/Browse,
+            // pattern_library, date editor, the full plugin editor) lives under
+            // Advanced…, which auto-opens when the Studio is NOT repo-connected
+            // (standalone / local-MATLAB use). Nothing leaves the YAML — New
+            // protocols pre-fill what this view stopped asking for.
+            const repoConnected = !!(document.body.classList.contains('ghauth') &&
+                window.Studio.courseSettings && window.Studio.courseSettings().repo);
             const info = experiment.experiment_info;
-            const infoBox = el('div', { class: 'settings-section' });
-            infoBox.appendChild(el('h3', {}, 'Experiment Info'));
-            for (const k of ['name', 'date_created', 'author', 'pattern_library']) {
+            ensureBuiltinRigs();
+
+            // ── Experiment ──────────────────────────────────────────────────
+            const expBox = el('div', { class: 'settings-section' });
+            expBox.appendChild(el('h3', {}, 'Experiment'));
+            {
                 const row = el('div', { class: 'set-row' });
-                row.appendChild(el('label', {}, k));
-                if (k === 'date_created') {
-                    // Standardized YYYY-MM-DD date input + a Today shortcut.
-                    const dInner = el('div', { class: 'rig-row' });
-                    const dInp = el('input', {
-                        type: 'date',
-                        class: 'settings-input',
-                        value: toISODate(info[k]),
-                        title: 'Creation date (YYYY-MM-DD) — use the picker or the Today button.'
-                    });
-                    dInp.addEventListener('change', () => onExperimentInfoEdit(k, dInp.value));
-                    const todayBtn = el('button', {
-                        class: 'settings-browse-btn',
-                        title: 'Set to today’s date',
-                        onClick: () => {
-                            const t = todayISO();
-                            dInp.value = t;
-                            onExperimentInfoEdit(k, t);
-                        }
-                    }, 'Today');
-                    dInner.appendChild(dInp);
-                    dInner.appendChild(todayBtn);
-                    row.appendChild(dInner);
-                    infoBox.appendChild(row);
-                    continue;
-                }
+                row.appendChild(el('label', {}, 'name'));
                 const inp = el('input', {
                     type: 'text',
                     class: 'settings-input',
-                    value: info[k] != null ? String(info[k]) : '',
-                    placeholder: k === 'pattern_library' ? 'path to pattern library' : '',
-                    title: 'Edit ' + k + '. Blank clears the field.',
+                    value: info.name != null ? String(info.name) : '',
+                    title: 'Protocol name (experiment_info.name). Blank clears the field.'
                 });
-                inp.addEventListener('change', () => onExperimentInfoEdit(k, inp.value));
+                inp.setAttribute('data-help', 'The protocol’s name — saved as experiment_info.name in the YAML.');
+                inp.addEventListener('change', () => onExperimentInfoEdit('name', inp.value));
                 row.appendChild(inp);
-                infoBox.appendChild(row);
+                expBox.appendChild(row);
             }
-            root.appendChild(infoBox);
+            {
+                const row = el('div', { class: 'set-row' });
+                row.appendChild(el('label', {}, 'experimenter'));
+                const inp = el('input', {
+                    type: 'text',
+                    class: 'settings-input',
+                    value: info.author != null ? String(info.author) : '',
+                    placeholder: 'who is building this protocol?',
+                    title: 'experiment_info.author — course-roster names are suggested; free text is accepted.'
+                });
+                inp.setAttribute('list', 'expList'); // roster datalist (readonly IDL prop — attribute only)
+                inp.setAttribute('data-help', 'Who made this protocol — saved as experiment_info.author. Names come from the course roster; type freely if not listed.');
+                inp.addEventListener('change', () => onExperimentInfoEdit('author', inp.value));
+                row.appendChild(inp);
+                expBox.appendChild(row);
+            }
+            {
+                const row = el('div', { class: 'set-row' });
+                row.appendChild(el('label', {}, 'date'));
+                const has = info.date_created != null && String(info.date_created).trim() !== '';
+                const ro = el('div', { class: 'set-ro' + (has ? '' : ' set-dim') },
+                    has ? toISODate(info.date_created) : '— auto-set on first save');
+                ro.setAttribute('data-help', has
+                    ? 'Creation date (experiment_info.date_created). Change it under Advanced….'
+                    : 'Stamped with today’s date the first time you save. A specific date can be set under Advanced….');
+                ro.title = 'date_created — editable under Advanced…';
+                row.appendChild(ro);
+                expBox.appendChild(row);
+            }
+            root.appendChild(expBox);
 
-            // Rig — editable path + Browse helper (v0.13)
+            // ── Rig — read-only status vs the session (bench) rig ───────────
             const rigBox = el('div', { class: 'settings-section' });
             rigBox.appendChild(el('h3', {}, 'Rig'));
+            {
+                const sessionRig = window.Studio && window.Studio.currentRig;
+                const rigPath = experiment.rig_path || '';
+                const entry = (builtinRigs || []).find((r) => r && r.path === rigPath);
+                const row = el('div', { class: 'set-row' });
+                let ro;
+                if (entry && sessionRig && entry.name === sessionRig.name) {
+                    ro = el('div', { class: 'set-ro set-ok' }, 'uses bench rig: ' + (entry.label || entry.name));
+                    ro.setAttribute('data-help', 'This protocol uses the bench (session) rig shown in the top bar. Change the rig there, or set an explicit path under Advanced….');
+                } else if (rigPath) {
+                    const mismatch = !!(entry && sessionRig && entry.name !== sessionRig.name);
+                    ro = el('div', { class: 'set-ro' + (mismatch ? ' set-warn' : '') },
+                        (entry ? (entry.label || entry.name) : rigPath) + (mismatch ? '  ·  ≠ bench rig' : ''));
+                    ro.setAttribute('data-help', mismatch
+                        ? 'The rig this protocol declares differs from the bench rig in the top bar. The protocol keeps its own rig; the bench setting drives Console geometry. Edit under Advanced….'
+                        : 'The rig this protocol declares. Edit the path under Advanced….');
+                } else {
+                    ro = el('div', { class: 'set-ro set-dim' }, 'no rig set — pick one under Advanced…');
+                    ro.setAttribute('data-help', 'This protocol has no rig yet — pick a built-in rig or set a path under Advanced….');
+                }
+                ro.title = rigPath ? 'rig: ' + rigPath : 'rig: (unset)';
+                row.appendChild(ro);
+                rigBox.appendChild(row);
+            }
+            // Arena (from rig) — read-only (LAB-92): the Pattern Set builder's
+            // locked target. Unchanged from v0.5.
+            {
+                const arenaRow = el('div', { class: 'set-row' });
+                arenaRow.appendChild(el('label', {}, 'arena (from rig)'));
+                if (rigIsCurrent() && loadedRig.arenaConfig) {
+                    const cfg = getConfig(loadedRig.arenaConfig);
+                    const lbl = (cfg && cfg.label) || loadedRig.arenaConfig;
+                    arenaRow.appendChild(el('div', {
+                        style: 'color: var(--accent); font-size: 0.82rem; padding: 3px 0;',
+                        title: 'Locked target for the Pattern Set builder. Comes from the rig YAML.'
+                    }, lbl + '  ·  ' + loadedRig.arenaConfig));
+                } else if (rigIsCurrent() && loadedRig.arenaRaw) {
+                    arenaRow.appendChild(el('div', {
+                        style: 'color: #e3a008; font-size: 0.82rem; padding: 3px 0;',
+                        title: 'The rig’s arena is not a known web config, so the Pattern Set builder is unavailable.'
+                    }, '“' + loadedRig.arenaRaw + '” is not a known web arena config'));
+                } else {
+                    arenaRow.appendChild(el('div', {
+                        style: 'color: var(--text-dim); font-size: 0.82rem; padding: 3px 0; font-style: italic;'
+                    }, 'Pick a rig (Advanced…) to detect its arena.'));
+                }
+                rigBox.appendChild(arenaRow);
+            }
+            // Rig provides — chips for the rig-enabled plugins. The full
+            // per-protocol plugin editor lives under Advanced….
+            if (rigIsCurrent() && loadedRig.derived) {
+                const provided = loadedRig.derived.plugins.filter((p) => p.enabled && p.mapped);
+                if (provided.length) {
+                    const row = el('div', { class: 'set-row set-chips' });
+                    row.appendChild(el('label', {}, 'rig provides'));
+                    const wrap = el('div', {});
+                    provided.forEach((p) => wrap.appendChild(el('span', {
+                        class: 'set-chip',
+                        title: p.matlabClass || p.key
+                    }, '⚡ ' + p.key)));
+                    row.appendChild(wrap);
+                    row.setAttribute('data-help', 'Plugins the rig YAML enables. New protocols declare them automatically; the per-protocol plugin editor is under Advanced….');
+                    rigBox.appendChild(row);
+                }
+            }
+            root.appendChild(rigBox);
 
-            // Built-in rig dropdown (from configs/rigs/index.json) — quick-pick the
-            // bundled CSHL rigs; the path field + Browse below handle local/custom files.
-            ensureBuiltinRigs();
+            // ── Pattern set ─────────────────────────────────────────────────
+            const psBox = el('div', { class: 'settings-section' });
+            psBox.appendChild(el('h3', {}, 'Pattern set'));
+            {
+                const row = el('div', { class: 'set-row' });
+                const b = el('button', {
+                    class: 'settings-browse-btn',
+                    title: 'Build an SD-card pattern set (bundle) for this rig’s arena — pick patterns, order them, export a ZIP (moved here from the toolbar)',
+                    onClick: () => { const t = $('patternSetBtn'); if (t && !t.disabled) t.click(); }
+                }, 'Build pattern set…');
+                b.setAttribute('data-help', 'Bundle this protocol’s patterns for the SD card — pick patterns, order them, export a ZIP to copy onto the card.');
+                row.appendChild(b);
+                psBox.appendChild(row);
+                const nm = info.name ? String(info.name).replace(/\.ya?ml$/i, '').replace(/[^\w.-]+/g, '_') : '';
+                if (repoConnected && nm) {
+                    psBox.appendChild(el('div', { class: 'set-hint' },
+                        'repo saves colocate patterns in ' + nm + '_patterns/'));
+                } else if (info.pattern_library) {
+                    psBox.appendChild(el('div', { class: 'set-hint' },
+                        'pattern_library: ' + info.pattern_library));
+                }
+            }
+            root.appendChild(psBox);
+
+            // ── Advanced… — the plumbing (auto-opens when not repo-connected) ─
+            const adv = el('details', { class: 'settings-advanced' });
+            if (!repoConnected) adv.open = true;
+            const advSummary = el('summary', {},
+                'Advanced…',
+                el('span', { class: 'set-hint', style: 'margin-left: 0.5rem;' },
+                    repoConnected ? 'rig path · pattern library · date · plugins'
+                        : '(open — not repo-connected: standalone / local MATLAB)'));
+            advSummary.setAttribute('data-help', 'The plumbing — rig path + Browse…, pattern_library, an editable date, and the per-protocol plugin editor. Mainly for standalone / local-MATLAB use; the course workflow fills these automatically.');
+            adv.appendChild(advSummary);
+            const advBody = el('div', { class: 'settings-advanced-body' });
+            adv.appendChild(advBody);
+
+            // Built-in rig dropdown (from configs/rigs/index.json).
             const rigSelRow = el('div', { class: 'set-row' });
             rigSelRow.appendChild(el('label', {}, 'built-in rig'));
             const rigSel = el('select', {
@@ -7274,10 +7694,12 @@ async function initFromUrl() {
                 if (rigSel.value) loadBuiltinRig(rigSel.value);
             });
             rigSelRow.appendChild(rigSel);
-            rigBox.appendChild(rigSelRow);
+            advBody.appendChild(rigSelRow);
 
+            // Rig path + Browse… (browsers can't read full paths — Browse fills
+            // the filename and keeps the current directory prefix).
             const rigRow = el('div', { class: 'set-row' });
-            rigRow.appendChild(el('label', {}, 'path (rig YAML loaded by MATLAB)'));
+            rigRow.appendChild(el('label', {}, 'rig path (YAML loaded by MATLAB)'));
             const rigInner = el('div', { class: 'rig-row' });
             const rigInput = el('input', {
                 type: 'text',
@@ -7286,8 +7708,6 @@ async function initFromUrl() {
                 title: 'Full path to the rig YAML. Required.',
             });
             rigInput.addEventListener('change', () => onRigEdit(rigInput.value));
-            // Browse fills in just the filename (browsers can't read full paths);
-            // the current directory prefix is preserved so you only adjust it.
             const rigFile = el('input', { type: 'file', accept: '.yaml,.yml', style: 'display:none;' });
             const browseBtn = el('button', {
                 class: 'settings-browse-btn',
@@ -7328,41 +7748,58 @@ async function initFromUrl() {
             rigInner.appendChild(rigInput);
             rigInner.appendChild(browseBtn);
             rigRow.appendChild(rigInner);
-            rigBox.appendChild(rigRow);
+            advBody.appendChild(rigRow);
+            advBody.appendChild(rigFile);
 
-            // Arena (from rig) — read-only (LAB-92). The arena the Pattern Set builder
-            // targets is set by the rig and locked; never edited here.
-            const arenaRow = el('div', { class: 'set-row' });
-            arenaRow.appendChild(el('label', {}, 'arena (from rig)'));
-            if (rigIsCurrent() && loadedRig.arenaConfig) {
-                const cfg = getConfig(loadedRig.arenaConfig);
-                const lbl = (cfg && cfg.label) || loadedRig.arenaConfig;
-                arenaRow.appendChild(el('div', {
-                    style: 'color: var(--accent); font-size: 0.82rem; padding: 3px 0;',
-                    title: 'Locked target for the Pattern Set builder. Comes from the rig YAML.'
-                }, lbl + '  ·  ' + loadedRig.arenaConfig));
-            } else if (rigIsCurrent() && loadedRig.arenaRaw) {
-                arenaRow.appendChild(el('div', {
-                    style: 'color: #e3a008; font-size: 0.82rem; padding: 3px 0;',
-                    title: 'The rig’s arena is not a known web config, so the Pattern Set builder is unavailable.'
-                }, '“' + loadedRig.arenaRaw + '” is not a known web arena config'));
-            } else {
-                arenaRow.appendChild(el('div', {
-                    style: 'color: var(--text-dim); font-size: 0.82rem; padding: 3px 0; font-style: italic;'
-                }, 'Browse a rig YAML to detect its arena.'));
-            }
-            rigBox.appendChild(arenaRow);
-
-            rigBox.appendChild(rigFile);
-            root.appendChild(rigBox);
-
-            // Plugins — add/remove from the supported-plugin registry. Each
-            // entry's commands become available in the "Add command" picker as
-            // soon as it lands in experiment.plugins[]. Config VALUES (device_id,
-            // channels, ports, …) are still edited in the exported YAML — the
-            // web tool ships registry defaults only. Locked in import mode.
+            // pattern_library (free path — MATLAB pattern folder).
             {
-                const pluginBox = el('div', { class: 'settings-section' });
+                const row = el('div', { class: 'set-row' });
+                row.appendChild(el('label', {}, 'pattern_library'));
+                const inp = el('input', {
+                    type: 'text',
+                    class: 'settings-input',
+                    value: info.pattern_library != null ? String(info.pattern_library) : '',
+                    placeholder: 'path to pattern library',
+                    title: 'Edit pattern_library. Blank clears the field.',
+                });
+                inp.addEventListener('change', () => onExperimentInfoEdit('pattern_library', inp.value));
+                row.appendChild(inp);
+                advBody.appendChild(row);
+            }
+
+            // date_created — editable (YYYY-MM-DD) + Today shortcut.
+            {
+                const row = el('div', { class: 'set-row' });
+                row.appendChild(el('label', {}, 'date_created'));
+                const dInner = el('div', { class: 'rig-row' });
+                const dInp = el('input', {
+                    type: 'date',
+                    class: 'settings-input',
+                    value: toISODate(info.date_created),
+                    title: 'Creation date (YYYY-MM-DD) — use the picker or the Today button.'
+                });
+                dInp.addEventListener('change', () => onExperimentInfoEdit('date_created', dInp.value));
+                const todayBtn = el('button', {
+                    class: 'settings-browse-btn',
+                    title: 'Set to today’s date',
+                    onClick: () => {
+                        const t = todayISO();
+                        dInp.value = t;
+                        onExperimentInfoEdit('date_created', t);
+                    }
+                }, 'Today');
+                dInner.appendChild(dInp);
+                dInner.appendChild(todayBtn);
+                row.appendChild(dInner);
+                advBody.appendChild(row);
+            }
+
+            // Plugins — the full per-protocol editor (add/remove from the
+            // supported-plugin registry). Each entry's commands become available
+            // in the "Add command" picker as soon as it lands in
+            // experiment.plugins[]. Locked in import mode.
+            {
+                const pluginBox = el('div', { class: 'settings-section settings-plugins' });
                 pluginBox.appendChild(el('h3', {}, 'Plugins (' + experiment.plugins.length + ')'));
                 if (experiment.plugins.length === 0) {
                     pluginBox.appendChild(el('div',
@@ -7440,15 +7877,11 @@ async function initFromUrl() {
                     const registryOpts = Object.keys(BUILTIN_PLUGINS).filter(
                         (n) => !declared.has(n) && !offeredBuiltins.has(n));
                     const totalAvail = rigOpts.length + registryOpts.length;
-
-                    const addRow = el('div',
-                        { style: 'display:flex; gap:0.3rem; margin-top:0.5rem;' });
+                    const addRow = el('div', { class: 'set-row', style: 'margin-top: 0.4rem;' });
                     const sel = el('select', {
-                        style: 'flex:1; background: var(--bg); color: var(--text); ' +
-                            'border:1px solid var(--border); border-radius:4px; ' +
-                            'padding:0.3rem 0.4rem; font: inherit;',
-                        title: rigCurrent
-                            ? 'Add a plugin — rig-supported plugins are listed first'
+                        class: 'settings-input',
+                        title: totalAvail === 0
+                            ? 'Every supported plugin is already declared'
                             : 'Choose a supported plugin to add to this protocol'
                     });
                     if (totalAvail === 0) {
@@ -7489,12 +7922,13 @@ async function initFromUrl() {
                     pluginBox.appendChild(addRow);
                 }
 
-                root.appendChild(pluginBox);
+                advBody.appendChild(pluginBox);
             }
 
-            // Variables moved out of the drawer into the always-visible left-column
-            // panel (#variablesPanel) — see renderVariables(). The drawer now holds
-            // only Experiment Info, Rig, and Plugins.
+            root.appendChild(adv);
+
+            // Variables live in the always-visible left-column panel
+            // (#variablesPanel) — see renderVariables().
         }
 
         // Variables (anchors) editor — always-visible panel below the conditions
@@ -8200,8 +8634,8 @@ async function initFromUrl() {
                         btns.push(el('span', {
                             class: 'wc-chip ' + (isW ? 'wc-w' : 'wc-c'),
                             title: isW
-                                ? 'Web pattern — in the active set; the browser can display it (carries an SD index). Select it, then “▶ Test on arena” in the Inspector.'
-                                : 'Computer pattern — a MATLAB pattern path not in the active web set; it runs from the MATLAB computer.'
+                                ? 'Web pattern — this Studio can show and run it (found on the SD card, in the pattern library, or in this protocol’s repo pattern folder). Select the condition, then “▶ Test on arena”.'
+                                : 'Computer pattern — this Studio session can’t find this pattern (not on the SD card, the library, or this protocol’s repo folder); it runs from the MATLAB computer.'
                         }, isW ? 'W' : 'C'));
                     }
                     btns.push(el('button', {
@@ -10883,10 +11317,22 @@ async function initFromUrl() {
             const it = s.items.find((x) => x.name === name);
             return it && it.valid ? it.index : null;
         }
-        // Badge helper: does this condition's trialParams `pattern` resolve in the set?
+        // Badge helper: does this condition's trialParams `pattern` resolve as a
+        // WEB pattern? Three sources, any one suffices: the Pattern Set builder's
+        // in-memory set, the Console picker's set (live SD listing when connected,
+        // built-in library otherwise), or the opened repo protocol's colocated
+        // _patterns/ listing (Studio.repoPatternNames — the portability model's
+        // "colocation IS the link"). Without the last two, repo protocols showed
+        // C for every condition (reported 2026-07-04).
         function conditionPatternInActiveSet(cond) {
             const cmd = RunnerLib.findTrialParams(cond);
-            return !!(cmd && activeSetIndexByName(cmd.pattern) != null);
+            if (!cmd || !cmd.pattern) return false;
+            if (activeSetIndexByName(cmd.pattern) != null) return true;
+            if (window.Studio.patternIndexByName && window.Studio.patternIndexByName(cmd.pattern) != null) return true;
+            const repoNames = window.Studio.repoPatternNames;
+            if (repoNames && window.Studio.sdLogicalName &&
+                repoNames.has(window.Studio.sdLogicalName(cmd.pattern))) return true;
+            return false;
         }
         // Build an animated preview (hover-cycles ≤10 sampled frames) for a set pattern
         // by name — the pattern_editor tray mechanism via PatPreview + icon-generator.
@@ -11373,6 +11819,21 @@ async function initFromUrl() {
             load: (text, filename, source) => loadYamlText(text, filename, { source: source }),
             newProtocol: () => $('newBtn').click(),
             hasUnappliedYaml: hasUnappliedYaml,
+            // Repaint the condition library (W/C pattern badges) — called by the
+            // spine when an async pattern source arrives (repo _patterns/ listing).
+            repaintLibrary: () => { if (experiment && !importMode) renderLibrary(); },
+            // First-save date fill (v6 Settings diet): an empty date_created is
+            // stamped with today right before the save serializes. Rides the
+            // normal §6-gated edit path, so it is one undo step and marks dirty
+            // (the save that follows immediately re-baselines). Returns true if
+            // the doc changed.
+            fillDateIfEmpty: () => {
+                if (!experiment || importMode) return false;
+                const cur = experiment.experiment_info && experiment.experiment_info.date_created;
+                if (cur != null && String(cur).trim() !== '') return false;
+                onExperimentInfoEdit('date_created', todayISO());
+                return true;
+            },
             markSaved: (filename) => {
                 if (filename) lastFilename = filename; // e.g. untitled → prompted save-as name
                 savedText = experiment && experiment._doc ? experiment._doc.toString() : null;
@@ -11393,6 +11854,311 @@ async function initFromUrl() {
 })();
 
 initFromUrl();
+</script>
+<script>
+/* ===== v6 SLICE — rail/panel/mode-dim/log + Patterns row-picker + resizable log
+   (classic, additive). Command handlers are unchanged (delegated on #consoleView
+   by data-cmd). The picker is the hidden <select id=cPatName> whose change
+   listener already drives cPat + thumb + info; we drive it from the listing rows. */
+(function ConsoleV6Slice(){
+  function P(t){return document.querySelector('.panel[data-panel="'+t+'"]');}
+  function R(t){return document.querySelector('.rail-btn[data-panel="'+t+'"]');}
+  function setOpen(t,o){var p=P(t),r=R(t); if(!p)return; p.classList.toggle('open',o); if(r)r.classList.toggle('sel',o);}
+  document.querySelectorAll('#cRail .rail-btn').forEach(function(b){
+    b.addEventListener('click',function(){var t=b.dataset.panel; if(!t)return; setOpen(t,!P(t).classList.contains('open'));});
+  });
+  document.querySelectorAll('.panel-x[data-close]').forEach(function(x){
+    x.addEventListener('click',function(e){e.stopPropagation(); setOpen(x.dataset.close,false);});
+  });
+
+  // Arena Trial: mode picker dims the fields that don't apply (rate=2, gain=4, start=3/4)
+  var modeSel=document.getElementById('cMode');
+  function dim(){var m=modeSel?modeSel.value:'2';
+    document.querySelectorAll('.panel[data-panel="trial"] .tf').forEach(function(f){
+      f.classList.toggle('dimf', (f.dataset.modes||'').indexOf(m)<0);});}
+  if(modeSel) modeSel.addEventListener('change',dim);
+
+  // reflect the selected pattern name into the Arena Trial chip
+  function updateSelName(){
+    var sel=document.getElementById('cPatName');
+    var nm = (sel && sel.options.length && sel.options[sel.selectedIndex]) ? sel.options[sel.selectedIndex].text : (sel && sel.value) || '—';
+    var a=document.getElementById('cTrialPatName'); if(a)a.textContent=nm;
+  }
+  // Connected SD rows carry the RAW filename (001_all_on.pat) in data-name,
+  // but the picker options are keyed by the LOGICAL name (all_on) — normalize
+  // before comparing, or bench clicks silently never match. Offline mirrored
+  // rows already use option values, and sdLogicalName is idempotent on those.
+  function logi(n){ return (window.Studio && Studio.sdLogicalName) ? Studio.sdLogicalName(n) : String(n==null?'':n); }
+  function markSelRow(){
+    var sel=document.getElementById('cPatName'), tb=document.getElementById('cSdBody');
+    if(!sel||!tb) return; var cur=sel.value;
+    tb.querySelectorAll('tr').forEach(function(r){r.classList.toggle('sel', !!r.dataset.name && (r.dataset.name===cur || logi(r.dataset.name)===cur));});
+  }
+  var pn=document.getElementById('cPatName');
+  if(pn) pn.addEventListener('change',function(){updateSelName(); markSelRow();});
+
+  // Patterns listing == picker. Row click drives the hidden select's change path.
+  var tb=document.getElementById('cSdBody');
+  if(tb) tb.addEventListener('click',function(e){
+    if(e.target.closest('.sd-down,.sd-del')) return;   // leave download/delete to the real handler
+    var tr=e.target.closest('tr'); if(!tr||!tr.dataset.name) return;
+    var sel=document.getElementById('cPatName'); if(!sel) return;
+    var want=logi(tr.dataset.name);
+    for(var i=0;i<sel.options.length;i++){ var v=sel.options[i].value;
+      if(v===tr.dataset.name || v===want){ sel.selectedIndex=i; sel.dispatchEvent(new Event('change')); break; } }
+    markSelRow(); updateSelName();
+  });
+
+  // Offline demo: with no live SD listing, mirror the built-in library into rows.
+  function mirrorLib(){
+    var tb=document.getElementById('cSdBody'), sel=document.getElementById('cPatName');
+    if(!tb||!sel||!sel.options.length) return;
+    if(tb.querySelector('tr[data-idx]')) return;        // a connected SD refresh owns the table
+    var html='';
+    for(var i=0;i<sel.options.length;i++){var o=sel.options[i];
+      html+='<tr data-name="'+o.value+'"><td>'+(i+1)+'</td><td title="'+o.value+'">'+o.textContent+'</td><td class="dim" style="font-size:10px">built-in</td></tr>';}
+    tb.innerHTML=html; markSelRow();
+  }
+  // Options rebuilt (SD refresh / built-in load): populatePatDropdown auto-picks
+  // names[0] WITHOUT dispatching change, so sync the row highlight + chip here too.
+  function pickerRebuilt(){ mirrorLib(); markSelRow(); updateSelName(); }
+  if(pn && window.MutationObserver){ new MutationObserver(pickerRebuilt).observe(pn,{childList:true}); }
+
+  // Bench log: draggable divider with snap-on-release; fills space below panels by default.
+  var rz=document.getElementById('cLogResizer'), cm=document.querySelector('.console-main'), fs=document.getElementById('consoleFields');
+  function availH(){
+    var bs=document.querySelector('.console-view .bench-strip'), ss=document.querySelector('.console-view .status-strip');
+    return fs.clientHeight - (bs?bs.offsetHeight:0) - (rz?rz.offsetHeight:0) - (ss?ss.offsetHeight:0);
+  }
+  if(rz && cm && fs){
+    var sy=0, sh=0, drag=false;
+    function move(e){ if(!drag)return; var A=availH(); var h=Math.max(96, Math.min(sh+(e.clientY-sy), A-90));
+      cm.style.flex='0 0 auto'; cm.style.height=h+'px'; e.preventDefault(); }
+    function snap(){ var A=availH(), h=cm.offsetHeight;
+      var pts=[0.30,0.46,0.62,0.80].map(function(f){return Math.round(f*A);});
+      var best=pts[0]; for(var i=1;i<pts.length;i++){ if(Math.abs(pts[i]-h)<Math.abs(best-h)) best=pts[i]; }
+      cm.style.height=best+'px'; }
+    function up(){ if(!drag)return; drag=false; snap(); document.removeEventListener('pointermove',move); document.removeEventListener('pointerup',up); document.body.style.userSelect=''; }
+    rz.addEventListener('pointerdown',function(e){ drag=true; sy=e.clientY; sh=cm.offsetHeight; document.addEventListener('pointermove',move); document.addEventListener('pointerup',up); document.body.style.userSelect='none'; e.preventDefault(); });
+  }
+
+  // collapse/show the always-visible log
+  var chev=document.getElementById('cLogChev');
+  if(chev) chev.addEventListener('click',function(){var h=document.body.classList.toggle('clogHidden'); chev.textContent=h?'▴ show log':'▾ hide log';});
+
+  /* ===== ? Help mode — end-user explanations. Content rules: plain language,
+     only what's working today, no opcodes/issue refs/design history. Native
+     title= hovers (the engineer layer) are suppressed while a help tip shows. */
+  var HELP = {
+    '#helpBtn': 'Help is ON — hover any control to see what it does. Click ? again to turn Help off.',
+    '.status': 'Connection to the arena. Green dot = connected. Use Connect (top right) to pick the arena’s USB port — works in Chrome and Edge.',
+    '.rigsel': 'The rig (arena) this bench drives. Previews and test frames use this arena layout. The 🔒 keeps it from changing by accident.',
+    '#rigMismatch': 'The bench rig and the protocol’s rig differ. The bench setting wins for Console operations; the protocol still runs with its own rig.',
+    '#docName': 'The protocol that is open right now.',
+    '#openProtoBtn': 'Open a protocol file (.yaml) from this computer.',
+    '#fileMenuBtn': 'Open and save protocols — from this computer, the shared library, or your course repo. GitHub settings live here too.',
+    '#modeSeg [data-mode="run"]': 'Run view — open a protocol and run the whole experiment. ▶ Run experiment records a log; ▶ Test experiment does not.',
+    '#modeSeg [data-mode="edit"]': 'Edit view — inspect or change the open protocol: its conditions, sequence and settings, or the YAML text itself.',
+    '#modeSeg [data-mode="console"]': 'Console — hands-on arena control: pick a pattern, play trials, step frames, test the display.',
+    '#connectBtn': 'Pick the arena’s USB port and connect. Nothing on the bench works until connected. Use Chrome or Edge.',
+    '#gearBtn': 'Links to the other web tools.',
+    '#pdLink': 'Open the Pattern Designer in a new tab to make or edit patterns. It arrives already set to this session’s arena and repo, with your GitHub sign-in carried over.',
+    /* File ▾ */
+    '#fmNew': 'Start a new, empty protocol (Edit view).',
+    '#fmOpen': 'Open a protocol file (.yaml) from this computer. It opens in the Editor so you can look it over first.',
+    '#fmOpenLibrary': 'Open one of the example protocols published with these tools.',
+    '#fmOpenCourse': 'Open a protocol this bench saved (or one shared with the course) from the course repo.',
+    '#fmSave': 'Save the protocol. Where it goes depends on the GitHub settings below — a local file, a Pull Request, or straight to the course repo.',
+    '#fmPromote': 'Copy this bench’s saved protocol (and its patterns) to the course’s shared folder so other benches can use it.',
+    '#ghSignInBtn': 'Sign in with a GitHub token so the Studio can read and write the course repo.',
+    '#ghLock': 'Instructor lock — the repo and bench settings stay fixed during a course.',
+    '#ghRepoInput': 'The GitHub repo saves go to (owner/name).',
+    '#ghBenchId': 'This bench’s name — saves and run logs are filed under it.',
+    /* Run view */
+    '#btnRunExp': 'Run the whole experiment and record a log. Needs: connected arena, a saved protocol, and Experimenter + Genotype filled in.',
+    '#btnTestExp': 'Run the whole experiment WITHOUT recording — for checking that everything works.',
+    '#btnStopRun': 'Stop the arena and end the run. Always available.',
+    '#btnStopDock': 'Stop the arena and end the run. Always available.',
+    '#btnAllOn': 'Quick check — turn every LED on.',
+    '#btnAllOff': 'Turn every LED off.',
+    '#btnLogSave': 'Download the run log as files (.json and .txt).',
+    '#btnLogPush': 'Send the last run’s log to the course repo — use this if the automatic push was skipped or failed.',
+    '#btnLogClear': 'Clear the log display (saved logs are not deleted).',
+    '#btnLogCopy': 'Copy the log text to the clipboard.',
+    '.seqlist': 'The experiment’s sequence. Each row is a condition — ▶ on a row tests just that one on the arena.',
+    '#mfExp': 'Who is running this experiment — required before a recorded run.',
+    '#mfGeno': 'The fly line you are testing — required before a recorded run.',
+    '#mNotes': 'Anything worth remembering about this run — temperature, fly age, oddities.',
+    '#provBox': 'Filled in automatically — which protocol, arena, and controller produced this run.',
+    '#runBridge': 'The FicTrac bridge program records runs and drives closed-loop trials. Connect it before a recorded run.',
+    /* File ▾ — relocated Edit actions */
+    '#fmOpenDemo': 'Open one of the bundled demo protocols to explore how experiments are built.',
+    '#fmSaveCopy': 'Download a regenerated copy of the protocol for diffing or MATLAB checks — this does NOT count as saving.',
+    '#fmCopyConditions': 'Copy conditions from another protocol file into this one — their variables and plugins come along.',
+    '#fmReset': 'Clear everything back to a blank starter protocol. Undo brings it back.',
+    /* Edit view */
+    '#edTabDesigner': 'The visual editor — conditions on the left, sequence in the middle, details on the right.',
+    '#edTabYaml': 'The protocol as YAML text. Edit here, then Apply to use your changes.',
+    '#undoBtn': 'Undo the last change (Ctrl+Z).',
+    '#redoBtn': 'Redo (Ctrl+Y).',
+    '#dirtyIndicator': 'You have unsaved changes — Ctrl+S (or File ▾ → Save) saves and unlocks recorded experiment runs.',
+    '#settingsToggle': 'Experiment settings — name, experimenter, date, rig, and the pattern-set builder. The plumbing lives under Advanced….',
+    '#libZoneTitle': 'The condition library — every stimulus condition this protocol defines. Click one to edit it in the Inspector.',
+    '#seqZoneTitle': 'The experiment sequence — the order conditions actually run in, including blocks and repetitions.',
+    '#inspectorZoneTitle': 'Details of whatever is selected — click a condition or sequence entry to edit its fields here.',
+    '#variablesPanel': 'Variables (anchors): named values conditions can share — change one here and every condition using it follows.',
+    '#edApply': 'Re-parse the YAML text into the designer (one undo step). Errors leave your text untouched.',
+    '#edRevert': 'Throw away the YAML edits and reload the text from the designer.',
+    '#edYaml': 'The protocol file itself. Comments and formatting are preserved. Apply when done.',
+    '#importBanner': 'Import mode — pick conditions on the right to stage them; your protocol is locked until you Commit or Cancel.',
+    '#settingsDrawer': 'Experiment settings. The everyday fields are on top; rig path, pattern library, date, and plugins live under Advanced….',
+    '#libraryZone': 'The condition library. Click a condition to edit it in the Inspector; the W/C badge says whether this Studio can display its pattern; dup copies it.',
+    '#sequenceZone': 'The run order — what actually plays, top to bottom. Blocks repeat their trials; drag conditions in from the library.',
+    '#inspectorZone': 'Edit the selected item here — durations, mode, pattern, gain. The 🔗 icon binds a field to a shared variable.',
+    /* Console rail */
+    '.rail-btn[data-panel="patterns"]': 'The patterns on the arena’s memory card. Open it and click a row to pick a pattern — Arena Trial and Step frames use your pick.',
+    '.rail-btn[data-panel="trial"]': 'Play the selected pattern on the arena (Modes 2, 3, or 4).',
+    '.rail-btn[data-panel="step"]': 'Show the selected pattern one frame at a time.',
+    '.rail-btn[data-panel="test"]': 'Test figures the browser draws and streams to the display — no memory card needed.',
+    '.rail-btn[data-panel="io"]': 'The controller’s analog and digital input/output connectors.',
+    '.rail-btn[data-panel="fw"]': 'Update or check the firmware on the LED panels.',
+    '.rail-btn[data-panel="fictrac"]': 'Closed loop with FicTrac: the fly’s walking steers the pattern.',
+    /* Console bench strip + panels */
+    '#ctlMenu > .cmenu-btn': 'Questions for the controller — firmware version, network address, frame counters — plus advanced settings (locked).',
+    '#dbgMenu > .cmenu-btn': 'Advanced diagnostics and raw commands. Locked — for instructors and debugging.',
+    '[data-cmd="callon"]': 'Quick check — turn every LED on.',
+    '[data-cmd="calloff"]': 'Turn every LED off.',
+    '.btn-benchstop': 'Stop the display. Always available.',
+    '#cMode': 'How the pattern plays: 2 = fixed rate, 3 = step frames yourself (or FicTrac), 4 = analog control.',
+    '#cRate': 'Frames per second (Mode 2). Negative plays backwards.',
+    '#cGain': 'Closed-loop gain (Mode 4).',
+    '#cInit': 'Which frame to start on (Modes 3 and 4).',
+    '#cDur': 'Stop automatically after this many seconds. 0 = play until Stop.',
+    '[data-cmd="ctrial"]': 'Start the trial with these settings.',
+    '[data-cmd="cstop"]': 'Stop the trial.',
+    '[data-cmd="csdlist"]': 'Re-read the memory card’s pattern list.',
+    '[data-cmd="cpatinfo"]': 'Ask the arena again about the selected pattern (frames, size).',
+    '[data-cmd="csdarchive"]': 'Download every pattern on the card as one ZIP file.',
+    '[data-cmd="csdpurge"]': 'Delete ALL patterns from the card. It will ask first.',
+    '[data-cmd="cmemsd"]': 'Show the patterns on the SD memory card.',
+    '[data-cmd="cmempsram"]': 'Show the patterns in the controller’s RAM.',
+    '#cPatThumb': 'Preview of the selected pattern — hover to animate multi-frame patterns.',
+    '#cSdBody': 'Click a row to select that pattern. Its preview shows on the right; Arena Trial and Step frames will use it.',
+    '[data-cmd="cframeload"]': 'Load the selected pattern so you can step through its frames.',
+    '#cFrame': 'The frame number to show.',
+    '[data-cmd="cframego"]': 'Show that frame.',
+    '[data-cmd="cframeprev"]': 'Previous frame (wraps around at the ends).',
+    '[data-cmd="cframenext"]': 'Next frame (wraps around at the ends).',
+    '[data-cmd="cstreamff"]': 'Fill the whole display at the chosen brightness.',
+    '[data-cmd="cstreampm"]': 'Show each panel’s number — checks the panels are wired in the right order.',
+    '[data-cmd="cstreamor"]': 'Orientation figure — checks the panels are mounted upright.',
+    '[data-cmd="cstreamck"]': 'Checkerboard test figure.',
+    '#cFps': 'Playback speed for multi-frame test files.',
+    '[data-cmd="cpaste"]': 'Paste a frame (numbers or JSON) and show it on the display.',
+    '[data-cmd="cloadfile"]': 'Stream a pattern file from this computer straight to the display (nothing is written to the card).',
+    '[data-cmd="cftconn"]': 'Connect to the FicTrac bridge program running on this computer.',
+    '#cFtApply': 'Start closed loop — FicTrac steers the pattern from the fly’s walking.',
+    '#cFtGain': 'How strongly the fly’s turning moves the pattern. Negative = opposite direction.',
+    '[data-cmd="crawcopy"]': 'Copy the bench log to the clipboard.',
+    '[data-cmd="crawclear"]': 'Clear the bench log.',
+    '#cLogChev': 'Hide or show the bench log.',
+    '#cLogResizer': 'Drag up or down to resize the log.'
+  };
+  Object.keys(HELP).forEach(function(sel){
+    try { document.querySelectorAll(sel).forEach(function(el){ el.setAttribute('data-help', HELP[sel]); }); } catch(_){}
+  });
+  // The two save-mode checkboxes: put the help on the whole label row.
+  (function(){ var pr=document.getElementById('ghPR'), di=document.getElementById('ghDirect');
+    if(pr&&pr.closest('label')) pr.closest('label').setAttribute('data-help','Saving opens a Pull Request for review instead of writing directly.');
+    if(di&&di.closest('label')) di.closest('label').setAttribute('data-help','Saving commits straight to the repo’s main branch — the usual course setup (each bench writes only its own files).');
+  })();
+  // Panel titles: student text beside the always-on engineer hover.
+  var PANEL_HELP = {
+    patterns: 'Everything on the arena’s memory card. The list is the picker — click a row to select a pattern. Add ▾ writes new patterns to the card.',
+    trial: 'Play the selected pattern. Pick a mode, set the fields that light up, then ▶ Start. Auto-stop ends it after N seconds.',
+    step: 'Load the selected pattern, then walk through it frame by frame — good for checking exactly what each frame shows.',
+    test: 'Built-in test figures (full field, panel map, orientation, checker) and files streamed straight from this computer.',
+    io: 'Read the analog input, set the analog output, and drive the two digital connectors.',
+    fw: 'Check what firmware the panels run, and program new firmware into every panel from here.',
+    fictrac: 'Closed loop: connect the bridge, load a pattern in Step frames, set the gain, then Activate — the fly steers the pattern.'
+  };
+  Object.keys(PANEL_HELP).forEach(function(k){
+    var t=document.querySelector('.panel[data-panel="'+k+'"] .panel-title');
+    if(t) t.setAttribute('data-help', PANEL_HELP[k]);
+  });
+
+  // One managed tooltip; suppress the hovered element's native title while shown.
+  var tipEl=document.createElement('div'); tipEl.id='helpTip'; document.body.appendChild(tipEl);
+  var tipStash=null;
+  function hideTip(){ tipEl.style.display='none';
+    if(tipStash){ tipStash.el.setAttribute('title', tipStash.title); tipStash=null; } }
+  document.addEventListener('mouseover', function(e){
+    if(!document.body.classList.contains('helpmode')) return;
+    var t=e.target && e.target.closest ? e.target.closest('[data-help]') : null;
+    if(!t){ hideTip(); return; }
+    hideTip();
+    var titled=e.target.closest('[title]');
+    if(titled && titled.getAttribute('title')){ tipStash={el:titled, title:titled.getAttribute('title')}; titled.removeAttribute('title'); }
+    tipEl.textContent=t.getAttribute('data-help');
+    tipEl.style.display='block';
+    var r=t.getBoundingClientRect();
+    var x=Math.min(Math.max(8, r.left), window.innerWidth - tipEl.offsetWidth - 8);
+    var y=r.bottom + 8;
+    if(y + tipEl.offsetHeight > window.innerHeight - 8) y = r.top - tipEl.offsetHeight - 8;
+    tipEl.style.left=x+'px'; tipEl.style.top=Math.max(8,y)+'px';
+  });
+  document.addEventListener('mouseout', function(e){
+    if(tipEl.style.display==='none') return;
+    var t=e.target && e.target.closest ? e.target.closest('[data-help]') : null;
+    if(t && !(e.relatedTarget && t.contains(e.relatedTarget))) hideTip();
+  });
+  window.addEventListener('scroll', hideTip, true);
+
+  // First-steps cards (one per view; ✕ hides until Help is toggled on again).
+  function helpCard(host, html){
+    var v=document.querySelector(host); if(!v) return;
+    var c=document.createElement('div'); c.className='help-card';
+    c.innerHTML='<button class="help-x" title="Hide this card (it comes back next time Help is turned on)">✕</button>'+html;
+    c.querySelector('.help-x').addEventListener('click',function(){ c.classList.add('dismissed'); });
+    v.insertBefore(c, v.firstChild);
+  }
+  helpCard('#runView .run-main',
+    '<b>Run an experiment:</b> ① Open a protocol — File ▾ (this computer, the library, or your course repo). ' +
+    '② Check the rig shown in the top bar matches your bench. ③ <b>Connect</b> (top right) and pick the arena’s USB port. ' +
+    '④ Fill in <b>Experimenter</b> and <b>Genotype</b> on the right, then <b>▶ Run experiment</b> — recorded runs save a log automatically. ' +
+    '<b>■ STOP</b> always stops the arena.');
+  helpCard('#editView',
+    '<b>Edit the protocol:</b> conditions are listed on the left; the middle column is the run sequence; click a condition to see and change its details on the right. ' +
+    'Every change can be undone (↶, Ctrl+Z). The <b>YAML</b> tab shows the protocol file itself. Save with <b>Ctrl+S</b> or File ▾ → Save. ' +
+    '<a href="experiment_designer_v3_quickstart.html" target="_blank" rel="noopener" title="Step-by-step guide to the editor, in a new tab">Full guide: Quick Start ↗</a>');
+  helpCard('#consoleView',
+    '<b>Bench basics:</b> pick a pattern in <b>Patterns</b> (click a row), then <b>▶ Start</b> in <b>Arena Trial</b> to play it. ' +
+    '<b>All on / All off</b> are quick display checks. <b>■ STOP</b> always stops the display. The log at the bottom shows everything the Studio does.');
+  var helpBtn=document.getElementById('helpBtn');
+  if(helpBtn) helpBtn.addEventListener('click', function(){
+    var on=document.body.classList.toggle('helpmode');
+    if(on) document.querySelectorAll('.help-card').forEach(function(c){ c.classList.remove('dismissed'); });
+    else hideTip();
+  });
+
+  // "Patterns ↗" — hand the session arena + repo to the Pattern Designer.
+  // The href is (re)built at click time so it always reflects the CURRENT
+  // session rig + course repo; the GitHub token needs no URL (same-origin
+  // storage + the new tab's sessionStorage copy carry it).
+  var pdLink=document.getElementById('pdLink');
+  if(pdLink) pdLink.addEventListener('click', function(){
+    var q=[];
+    var arena=window.Studio && Studio.currentRig && Studio.currentRig.arenaConfig;
+    if(arena) q.push('arena='+encodeURIComponent(arena));
+    var repo=(localStorage.getItem('studio_gh_repo')||'').trim();
+    if(repo) q.push('repo='+encodeURIComponent(repo));
+    pdLink.href='pattern_editor.html'+(q.length?'?'+q.join('&'):'');
+  });
+
+  dim(); updateSelName();
+  setTimeout(pickerRebuilt, 1300);
+  setTimeout(pickerRebuilt, 2000);
+})();
 </script>
 </body>
 </html>
