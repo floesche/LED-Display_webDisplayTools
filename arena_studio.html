@@ -2632,7 +2632,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.7 | 2026-07-05 10:17 ET · Edit toolbar + Settings diet · Console tool rail · ? Help mode · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
+<footer id="footer">Arena Studio v0.7 | 2026-07-05 12:32 ET · Edit toolbar + Settings diet · Console tool rail · ? Help mode · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -12126,11 +12126,13 @@ initFromUrl();
     '<b>Run an experiment:</b> ① Open a protocol — File ▾ (this computer, the library, or your course repo). ' +
     '② Check the rig shown in the top bar matches your bench. ③ <b>Connect</b> (top right) and pick the arena’s USB port. ' +
     '④ Fill in <b>Experimenter</b> and <b>Genotype</b> on the right, then <b>▶ Run experiment</b> — recorded runs save a log automatically. ' +
-    '<b>■ STOP</b> always stops the arena.');
+    '<b>■ STOP</b> always stops the arena. ' +
+    '<a href="https://github.com/reiserlab/webDisplayTools/blob/main/docs/protocol-pattern-workflow.md" target="_blank" rel="noopener" title="Making a protocol + patterns from scratch — the full GitHub workflow, step by step">Full workflow guide ↗</a>');
   helpCard('#editView',
     '<b>Edit the protocol:</b> conditions are listed on the left; the middle column is the run sequence; click a condition to see and change its details on the right. ' +
     'Every change can be undone (↶, Ctrl+Z). The <b>YAML</b> tab shows the protocol file itself. Save with <b>Ctrl+S</b> or File ▾ → Save. ' +
-    '<a href="experiment_designer_v3_quickstart.html" target="_blank" rel="noopener" title="Step-by-step guide to the editor, in a new tab">Full guide: Quick Start ↗</a>');
+    '<a href="https://github.com/reiserlab/webDisplayTools/blob/main/docs/protocol-pattern-workflow.md" target="_blank" rel="noopener" title="Making a protocol + patterns from scratch — the full GitHub workflow, step by step">Full workflow guide ↗</a> · ' +
+    '<a href="experiment_designer_v3_quickstart.html" target="_blank" rel="noopener" title="Step-by-step guide to the editor, in a new tab">Quick Start ↗</a>');
   helpCard('#consoleView',
     '<b>Bench basics:</b> pick a pattern in <b>Patterns</b> (click a row), then <b>▶ Start</b> in <b>Arena Trial</b> to play it. ' +
     '<b>All on / All off</b> are quick display checks. <b>■ STOP</b> always stops the display. The log at the bottom shows everything the Studio does.');
