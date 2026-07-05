@@ -902,8 +902,20 @@ class ThreeViewer {
         // Add panel number labels if enabled
         if (this.state.showPanelNumbers) {
             const panelH = height / numRows;
+            // The overlay must match the ARENA's own panel map (the Console's
+            // "Panel map" test figure). G6 firmware indexes panels ROW-major
+            // (panel_index = row * numCols + col, 1-based on the display; row 0
+            // = bottom per the .pat convention) — bench-verified 2026-07-05.
+            // Earlier generations keep the classic column-major numbering.
+            const rowMajor = !!(
+                this.arenaConfig &&
+                this.arenaConfig.arena &&
+                this.arenaConfig.arena.generation === 'G6'
+            );
             for (let row = 0; row < numRows; row++) {
-                const panelNumber = colIndex * numRows + row + 1; // 1-indexed
+                const panelNumber = rowMajor
+                    ? row * numCols + colIndex + 1
+                    : colIndex * numRows + row + 1; // 1-indexed
                 const label = this._createLabel(panelNumber.toString(), '#ff3333', 'bold', '17px');
                 // Position on back side of panel, centered
                 label.position.set(0, -halfH + row * panelH + panelH / 2, -panelThickness - 0.02);
