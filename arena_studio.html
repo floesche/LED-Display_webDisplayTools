@@ -2627,7 +2627,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.7 | 2026-07-05 21:39 ET · Edit toolbar + Settings diet · Console tool rail · ? Help mode · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
+<footer id="footer">Arena Studio v0.7 | 2026-07-05 21:45 ET · Edit toolbar + Settings diet · Console tool rail · ? Help mode · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -6034,13 +6034,11 @@ async function saveViaPR() {
 // straight onto the default branch — no branch, no PR. Safe because bench-id
 // namespacing means no two rigs ever write the same file; blocked with a
 // clear notice when the bench id is unset (never a silently-colliding name).
-// Repo overwrite guard: derive the target path from doc.filename; if a file
-// already exists there AND it is NOT the one this doc tracks as its own origin
-// (doc.repoRef, set on every successful commit), force a choice — replace it,
-// pick another name, or cancel — so a Save (or Save as…) NEVER silently
-// clobbers a different protocol. Returns the final path, or null to cancel;
-// may update doc.filename when the user renames. A re-save to the doc's own
-// path skips the prompt (that's a normal update, not a clobber).
+// Repo overwrite guard: derive the target path from doc.filename; if ANY file
+// already exists there, confirm before overwriting — even the file you opened
+// (a straight Save over an existing repo file must be deliberate, never
+// silent). Only a brand-new filename saves without a prompt. Returns the final
+// path, or null to cancel; may update doc.filename when the user renames.
 async function resolveRepoSaveTarget(cs, doc, token) {
     let base = (doc.filename || 'protocol.yaml').replace(/\.ya?ml$/i, '');
     for (;;) {
@@ -6050,13 +6048,18 @@ async function resolveRepoSaveTarget(cs, doc, token) {
             const chk = await GH.run(fetch, GH.reqGetContents(cs.repo.owner, cs.repo.name, path, null, token));
             exists = !!(chk && chk.ok && chk.data && chk.data.sha);
         } catch (_) { exists = false; }
+        if (!exists) { doc.filename = base + '.yaml'; return path; } // new file — no prompt
+        // Existing file → always confirm the overwrite. The message distinguishes
+        // "the file you opened" from "a different file", but BOTH require a yes.
         const own = !!(doc.repoRef && doc.repoRef.repo === cs.repo.full && doc.repoRef.path === path);
-        if (!exists || own) { doc.filename = base + '.yaml'; return path; }
-        const replace = confirm(
-            '"' + path + '" already exists in ' + cs.repo.full + '.\n\n' +
-            'OK = replace that file.\n' +
-            'Cancel = save under a different name.');
-        if (replace) { doc.filename = base + '.yaml'; return path; }
+        const msg = own
+            ? 'Overwrite "' + path + '" in ' + cs.repo.full + '?\n\n' +
+              'This is the file you opened — OK saves your changes over it.\n' +
+              'Cancel = save under a different name instead.'
+            : '⚠ A different file named "' + path + '" already exists in ' + cs.repo.full + '.\n\n' +
+              'OK = overwrite it.\n' +
+              'Cancel = save under a different name.';
+        if (confirm(msg)) { doc.filename = base + '.yaml'; return path; }
         const nn = prompt('New .yaml filename:', base + '_v2.yaml');
         if (!nn || !nn.trim()) return null; // fully cancelled
         base = nn.trim().replace(/\.ya?ml$/i, '');
