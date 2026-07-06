@@ -268,7 +268,13 @@
      to squeeze the launch card + sequence above; the sequence takes the flexible
      middle (flex:1) and the logbox scrolls inside this cap. */
   .run-log-strip{margin-top:8px;display:flex;flex-direction:column;flex:0 1 auto;max-height:40vh;min-height:150px;background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden}
-  body.log-collapsed .run-log-strip{flex:0 0 auto;min-height:0;height:auto}
+  body.log-collapsed .run-log-strip{flex:0 0 auto!important;min-height:0!important;height:auto!important}
+  /* MR#2b: draggable divider above the run log — drag to resize, snaps on release
+     (mirrors the Console log resizer); hidden when the log is collapsed. */
+  .run-view .rlog-resizer{flex:0 0 10px;cursor:ns-resize;position:relative}
+  .run-view .rlog-resizer::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:44px;height:3px;border-radius:2px;background:var(--border)}
+  .run-view .rlog-resizer:hover::after{background:var(--accent)}
+  body.log-collapsed .run-view .rlog-resizer{display:none}
   body.log-collapsed .dock-pane{display:none}
   .dock-h{display:flex;align-items:center;gap:9px;padding:7px 12px;border-bottom:1px solid var(--border);font-family:var(--head);font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--dim)}
   body.log-collapsed .dock-h{border-bottom:0}
@@ -2018,6 +2024,7 @@
         <div id="seqBody"><span class="dim">Open a protocol (📂 Open) to see its sequence.</span></div>
       </div>
 
+      <div class="rlog-resizer" id="rlogResizer" title="Drag to resize the run log (snaps)"></div>
       <!-- RUN-LOG STRIP -->
       <div class="run-log-strip">
         <div class="dock-h">
@@ -2782,7 +2789,11 @@
     function highlightSeq(name) {
         document.querySelectorAll('.seqrow.active').forEach((el) => el.classList.remove('active'));
         const row = document.querySelector('.seqrow[data-cond="' + cssEscape(name) + '"]');
-        if (row) row.classList.add('active');
+        if (row) {
+            row.classList.add('active');
+            // MR#2a: keep the active step on screen during a run (it can otherwise scroll below the fold)
+            try { row.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (_) {}
+        }
     }
     function clearSeqHighlight() {
         document.querySelectorAll('.seqrow.active').forEach((el) => el.classList.remove('active'));
@@ -12199,6 +12210,22 @@ initFromUrl();
     function up(){ if(!drag)return; drag=false; snap(); document.removeEventListener('pointermove',move); document.removeEventListener('pointerup',up); document.body.style.userSelect=''; }
     rz.addEventListener('pointerdown',function(e){ drag=true; sy=e.clientY; sh=cm.offsetHeight; document.addEventListener('pointermove',move); document.addEventListener('pointerup',up); document.body.style.userSelect='none'; e.preventDefault(); });
   }
+
+  // MR#2b: Run-view log — draggable divider with snap-on-release (mirrors the Console log).
+  (function(){
+    var rrz=document.getElementById('rlogResizer');
+    var strip=document.querySelector('.run-view .run-log-strip');
+    var rmain=document.querySelector('.run-view .run-main');
+    if(!rrz||!strip||!rmain) return;
+    var sy=0, sh=0, drag=false;
+    function availH(){ return rmain.clientHeight; }
+    function apply(h){ strip.style.flex='0 0 auto'; strip.style.maxHeight='none'; strip.style.height=h+'px'; }
+    function move(e){ if(!drag)return; var A=availH(); var h=Math.max(110, Math.min(sh+(sy-e.clientY), A-150)); apply(h); e.preventDefault(); }
+    function snap(){ var A=availH(); var pts=[0.25,0.40,0.55,0.70].map(function(f){return Math.round(f*A);});
+      var h=strip.offsetHeight, best=pts[0]; for(var i=1;i<pts.length;i++){ if(Math.abs(pts[i]-h)<Math.abs(best-h)) best=pts[i]; } apply(best); }
+    function up(){ if(!drag)return; drag=false; snap(); document.removeEventListener('pointermove',move); document.removeEventListener('pointerup',up); document.body.style.userSelect=''; }
+    rrz.addEventListener('pointerdown',function(e){ drag=true; sy=e.clientY; sh=strip.offsetHeight; document.addEventListener('pointermove',move); document.addEventListener('pointerup',up); document.body.style.userSelect='none'; e.preventDefault(); });
+  })();
 
   // collapse/show the always-visible log
   var chev=document.getElementById('cLogChev');

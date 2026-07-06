@@ -66,6 +66,10 @@ history lives here. Newest first. (Per-session engineering detail stays in
 - **Cross-tool links moved to the left** (2026-07-06): "Pattern Designer ↗" and "Other tools"
   now sit together on the left of the top bar (right after the brand) in all three views —
   previously "Pattern Designer ↗" was mid-bar and "Other tools" was at the far right.
+- **Runner: active step stays visible + resizable run log** (2026-07-06): during a run the
+  highlighted step now auto-scrolls into view (it used to drop below the fold on long
+  sequences), and the Run-view log gained a drag divider that snaps to a few heights — the
+  same behavior as the Console log.
 
 ## v0.6 — 2026-07-04 · Console de-clutter (tool rail)
 
