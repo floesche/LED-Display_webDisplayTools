@@ -38,7 +38,9 @@ history lives here. Newest first. (Per-session engineering detail stays in
   **any course-repo save that would overwrite an existing file now confirms first — even
   the file you opened.** A plain Save over an existing protocol stops and makes you choose
   (Overwrite it / pick another name / Cancel); only a brand-new filename saves without a
-  prompt. No more silent clobbering of a repo protocol.
+  prompt. No more silent clobbering of a repo protocol. *Save as…* names its destination
+  (course repo / Pull Request / local file) in both the menu label and the prompt, and its
+  filename defaults to the protocol's own name (`experiment_info.name`).
 - **Build pattern set… knows the course repo** (#150): a "Course repo" source lists the
   shared `patterns/` library and this protocol's `_patterns/` folder; **Add referenced**
   seeds the set from the protocol's own pattern names (unresolved names reported loudly);

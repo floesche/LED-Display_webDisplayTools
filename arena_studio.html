@@ -1911,7 +1911,7 @@
       <button id="fmOpenCourse" title="List this bench's saves (protocols/&lt;bench-id&gt;/) and promoted shared protocols (protocols/shared/) in the course-data repo">Open from Repo…</button>
       <button id="fmOpenDemo" class="edit-only" title="Load a bundled demo protocol to explore — same list the designer's Load demo ▾ used to hold">Open demo…</button>
       <button id="fmSave" class="edit-only">Save → local file</button>
-      <button id="fmSaveAs" class="edit-only" title="Save under a NEW filename. In the course repo it checks first — if that name already exists you choose to replace it or pick another (never a silent overwrite)">Save as… (new filename)</button>
+      <button id="fmSaveAs" class="edit-only" title="Save under a NEW filename (defaults to the protocol's name). The destination — course repo, Pull Request, or local file — is shown in the label and the prompt; a repo name that already exists asks before overwriting">Save as → local file…</button>
       <button id="fmSaveCopy" class="edit-only" title="Download a regenerated copy (*_roundtrip.yaml) for diffing/MATLAB checks — does NOT mark the protocol saved">Save copy (download)…</button>
       <button id="fmPromote" class="edit-only" title="Copy this bench's saved protocol (+ its _patterns/) to protocols/shared/ in the course repo — blocked if a DIFFERENT file already exists under the same name">Promote to shared (course)…</button>
       <div class="sep"></div>
@@ -2627,7 +2627,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.7 | 2026-07-05 21:45 ET · Edit toolbar + Settings diet · Console tool rail · ? Help mode · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
+<footer id="footer">Arena Studio v0.7 | 2026-07-05 22:01 ET · Edit toolbar + Settings diet · Console tool rail · ? Help mode · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -6151,10 +6151,21 @@ $('fmSaveAs').addEventListener('click', () => {
         Studio.showBanner('The YAML tab has unapplied edits — Apply or Revert them first.');
         return;
     }
-    const curBase = (doc.filename || '').replace(/\.ya?ml$/i, '');
-    const suggested = curBase ||
-        GH.slug((doc.experiment && doc.experiment.experiment_info && doc.experiment.experiment_info.name) || 'protocol');
-    const name = prompt('Save as — new .yaml filename:', suggested + '.yaml');
+    // Suggest the protocol's YAML name (experiment_info.name) first — that's the
+    // rename the user just made — falling back to the current filename. Shown as
+    // the slug that will actually become the repo path, so there's no surprise.
+    const yamlName = GH.slug((doc.experiment && doc.experiment.experiment_info && doc.experiment.experiment_info.name) || '');
+    const curBase = GH.slug((doc.filename || '').replace(/\.ya?ml$/i, ''));
+    const suggested = yamlName || curBase || 'protocol';
+    // Name the destination in the prompt so it's never ambiguous where this goes.
+    const auth = document.body.classList.contains('ghauth');
+    const cs = Studio.courseSettings();
+    const dest = (auth && cs.direct && cs.repo)
+        ? 'commit to ' + cs.repo.full + ' /protocols/' + (cs.benchId || '?') + '/'
+        : (auth && $('ghPR').checked)
+            ? 'open a Pull Request on ' + ghTargetRepo().full
+            : 'download a local .yaml file';
+    const name = prompt('Save as — new filename (will ' + dest + '):', suggested + '.yaml');
     if (!name || !name.trim()) return;
     doc.filename = /\.ya?ml$/i.test(name.trim()) ? name.trim() : name.trim() + '.yaml';
     Studio.saveCurrent();
@@ -6210,16 +6221,20 @@ function updateSaveLabel() {
     const cs = Studio.courseSettings();
     const direct = auth && cs.direct && cs.repo;
     const pr = !direct && auth && $('ghPR').checked;
+    const saveAs = $('fmSaveAs');
     if (direct) {
         $('ghDest').textContent = '→ commits straight to ' + cs.repo.full + ' /protocols/' +
             (cs.benchId || '⚠ set bench id') + '/ (default branch, no PR)';
         $('fmSave').textContent = 'Save → course repo';
+        if (saveAs) saveAs.textContent = 'Save as → course repo…';
     } else if (pr) {
         $('ghDest').textContent = '→ commits to a branch + opens a Pull Request on ' + ghTargetRepo().full;
         $('fmSave').textContent = 'Save → Pull Request';
+        if (saveAs) saveAs.textContent = 'Save as → Pull Request…';
     } else {
         $('ghDest').textContent = '→ writes a local .yaml file (sign in to GitHub to open a PR instead)';
         $('fmSave').textContent = 'Save → local file';
+        if (saveAs) saveAs.textContent = 'Save as → local file…';
     }
 }
 // PR vs direct-commit are mutually exclusive write modes — checking one
