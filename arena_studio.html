@@ -2627,7 +2627,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.7 | 2026-07-05 22:01 ET · Edit toolbar + Settings diet · Console tool rail · ? Help mode · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
+<footer id="footer">Arena Studio v0.7 | 2026-07-05 23:17 ET · Edit toolbar + Settings diet · Console tool rail · ? Help mode · bench≠protocol run confirm · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -5726,6 +5726,24 @@ function escapeHtml(s) {
 Studio.beginRun = async function (isExperiment) {
     const doc = Studio.currentDoc;
     if (!doc || !Studio.session) return;
+    // Rig-mismatch confirm (#135 follow-up): the bench rig is authoritative and
+    // the protocol runs unchanged, but bench ≠ protocol is worth an explicit ack
+    // before driving the arena with the whole sequence. Same name predicate as
+    // the top-bar mismatch chip; fires only when both rig names are known and differ.
+    const sr = Studio.currentRig;
+    const docRigName = doc.rig && doc.rig.name ? doc.rig.name : null;
+    if (sr && sr.name && docRigName && sr.name !== docRigName) {
+        if (
+            !confirm(
+                'Bench rig "' + sr.name + '" ≠ this protocol\'s rig "' + docRigName + '".\n\n' +
+                    'The arena geometry follows the BENCH rig' +
+                    (sr.arenaConfig ? ' (' + sr.arenaConfig + ')' : '') +
+                    ' and the protocol runs unchanged — but if this protocol was built for a ' +
+                    'different arena, its patterns may not display as intended.\n\nRun anyway?'
+            )
+        )
+            return;
+    }
     if (!Studio.session.connected) {
         try { await Studio.session.connect(); } catch (e) { Studio.showBanner('Connect failed: ' + e.message); return; }
     }

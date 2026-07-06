@@ -55,6 +55,14 @@ history lives here. Newest first. (Per-session engineering detail stays in
   keeps unsaved work; only a first click opens a tab (handing over arena + repo).
   The ⚙ gear menu is gone — replaced by an "Other tools" link on both pages (one
   reused index tab); its glyph moved onto the Editor's "⚙ Settings ▾" button.
+- **Run confirms on a bench ≠ protocol rig mismatch** (2026-07-05): ▶ Run experiment and
+  ▶ Test experiment now pop a one-time confirm when the session (bench) rig name differs from
+  the loaded protocol's `rig:` — the bench geometry still wins and the protocol document is
+  unchanged, but you acknowledge before driving the arena with the whole sequence. It does
+  **not** hard-block (a protocol authored on a sibling bench with the same arena still runs),
+  and single-condition ▶ Test is unaffected. The top-bar mismatch chip already surfaced this
+  passively; this makes a full run an explicit choice. Keys on the rig *name* (cheap); a
+  geometry-aware version would need to resolve the protocol's rig YAML.
 
 ## v0.6 — 2026-07-04 · Console de-clutter (tool rail)
 
