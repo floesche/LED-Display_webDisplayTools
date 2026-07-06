@@ -63,6 +63,9 @@ history lives here. Newest first. (Per-session engineering detail stays in
   and single-condition ▶ Test is unaffected. The top-bar mismatch chip already surfaced this
   passively; this makes a full run an explicit choice. Keys on the rig *name* (cheap); a
   geometry-aware version would need to resolve the protocol's rig YAML.
+- **Cross-tool links moved to the left** (2026-07-06): "Pattern Designer ↗" and "Other tools"
+  now sit together on the left of the top bar (right after the brand) in all three views —
+  previously "Pattern Designer ↗" was mid-bar and "Other tools" was at the far right.
 
 ## v0.6 — 2026-07-04 · Console de-clutter (tool rail)
 

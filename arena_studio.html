@@ -1874,6 +1874,11 @@
 <!-- ===== TOP BAR (the persistent spine) ===== -->
 <div class="topbar">
   <span class="brand">Arena Studio</span>
+  <a class="ribbon-btn pd-link" id="pdLink" href="pattern_editor.html" rel="opener"
+     title="Switch to the Pattern Designer — reuses its tab if one is open (your work there is kept); a first click opens it set to this session's arena + repo, sign-in carried over">Pattern Designer ↗</a>
+  <a class="ribbon-btn other-tools" id="otherToolsLink" href="index.html" target="wdt-index"
+     title="All web tools (the index page) — opens in its own reused tab, so the Studio keeps its arena connection">Other tools</a>
+  <span class="sep-v"></span>
   <span class="status"><span class="dot" id="statusDot" title="Connection status (green = connected). One ArenaSession broker owns the single Web Serial port."></span><span id="statusTxt">disconnected</span></span>
   <label class="rigsel" title="Session (bench) rig — ONE shared selection consumed by Run, Edit, and Console (stream-frame geometry, ISP progress map, paste validation, FicTrac framing). Follows the loaded protocol's rig unless you explicitly pick one; locked against accidental change (#135).">rig
     <select id="sessionRig" disabled></select>
@@ -1936,8 +1941,6 @@
     </div>
   </div>
 
-  <a class="ribbon-btn pd-link" id="pdLink" href="pattern_editor.html" rel="opener"
-     title="Switch to the Pattern Designer — reuses its tab if one is open (your work there is kept); a first click opens it set to this session's arena + repo, sign-in carried over">Pattern Designer ↗</a>
 
   <div class="seg" id="modeSeg">
     <button class="on" data-mode="run">▶ Run</button>
@@ -1949,8 +1952,6 @@
 
   <button class="help-btn" id="helpBtn" title="Help — turn on, then hover any control for a plain-language explanation">?</button>
 
-  <a class="ribbon-btn other-tools" id="otherToolsLink" href="index.html" target="wdt-index"
-     title="All web tools (the index page) — opens in its own reused tab, so the Studio keeps its arena connection">Other tools</a>
 </div>
 
 <input type="file" id="fileInput" accept=".yaml,.yml" style="display:none" />
@@ -2627,7 +2628,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.7 | 2026-07-05 23:17 ET · Edit toolbar + Settings diet · Console tool rail · ? Help mode · bench≠protocol run confirm · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
+<footer id="footer">Arena Studio v0.7 | 2026-07-06 00:08 ET · Edit toolbar + Settings diet · Console tool rail · ? Help mode · bench≠protocol run confirm · bench-review UI fixes ·<a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
