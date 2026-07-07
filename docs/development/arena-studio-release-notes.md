@@ -4,6 +4,36 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.31 — 2026-07-07 · Console pattern-picker step, sharper previews, runner fixes
+
+Batch of post-bench fixes:
+
+- **Console "upload a set" now asks which patterns.** Choosing **Upload ▾ → From
+  course repo / library (whole set)** and picking a protocol now opens a **checkbox
+  picker** of that set's `.pat` files (all selected by default, with a Select-all
+  toggle and live count) before anything is written to the SD card. A colocated set
+  can be dozens of files and the card can't hold every protocol's set at once — this
+  replaces the old "pick a set → dump all of it" behaviour.
+- **Pattern previews render at HiDPI.** Thumbnails/animations now supersample the
+  canvas by `devicePixelRatio` (capped 3×), so they're crisp on Retina screens
+  instead of pixelated/upscaled.
+- **Multi-frame previews autoplay.** Pattern thumbnails now loop automatically as a
+  lightweight GIF (Console picker, stream preview, and the Edit inspector) instead of
+  only animating on hover. The loop self-stops when the thumbnail leaves the screen.
+- **"W · web" patterns preview in the Edit inspector.** A loaded course/library
+  protocol's colocated patterns now show their animated thumbnail (and read as
+  **W · web** with a coherent source dropdown) in the condition inspector — previously
+  only patterns loaded into the SD-bundle builder previewed there, so repo patterns
+  showed a W badge but no image.
+- **Run-time estimate counts per-command overhead.** The projected finish time added
+  only display/wait durations and ran short (~8 s over a ~10 min run); it now includes
+  an estimate of the serial round-trip each wire command costs, so the projection
+  tracks wall-clock more closely.
+- **Runner highlights the right block.** The "you are here" row in the Run view now
+  matches by sequence position (and trial index within a block) instead of by
+  condition name, so a condition reused across blocks (e.g. `blank_1s`) lights the
+  occurrence that's actually running, not the first one in the list.
+
 ## v0.30 — 2026-07-07 · Course-repo quick-links moved into the footer
 
 - The **course repo ↗ protocols / logs / patterns** links moved from the fixed

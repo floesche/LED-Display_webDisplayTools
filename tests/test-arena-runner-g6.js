@@ -318,6 +318,30 @@ async function main() {
         5
     );
 
+    console.log('\n=== conditionOverhead (per non-wait command serial cost) ===');
+    const oh1 = Runner.conditionOverhead({ commands: [trialCmd] });
+    checkBool('single command has positive overhead', oh1 > 0, 'oh1=' + oh1);
+    check('null -> 0 overhead', Runner.conditionOverhead(null), 0);
+    check(
+        'waits-only -> 0 overhead',
+        Runner.conditionOverhead({ commands: [{ type: 'wait', duration: 2 }] }),
+        0
+    );
+    check(
+        'two commands = 2x one command',
+        Runner.conditionOverhead({
+            commands: [trialCmd, { type: 'controller', command_name: 'allOff' }]
+        }),
+        oh1 * 2
+    );
+    check(
+        'waits add no overhead',
+        Runner.conditionOverhead({
+            commands: [trialCmd, { type: 'wait', duration: 3 }, { type: 'wait', duration: 4 }]
+        }),
+        oh1
+    );
+
     console.log('\n=== flattenStructure (reps × trials, ITI between-not-after) ===');
     const flattenFixture = {
         conditions: [

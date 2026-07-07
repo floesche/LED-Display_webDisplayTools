@@ -138,7 +138,15 @@
   .rlup-msg.err{color:var(--danger)}
   .rlup-box button{margin-top:14px}
   .picker-item .sub{font-size:10.5px;color:var(--dim)}
-  .picker-foot{padding:8px 12px;border-top:1px solid var(--border);text-align:right}
+  .picker-foot{padding:8px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;justify-content:flex-end}
+  .picker-foot .foot-count{margin-right:auto;color:var(--dim);font-size:11px}
+  .pill.primary{background:var(--accent);color:#06210f;border-color:var(--accent);font-weight:700}
+  .pill.primary:hover{background:var(--hover)}
+  /* multi-select picker rows (choose which patterns of a set to write to SD) */
+  .picker-check{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;font-size:12.5px;cursor:pointer;color:var(--text)}
+  .picker-check:hover{background:var(--surface2)}
+  .picker-check input{margin:0;flex:0 0 auto}
+  .picker-check .sub{font-size:10.5px;color:var(--dim);margin-left:auto}
   .seg{display:flex;align-self:center;height:30px;border:1px solid var(--border);border-radius:6px;overflow:hidden;flex:0 0 auto}
   .seg button{display:flex;align-items:center;background:transparent;border:0;color:var(--dim);padding:0 11px;font-size:12px}
   .seg button + button{border-left:1px solid var(--bg)}
@@ -1181,6 +1189,12 @@
         .edit-view .pat-preview img {
             width: 96px; height: 96px; border-radius: 6px;
             border: 1px solid var(--border); background: var(--surface);
+        }
+        .edit-view .pat-preview-ph {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 96px; height: 96px; border-radius: 6px; line-height: 1;
+            border: 1px solid var(--border); background: var(--surface);
+            color: var(--dim); font-size: 1.2rem;
         }
         .edit-view .pat-preview-badge {
             position: absolute; bottom: 3px; right: 3px;
@@ -2790,7 +2804,7 @@
 </div>
 
 <footer id="footer">
-  <span class="foot-left">Arena Studio v0.30 | 2026-07-07 15:45 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
+  <span class="foot-left">Arena Studio v0.31 | 2026-07-07 17:42 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
   <!-- Course-repo quick-links: open protocols / logs / patterns in a new tab.
        Hrefs built from the configured repo + bench id (updateGhQuickLinks). -->
   <span id="ghQuickLinks" title="Open the course repo on GitHub (new tab)">
@@ -2993,10 +3007,8 @@
             const step = $('rpStep');
             if (step) step.textContent = 'step ' + (s.index + 1) + ' / ' + total;
             const nm = s.step && s.step.conditionName;
-            if (nm) {
-                $('runInlineTxt').textContent = '▸ ' + nm;
-                highlightSeq(nm);
-            }
+            if (nm) $('runInlineTxt').textContent = '▸ ' + nm;
+            if (s.step) highlightSeq(s.step);
         }
         // forward to the Edit view (timeline "you are here" highlight)
         if (typeof Studio.editRunStatus === 'function') Studio.editRunStatus(s);
@@ -3010,9 +3022,39 @@
         }
     };
 
-    function highlightSeq(name) {
+    // Highlight the row for the CURRENTLY-running step. Match by position
+    // (seqIdx + role, + trial index within a block) so a condition reused across
+    // blocks lights the right occurrence, not the first one. Randomized blocks
+    // reorder trials at run time, so their trialIdxInBlock is a shuffled position —
+    // fall back to matching the condition name within that block. `step` may be a
+    // bare name string (legacy callers) — handled by the final fallback.
+    function highlightSeq(step) {
         document.querySelectorAll('.seqrow.active').forEach((el) => el.classList.remove('active'));
-        const row = document.querySelector('.seqrow[data-cond="' + cssEscape(name) + '"]');
+        let row = null;
+        if (step && typeof step === 'object') {
+            const si = step.seqIdx;
+            if (typeof si === 'number') {
+                if (step.kind === 'ref') {
+                    row = document.querySelector('.seqrow[data-seqidx="' + si + '"][data-role="ref"]');
+                } else if (step.kind === 'iti') {
+                    row = document.querySelector('.seqrow[data-seqidx="' + si + '"][data-role="iti"]');
+                } else if (step.kind === 'block-trial') {
+                    const base = '.seqrow[data-seqidx="' + si + '"][data-role="trial"]';
+                    if (!step.randomize && typeof step.trialIdxInBlock === 'number') {
+                        row = document.querySelector(base + '[data-trialidx="' + step.trialIdxInBlock + '"]');
+                    }
+                    if (!row && step.conditionName) {
+                        row = document.querySelector(base + '[data-cond="' + cssEscape(step.conditionName) + '"]');
+                    }
+                }
+            }
+        }
+        // Fallback: match the first row by condition name (bare-string callers, or
+        // a step shape without positional info).
+        if (!row) {
+            const nm = step && typeof step === 'object' ? step.conditionName : step;
+            if (nm) row = document.querySelector('.seqrow[data-cond="' + cssEscape(nm) + '"]');
+        }
         if (row) {
             row.classList.add('active');
             // MR#2a: keep the active step on screen during a run (it can otherwise scroll below the fold)
@@ -5609,6 +5651,56 @@ function patByteSource(sd) {
 }
 let patPreviewCache = {};
 
+// Autoplay a multi-frame pattern preview as a lightweight looping GIF: cycle the
+// sampled frames on an interval that SELF-CLEARS once the img leaves the DOM (a
+// picker re-render / inspector rebuild) — so nothing leaks and detached nodes
+// stop animating on their own. Shared by the Console picker thumb and the Edit
+// inspector preview. ~6–7 fps (150 ms) matches the old hover animation.
+Studio.startPatAutoplay = function (img, frames, staticIndex) {
+    if (!img || !frames || frames.length <= 1) return null;
+    let k = staticIndex || 0;
+    const iv = setInterval(() => {
+        if (!img.isConnected) { clearInterval(iv); return; }
+        k = (k + 1) % frames.length;
+        img.src = frames[k];
+    }, 150);
+    return iv;
+};
+
+// Resolve a byte source for a pattern by LOGICAL name (what protocols reference,
+// e.g. `all_on`). webPreviewBySdName is keyed by the on-card/repo FILENAME (which
+// may carry an NNN_ index prefix + .pat), so match on the normalized logical
+// name. Returns a `() => Promise<ArrayBuffer>` or null. Lets the Edit inspector
+// preview repo/library "W · web" patterns that were never loaded into the SD-
+// bundle builder (reported 2026-07-07: W badges but no thumbnail).
+Studio.webBytesForName = function (name) {
+    if (!name) return null;
+    if (webPreviewBySdName.has(name)) return webPreviewBySdName.get(name);
+    const target = sdLogicalName(name);
+    for (const [k, fn] of webPreviewBySdName) {
+        if (sdLogicalName(k) === target) return fn;
+    }
+    return null;
+};
+// Sample animation frames for a web pattern by logical name (fetch → parse →
+// render), cached. Returns { sampled, numFrames } or null when no bytes exist.
+Studio.webPreviewFramesForName = async function (name, arena, iconOpts) {
+    const src = Studio.webBytesForName(name);
+    if (!src || !PP) return null;
+    const cacheKey = 'name:' + name;
+    if (patPreviewCache[cacheKey]) return patPreviewCache[cacheKey];
+    const ab = await src();
+    const parsed = PatParser.parsePatFile(ab);
+    const sampled = PP.samplePreviewFrames(parsed, arena, {
+        renderIcon: generatePatternIcon,
+        iconOpts: iconOpts || { width: 96, height: 96, backgroundColor: '#1a1f26',
+            innerRadiusRatio: 0.4, padding: 2, showGaps: false, showOutlines: false }
+    });
+    const out = { sampled, numFrames: parsed.numFrames };
+    patPreviewCache[cacheKey] = out;
+    return out;
+};
+
 function arenaForConfig(cfg) {
     const c = cfg ? getConfig(cfg) : null;
     return c && c.arena;
@@ -5736,7 +5828,7 @@ async function renderPatThumb(name) {
     const p = m && m.patterns[name];
     if (!p || !PP || !host) return;
     host.title = webPreviewBySdName.has(p.sd_name)
-        ? 'Pattern preview (hover a multi-frame pattern to animate)'
+        ? 'Pattern preview (multi-frame patterns animate automatically)'
         : 'No preview — this pattern is on the SD card but its bytes were not seen this session (upload it via Upload ▾, or open its course-repo protocol, for a thumbnail)';
     try {
         let sampled = patPreviewCache[name];
@@ -5758,11 +5850,7 @@ async function renderPatThumb(name) {
         img.src = sampled.frames[sampled.staticIndex || 0];
         img.alt = name;
         host.appendChild(img);
-        if (sampled.frames.length > 1) {
-            let iv = null, k = 0;
-            host.addEventListener('mouseenter', () => { k = 0; iv = setInterval(() => { k = (k + 1) % sampled.frames.length; img.src = sampled.frames[k]; }, 150); });
-            host.addEventListener('mouseleave', () => { if (iv) { clearInterval(iv); iv = null; } img.src = sampled.frames[sampled.staticIndex || 0]; });
-        }
+        if (sampled.frames.length > 1) Studio.startPatAutoplay(img, sampled.frames, sampled.staticIndex || 0);
     } catch (e) { /* preview is best-effort */ }
 }
 // Register just-uploaded pattern bytes as picker preview sources, keyed by the
@@ -5934,6 +6022,7 @@ function renderStreamThumb(patArrayBuffer, hostId) {
             const img = document.createElement('img');
             img.src = sampled.frames[sampled.staticIndex || 0];
             host.appendChild(img);
+            if (sampled.frames.length > 1) Studio.startPatAutoplay(img, sampled.frames, sampled.staticIndex || 0);
         }
     } catch (e) { /* preview best-effort */ }
 }
@@ -6555,7 +6644,11 @@ function renderSequence(exp) {
         body.innerHTML = '<span class="dim">This protocol has no sequence entries.</span>';
         return;
     }
-    seq.forEach((entry) => {
+    // seqIdx MUST match the runner's flattenStructure index (its per-entry
+    // position), so the "you are here" highlight can key on position + block +
+    // trial rather than name — otherwise a condition reused across blocks (e.g.
+    // blank_1s) always lit its first occurrence (reported 2026-07-07).
+    seq.forEach((entry, seqIdx) => {
         if (entry.kind === 'block') {
             const head = document.createElement('div');
             head.className = 'blockhead';
@@ -6566,26 +6659,34 @@ function renderSequence(exp) {
                 ' · ' + nTrials + ' condition' + (nTrials === 1 ? '' : 's') + '</span>';
             body.appendChild(head);
             // trials is an array of condition-name strings.
-            (entry.trials || []).forEach((name) => {
-                body.appendChild(seqRow(name, condByName.get(name), true));
+            (entry.trials || []).forEach((name, trialIdx) => {
+                body.appendChild(seqRow(name, condByName.get(name), true,
+                    { seqidx: seqIdx, role: 'trial', block: entry.name || '', trialidx: trialIdx }));
             });
             // intertrial is a condition-name string (or null).
             if (entry.intertrial) {
-                const r = seqRow(entry.intertrial, condByName.get(entry.intertrial), true);
+                const r = seqRow(entry.intertrial, condByName.get(entry.intertrial), true,
+                    { seqidx: seqIdx, role: 'iti', block: entry.name || '' });
                 r.style.borderStyle = 'dashed';
                 body.appendChild(r);
             }
         } else {
             const name = entry.condition_name || entry.name;
-            body.appendChild(seqRow(name, condByName.get(name), false));
+            body.appendChild(seqRow(name, condByName.get(name), false, { seqidx: seqIdx, role: 'ref' }));
         }
     });
 }
 
-function seqRow(name, cond, nested) {
+function seqRow(name, cond, nested, attrs) {
     const row = document.createElement('div');
     row.className = 'seqrow' + (nested ? ' nested' : '');
     row.dataset.cond = name || '';
+    if (attrs) {
+        if (attrs.seqidx != null) row.dataset.seqidx = String(attrs.seqidx);
+        if (attrs.role) row.dataset.role = attrs.role;
+        if (attrs.block != null) row.dataset.block = attrs.block;
+        if (attrs.trialidx != null) row.dataset.trialidx = String(attrs.trialidx);
+    }
     const chips = cond ? condChips(cond) : '';
     row.innerHTML =
         '<span class="idx">▸</span><span class="nm">' + escapeHtml(name || '?') + '</span>' +
@@ -6633,12 +6734,15 @@ Studio.beginRun = async function (isExperiment) {
     const conditionsByName = new Map((exp.conditions || []).map((c) => [c.name, c]));
     startRunLog(isExperiment);
     document.body.classList.toggle('testing', !isExperiment);
-    // Estimated total = sum of step durations (host-timed); the timer ticks
-    // wall-time since now. Best-effort — steps whose condition isn't found add 0.
+    // Estimated total = sum of step durations PLUS per-command serial overhead
+    // (host-timed); the timer ticks wall-time since now. conditionDuration alone
+    // undercounts — every wire command costs a serial round-trip the display time
+    // doesn't include, so the run finishes a few seconds later than a pure
+    // sum-of-durations. Best-effort — steps whose condition isn't found add 0.
     let totalSec = 0;
     for (const st of steps) {
         const c = conditionsByName.get(st.conditionName);
-        if (c) totalSec += RunnerLib.conditionDuration(c) || 0;
+        if (c) totalSec += (RunnerLib.conditionDuration(c) || 0) + (RunnerLib.conditionOverhead(c) || 0);
     }
     if (Studio.startRunTimer) Studio.startRunTimer(totalSec);
     await runSteps(steps, conditionsByName, exp, isExperiment);
@@ -7322,6 +7426,76 @@ function showPicker(title, items, onPick) {
 }
 function hidePicker() {
     $('pickerOverlay').style.display = 'none';
+    // tear down any multi-select footer extras so the single-select picker's
+    // footer (Cancel only) is clean the next time showPicker runs.
+    const foot = $('pickerOverlay').querySelector('.picker-foot');
+    if (foot) {
+        const c = foot.querySelector('.foot-count');
+        if (c) c.remove();
+    }
+    if (_mpConfirmBtn) { _mpConfirmBtn.remove(); _mpConfirmBtn = null; }
+}
+
+// Multi-select variant of showPicker: checkbox rows + a live count + an Upload
+// button, for choosing WHICH patterns of a set to write to the SD card. A
+// colocated _patterns/ set can be dozens of files, so writing every one on every
+// "upload set" is impractical — this is the "one more step" picker. items =
+// [{label, sub, tooltip, value, checked?}]; onConfirm gets the chosen values.
+let _mpConfirmBtn = null;
+function showMultiPicker(title, items, onConfirm, confirmVerb) {
+    const ov = $('pickerOverlay');
+    $('pickerTitle').textContent = title;
+    const list = $('pickerList');
+    list.innerHTML = '';
+    const foot = ov.querySelector('.picker-foot');
+    let count = foot.querySelector('.foot-count');
+    if (!count) { count = document.createElement('span'); count.className = 'foot-count'; foot.insertBefore(count, foot.firstChild); }
+    if (!_mpConfirmBtn) { _mpConfirmBtn = document.createElement('button'); _mpConfirmBtn.className = 'pill primary'; foot.appendChild(_mpConfirmBtn); }
+    const checks = [];
+    const allRow = document.createElement('label');
+    allRow.className = 'picker-check';
+    allRow.title = 'Select or clear every pattern in this set';
+    const allCb = document.createElement('input');
+    allCb.type = 'checkbox';
+    allCb.checked = true;
+    allRow.appendChild(allCb);
+    const allTxt = document.createElement('b');
+    allTxt.textContent = 'Select all';
+    allRow.appendChild(allTxt);
+    list.appendChild(allRow);
+    const update = () => {
+        const n = checks.filter((c) => c.checked).length;
+        count.textContent = n + ' of ' + checks.length + ' selected';
+        _mpConfirmBtn.textContent = (confirmVerb || 'Upload') + (n ? ' (' + n + ')' : '');
+        _mpConfirmBtn.disabled = n === 0;
+        allCb.checked = n === checks.length;
+        allCb.indeterminate = n > 0 && n < checks.length;
+    };
+    items.forEach((it) => {
+        const row = document.createElement('label');
+        row.className = 'picker-check';
+        row.title = it.tooltip || it.label;
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = it.checked !== false;
+        cb._value = it.value;
+        cb.addEventListener('change', update);
+        checks.push(cb);
+        row.appendChild(cb);
+        const nm = document.createElement('span');
+        nm.textContent = it.label;
+        row.appendChild(nm);
+        if (it.sub) { const s = document.createElement('span'); s.className = 'sub'; s.textContent = it.sub; row.appendChild(s); }
+        list.appendChild(row);
+    });
+    allCb.addEventListener('change', () => { checks.forEach((c) => { c.checked = allCb.checked; }); update(); });
+    _mpConfirmBtn.onclick = () => {
+        const chosen = checks.filter((c) => c.checked).map((c) => c._value);
+        hidePicker();
+        if (chosen.length) onConfirm(chosen);
+    };
+    update();
+    ov.style.display = 'flex';
 }
 $('pickerCancel').addEventListener('click', hidePicker);
 $('pickerOverlay').addEventListener('click', (e) => {
@@ -7527,7 +7701,7 @@ Studio.uploadFromSource = async function (source, mode) {
         return;
     }
     if (!listing) return; // banner already shown (e.g. course repo not set)
-    const verb = mode === 'file' ? 'pick a source, then one pattern' : 'pick a source — all its patterns upload';
+    const verb = mode === 'file' ? 'pick a source, then one pattern' : 'pick a source, then choose which patterns';
     showPicker(
         'Upload from ' + srcLabel + ' — ' + verb + ' (' + listing.origin + ')',
         listing.items,
@@ -7551,7 +7725,22 @@ async function onUploadProtocolPicked(sel, mode, srcLabel, token) {
         return;
     }
     if (mode === 'folder') {
-        await fetchAndUpload(set.files, srcLabel + ' set');
+        // One more step: choose WHICH patterns of the set to write (all checked by
+        // default). A colocated set can be dozens of files and the SD card can't
+        // hold every protocol's set at once — so a subset picker, not a blind dump.
+        $('cSdUpStatus').textContent = '';
+        const items = set.files.map((f) => ({
+            label: f.name,
+            sub: f.size != null ? (f.size / 1024).toFixed(1) + ' KB' : '',
+            value: f,
+            checked: true
+        }));
+        showMultiPicker(
+            'Upload to SD — choose patterns from ' + set.dir.split('/').pop() + '/',
+            items,
+            (chosen) => fetchAndUpload(chosen, srcLabel + ' set'),
+            'Upload'
+        );
         return;
     }
     // single-pattern: a second picker over the .pat files in the set
@@ -10778,32 +10967,44 @@ async function initFromUrl() {
             const COMP = '__computer__';
             window.PatternSet.assignIndices(activeSet());
             const inSet = items.some((it) => it.name === value);
+            // A pattern can also be "web" without being in the SD-bundle builder:
+            // a loaded course/library protocol registers its colocated _patterns/
+            // bytes (Studio.webBytesForName), which the browser can preview + run.
+            const webBytes = !inSet && window.Studio.webBytesForName ? window.Studio.webBytesForName(value) : null;
+            const isWeb = inSet || !!webBytes;
 
             // Prominent source chip — W = web pattern, C = computer/MATLAB pattern.
             wrapper.appendChild(el('span', {
-                class: 'wc-chip ' + (inSet ? 'wc-w' : 'wc-c'),
-                title: inSet
-                    ? 'Web pattern — in the active set; the browser can display it (carries an SD index).'
+                class: 'wc-chip ' + (isWeb ? 'wc-w' : 'wc-c'),
+                title: isWeb
+                    ? 'Web pattern — the browser can display it (in the active set or the loaded protocol’s colocated patterns).'
                     : 'Computer pattern — a MATLAB pattern path not in the active web set; it runs from the MATLAB computer.'
-            }, inSet ? 'W · web' : 'C · computer'));
+            }, isWeb ? 'W · web' : 'C · computer'));
 
             const select = el('select', { class: 'field-edit',
                 title: 'Source — pick a web pattern from the active set, or “C · computer / MATLAB pattern…” to type a path' });
+            // Web pattern from the loaded protocol but not in the builder set: pin
+            // the current name as a selected option so the dropdown stays coherent.
+            if (isWeb && !inSet) {
+                const opt = el('option', { value: value }, 'web · ' + value);
+                opt.selected = true;
+                select.appendChild(opt);
+            }
             for (const it of items) {
                 const opt = el('option', { value: it.name }, it.index + ' · ' + it.name);
                 if (it.name === value) opt.selected = true;
                 select.appendChild(opt);
             }
             const compOpt = el('option', { value: COMP }, 'C · computer / MATLAB pattern…');
-            if (!inSet) compOpt.selected = true;
+            if (!isWeb) compOpt.selected = true;
             select.appendChild(compOpt);
 
-            // Computer/MATLAB path input — shown only in C mode (pattern not in the set).
+            // Computer/MATLAB path input — shown only in C mode (not a web pattern).
             const compInput = el('input', { type: 'text', class: 'field-edit str',
-                value: inSet ? '' : (value == null ? '' : String(value)),
+                value: isWeb ? '' : (value == null ? '' : String(value)),
                 placeholder: 'patterns/my_pattern.pat',
                 title: 'Computer / MATLAB pattern file (not in the web set). MATLAB runs this path; a browser run falls back to pattern_ID.',
-                style: inSet ? 'display:none;' : '' });
+                style: isWeb ? 'display:none;' : '' });
             compInput.addEventListener('change', () => {
                 if (compInput.value === value) return;
                 if (!pushUndo()) return;
@@ -10812,12 +11013,12 @@ async function initFromUrl() {
             });
 
             const previewHost = el('div', { class: 'pat-preview-host' });
-            if (inSet) { const p = buildActiveSetPreview(value); if (p) previewHost.appendChild(p); }
+            if (isWeb) { const p = buildActiveSetPreview(value); if (p) previewHost.appendChild(p); }
 
             select.addEventListener('change', () => {
                 const picked = select.value;
                 if (picked === COMP) {
-                    if (inSet) {
+                    if (isWeb) {
                         // Switch web → computer: clear the web name so the source becomes C,
                         // then re-render into the path-input mode.
                         if (!pushUndo()) return;
@@ -12364,44 +12565,56 @@ async function initFromUrl() {
                 repoNames.has(window.Studio.sdLogicalName(cmd.pattern))) return true;
             return false;
         }
-        // Build an animated preview (hover-cycles ≤10 sampled frames) for a set pattern
-        // by name — the pattern_editor tray mechanism via PatPreview + icon-generator.
-        // Returns a DOM node, or null if it can't render (no item / no arena / no frames).
+        // Build an animated preview (hover-cycles ≤10 sampled frames) for a web
+        // pattern by name — the pattern_editor tray mechanism via PatPreview +
+        // icon-generator. Two sources: (1) the in-memory SD-bundle builder set
+        // (parsed already), or (2) a repo/library pattern whose bytes were seen
+        // this session (Studio.webBytesForName → fetch+parse asynchronously). The
+        // second path is what makes a loaded course protocol's "W · web" patterns
+        // previewable in the inspector (reported 2026-07-07: W badge, no thumbnail).
+        // Returns a DOM node, or null if nothing can render (no arena / no source).
+        const PREVIEW_ICON_OPTS = { width: 96, height: 96, backgroundColor: '#1a1f26',
+            innerRadiusRatio: 0.4, padding: 2, showGaps: false, showOutlines: false };
         function buildActiveSetPreview(name) {
-            const item = activeSetItemByName(name);
-            if (!item || !item.parsed) return null;
             const cfg = getConfig(rigArenaConfig());
             if (!cfg || !cfg.arena) return null;
-            const sampled = window.PatPreview.samplePreviewFrames(item.parsed, cfg.arena, {
-                renderIcon: generatePatternIcon,
-                iconOpts: { width: 96, height: 96, backgroundColor: '#1a1f26',
-                    innerRadiusRatio: 0.4, padding: 2, showGaps: false, showOutlines: false }
-            });
-            const frames = sampled.frames;
-            if (!frames.length) return null;
-            const meta = item.preview || {};
             const container = el('div', { class: 'pat-preview' });
+            const item = activeSetItemByName(name);
+            if (item && item.parsed) {
+                const sampled = window.PatPreview.samplePreviewFrames(item.parsed, cfg.arena, {
+                    renderIcon: generatePatternIcon, iconOpts: PREVIEW_ICON_OPTS
+                });
+                if (!sampled.frames.length) return null;
+                const meta = item.preview || {};
+                fillPatPreview(container, name, sampled.frames, sampled.staticIndex, meta.frames || 1, meta.gs);
+                return container;
+            }
+            // repo/library web pattern not in the builder set: fetch bytes + parse.
+            if (!window.Studio.webBytesForName || !window.Studio.webBytesForName(name)) return null;
+            container.appendChild(el('span', { class: 'pat-preview-ph', title: name + ' — loading preview…' }, '⋯'));
+            window.Studio.webPreviewFramesForName(name, cfg.arena, PREVIEW_ICON_OPTS)
+                .then((res) => {
+                    container.innerHTML = '';
+                    if (!res || !res.sampled.frames.length) { container.remove(); return; }
+                    fillPatPreview(container, name, res.sampled.frames, res.sampled.staticIndex, res.numFrames, null);
+                })
+                .catch(() => container.remove());
+            return container;
+        }
+        // Fill a .pat-preview container: static img + frame badge + autoplay loop.
+        function fillPatPreview(container, name, frames, staticIndex, nFrames, gs) {
+            nFrames = nFrames || 1;
             const img = el('img', {
-                src: frames[sampled.staticIndex], alt: name + ' preview',
-                title: name + ' — ' + (meta.frames || 1) + ' frame' + ((meta.frames || 1) === 1 ? '' : 's') +
-                    ' · GS' + (meta.gs || '?') + (frames.length > 1 ? ' · hover to animate' : '')
+                src: frames[staticIndex], alt: name + ' preview',
+                title: name + ' — ' + nFrames + ' frame' + (nFrames === 1 ? '' : 's') +
+                    (gs ? ' · GS' + gs : '') + (frames.length > 1 ? ' · animating' : '')
             });
             container.appendChild(img);
-            if ((meta.frames || 1) > 1) {
-                container.appendChild(el('span', { class: 'pat-preview-badge' }, meta.frames + 'f'));
-            }
-            if (frames.length > 1) {
-                let iv = null, k = 0;
-                container.addEventListener('mouseenter', () => {
-                    k = 0;
-                    iv = setInterval(() => { k = (k + 1) % frames.length; img.src = frames[k]; }, 150);
-                });
-                container.addEventListener('mouseleave', () => {
-                    if (iv) { clearInterval(iv); iv = null; }
-                    img.src = frames[sampled.staticIndex];
-                });
-            }
-            return container;
+            if (nFrames > 1) container.appendChild(el('span', { class: 'pat-preview-badge' }, nFrames + 'f'));
+            // Multi-frame patterns autoplay as a lightweight looping GIF. The
+            // interval self-clears once the img leaves the DOM (inspector re-render),
+            // so nothing leaks when the card is re-rendered.
+            if (frames.length > 1) window.Studio.startPatAutoplay(img, frames, staticIndex);
         }
 
         function psEnsureModal() {

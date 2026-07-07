@@ -215,6 +215,29 @@ var ArenaRunnerG6 = (function () {
         return Math.max(tp, wait);
     }
 
+    // Empirical per-wire-command overhead (seconds). conditionDuration counts only
+    // the nominal display/wait time; it ignores the serial round-trip the runner
+    // pays on every command's `await link.send(...)` (trialParams, allOn/allOff,
+    // setFramePosition, AO/DO, the trailing stop, …). Across a whole protocol those
+    // round-trips accumulate into a real drift — the run finishes LATER than the
+    // sum-of-durations estimate (reported ~8 s over a ~10 min run). Counting them
+    // makes the projected finish time track wall-clock. Waits carry no send (a
+    // local timer), so they're excluded. Tune from bench timing if needed.
+    const PER_CMD_OVERHEAD_SEC = 0.03;
+
+    /**
+     * Estimated serial overhead for a condition, in seconds: PER_CMD_OVERHEAD_SEC
+     * per non-wait command (each of which the runner sends over the wire). PURE, so
+     * the run estimate and any preview share one definition alongside
+     * conditionDuration.
+     */
+    function conditionOverhead(cond) {
+        if (!cond || !Array.isArray(cond.commands)) return 0;
+        let n = 0;
+        for (const c of cond.commands) if (c && c.type !== 'wait') n++;
+        return n * PER_CMD_OVERHEAD_SEC;
+    }
+
     /**
      * Flatten an experiment_structure into the ordered list of steps the runner
      * (and the timeline preview) execute: refs, block trials × repetitions, and
@@ -1012,6 +1035,7 @@ var ArenaRunnerG6 = (function () {
         frameIndexToInitPos,
         buildTrialParams,
         conditionDuration,
+        conditionOverhead,
         flattenStructure,
         translateCommand,
         hostSideTrialEnd,
