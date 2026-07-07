@@ -2750,7 +2750,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.23 | 2026-07-07 13:06 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
+<footer id="footer">Arena Studio v0.24 | 2026-07-07 13:41 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -2779,8 +2779,13 @@
 <script>
 'use strict';
 (function () {
-    const TOOL_VERSION = 'Arena Studio v0.5';
+    // Derive from the footer (the single source of truth for the version) so run-log
+    // metadata can never drift stale again — this was hardcoded 'v0.5' and stamped
+    // every runlog wrong even at v0.23.
     const $ = (id) => document.getElementById(id);
+    const TOOL_VERSION =
+        (($('footer') && $('footer').textContent.match(/Arena Studio v[0-9.]+/)) || [])[0] ||
+        'Arena Studio';
     const Wire = window.ArenaWireG6;
     const RunLog = window.RunLog;
     const Adapter = window.StudioRunLogAdapter;

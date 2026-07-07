@@ -4,6 +4,14 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.24 — 2026-07-07 · Run-log metadata version was stuck at "v0.5"
+
+`tool_version` in every run-log's `run_metadata` was a hardcoded constant
+(`Arena Studio v0.5`) that never got bumped with the footer — so all logs, even at
+v0.23, were stamped v0.5. It now derives from the footer at load, so it can't drift
+again. (Discovered while diagnosing a bench run whose bridge was an old build; the
+metadata mislabel is unrelated to that bridge issue.)
+
 ## v0.23 — 2026-07-07 · Safe-mode fixes: GitHub padlock + File-menu Run-logging
 
 - **The GitHub padlock is back in safe mode.** It was hidden, so bench setup looked
