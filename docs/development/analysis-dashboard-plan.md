@@ -103,7 +103,8 @@ The dashboard and live oscilloscope MUST use the same derivation code and defaul
 — the dashboard imports the same module; do not fork the math.
 
 - Input = the **`behavior_v1`** compact state `[ms, fc, idx, ft, x, y, hd]` (bridge
-  WS frame + logged row; issue #140 comment 4900650706). `x`/`y` = integrated
+  WS frame + logged row; issue #140 comment 4900650706, the default level — `full`
+  25-column logging is a File ▾ → Run logging opt-in). `x`/`y` = integrated
   lab-frame position (cols 15/16, rad); `hd` = integrated heading (col 17, rad);
   `ft` = FicTrac timestamp (col 22) as relative ms — the derivative time base.
 - Turning velocity: OLS slope (live) / central difference (offline) of **unwrapped

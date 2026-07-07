@@ -4,6 +4,22 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.17 — 2026-07-07 · Run-logging level is a File-menu setting
+
+- **Pick the FicTrac frame-logging level from File ▾ → Run logging** — `behavior_v1`
+  (compact, the default) or `full` (the whole 25-column record, for a debug/archival run).
+  It's a **runtime/session setting** (remembered on the browser), not something baked into
+  each protocol, and it sits with the other data-pipeline settings (next to "Archive SD
+  patterns after each run"). Advanced-only — hidden in safe mode, so students always get the
+  compact default.
+- **The Console keeps its manual `log` toggle** for ad-hoc use — when you're just trying
+  things out without a protocol, flip it on to capture data. The Console shows the *level*
+  read-only next to it (change it in File ▾).
+- **A recorded experiment run is deterministic:** it asserts the File-menu level + logging-on
+  at run start, overriding whatever the Console toggle was doing.
+- (Replaces the interim v0.16 approach of a per-protocol `log_level` plugin field — logging
+  verbosity is a capture decision, not part of the experiment definition.)
+
 ## v0.16 — 2026-07-07 · Full-width scope + behavior_v1 logging is the runner default
 
 - **The oscilloscope now spans the full width of the Run view** — edge to edge, matching
@@ -14,10 +30,8 @@ history lives here. Newest first. (Per-session engineering detail stays in
   *asserts* that level to the bridge when it starts logging, so every run is captured as the
   compact `[ms, fc, idx, ft, x, y, hd]` row regardless of how `pixi run bridge` was launched
   — the same data the scope and analysis dashboard use.
-- **Change the logging level per protocol via a FicTrac-plugin field.** The `fictrac` plugin
-  gains a **Frame logging** option — leave it on `behavior_v1` (compact, the default) or pick
-  **full 25-column** for a debug/archival run. It rides in the protocol YAML (`log_level:`)
-  and the bridge honors it for that run.
+- (The logging level was briefly a per-protocol plugin field here; v0.17 moved it to a
+  File-menu runtime setting — see above.)
 
 ## v0.15 — 2026-07-07 · Live oscilloscope (watch the fly's behavior during a run)
 

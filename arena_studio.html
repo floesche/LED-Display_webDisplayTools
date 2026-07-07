@@ -2004,6 +2004,11 @@
         <label class="gh-check"><input type="checkbox" id="ghPR" title="Save opens a branch + Pull Request on the target repo (review-gated — the default for reiserlab/webDisplayTools)"> Save as Pull Request</label>
         <label class="gh-check"><input type="checkbox" id="ghDirect" title="Save commits straight to the target repo's default branch — no branch, no PR. Course-repo mode: safe there because bench-id namespacing means no two rigs write the same file"> Commit directly to default branch</label>
         <label class="gh-check"><input type="checkbox" id="ghArchivePatterns" title="Advanced: after each completed run, snapshot the SD card's patterns to pattern-sets/&lt;hash&gt;/patterns.zip in the repo (content-hash deduped) — redundancy for on-card edits. OFF by default: the SD bulk-download is still under investigation (it can disconnect the arena on large cards)."> Archive SD patterns to repo after each run <span class="dim">(advanced)</span></label>
+        <div class="gh-row"><label for="fmLogLevel">Run logging</label>
+          <select id="fmLogLevel" title="FicTrac frame logging verbosity for recorded runs (and ad-hoc Console logging). behavior_v1 = the compact [ms,fc,idx,ft,x,y,hd] row the live scope + analysis dashboard use (default); full = the whole 25-column FicTrac record (debug/archival, ~4× larger). Asserted at run start — overrides the Console log toggle for deterministic experiment logging.">
+            <option value="behavior_v1">behavior_v1 (compact — default)</option>
+            <option value="full">full 25-column (debug)</option>
+          </select></div>
         <div class="gh-dest" id="ghDest">→ writes a local .yaml file (sign in to GitHub to open a PR instead)</div>
       </div>
     </div>
@@ -2676,7 +2681,8 @@
             <label>port <input id="cFtPort" type="number" min="1" max="65535" value="60000" style="width:72px" title="UDP/TCP port the bridge listens on for FicTrac"></label>
             <label>gain <input id="cFtGain" type="number" step="0.1" value="1.8" style="width:64px" title="heading degrees per frame index (1.8 = 360°/200)"></label>
             <span id="cFtPresets" class="seg2"></span>
-            <label title="Log FicTrac frames + arena commands to a JSONL file"><input type="checkbox" id="cFtLog"> log</label></div>
+            <label title="Log FicTrac frames + arena commands to a JSONL file. For ad-hoc sessions (no protocol) — a recorded experiment run logs automatically and overrides this. Verbosity is set in File ▾ → Run logging."><input type="checkbox" id="cFtLog"> log</label>
+            <span class="dim" id="cFtLogLevel" title="Frame-logging level (read-only here — change it in File ▾ → Run logging)">behavior_v1</span></div>
           </div>
         </section>
       </div>
@@ -2736,7 +2742,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.16 | 2026-07-07 03:54 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
+<footer id="footer">Arena Studio v0.17 | 2026-07-07 08:40 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -3782,6 +3788,31 @@
             v = localStorage.getItem('studio_runlog_collapsed') === '0' ? 'log' : 'collapsed';
         }
         setDockView(v);
+    })();
+
+    // ---- Run logging level (runtime setting; File ▾ → Run logging) ------------
+    // Frame-logging verbosity for recorded runs AND ad-hoc Console logging. A
+    // SESSION setting (localStorage), NOT per-protocol: `behavior_v1` (compact,
+    // default) or `full` (the 25-column record). The runner asserts it at run start
+    // (deterministic — overrides the Console log toggle); the Console keeps the
+    // manual on/off for non-protocol sessions and shows this level read-only.
+    function sessionLogLevel() {
+        return localStorage.getItem('studio_log_level') === 'full' ? 'full' : 'behavior_v1';
+    }
+    Studio.sessionLogLevel = sessionLogLevel;
+    function applyLogLevel(level) {
+        const lvl = level === 'full' ? 'full' : 'behavior_v1';
+        localStorage.setItem('studio_log_level', lvl);
+        const b = Studio.session && Studio.session.bridge;
+        if (b && b.setLogLevel) b.setLogLevel(lvl); // so ad-hoc Console logging uses it too
+        const sel = $('fmLogLevel'); if (sel && sel.value !== lvl) sel.value = lvl;
+        const disp = $('cFtLogLevel'); if (disp) disp.textContent = lvl;
+    }
+    Studio.applyLogLevel = applyLogLevel;
+    (function initLogLevel() {
+        const sel = $('fmLogLevel');
+        if (sel) sel.addEventListener('change', () => applyLogLevel(sel.value));
+        applyLogLevel(sessionLogLevel()); // sync selector + Console display + bridge from storage
     })();
 
     // ---- log strip controls ---------------------------------------------------
@@ -6468,9 +6499,6 @@ async function runSteps(steps, conditionsByName, exp, isExperiment) {
     // (console field, default ws://localhost:8765).
     const bridge = Studio.session && Studio.session.bridge;
     if (bridge) {
-        // Frame-logging level: behavior_v1 by default for EVERY web-runner run; a
-        // FicTrac plugin may opt into `log_level: full` for a debug/archival run.
-        let logLevel = 'behavior_v1';
         if (ftNames.length) {
             const plug = (exp.plugins || []).find((p) => p && ftNames.includes(p.name));
             const pcfg = (plug && plug.config) || {};
@@ -6478,9 +6506,12 @@ async function runSteps(steps, conditionsByName, exp, isExperiment) {
             if (Number.isFinite(Number(pcfg.fictrac_port))) cfg.fictrac_port = Number(pcfg.fictrac_port);
             if (Number.isFinite(Number(pcfg.gain))) cfg.gain = Number(pcfg.gain);
             if (Object.keys(cfg).length) bridge.setConfig(cfg);
-            if (pcfg.log_level === 'full' || pcfg.log_level === 'behavior_v1') logLevel = pcfg.log_level;
         }
-        if (bridge.setLogLevel) bridge.setLogLevel(logLevel);
+        // Frame-logging level is a runtime/session setting (File ▾ → Run logging),
+        // NOT per-protocol. Assert it here so a recorded run logs deterministically
+        // at the chosen level — this OVERRIDES any ad-hoc Console log toggle state.
+        if (bridge.setLogLevel)
+            bridge.setLogLevel(Studio.sessionLogLevel ? Studio.sessionLogLevel() : 'behavior_v1');
         bridge.setLogging(true); // universal default-on: no experiment untracked
         if ($('cFtLog')) $('cFtLog').checked = true; // keep the console toggle honest
         const ftUrl = ((($('cFtUrl') || {}).value) || 'ws://localhost:8765').trim();

@@ -143,10 +143,10 @@ active the bridge records:
   position + heading (rad, 5-decimal). The live scope + offline dashboard recompute
   every derived channel (turning/forward/side/speed/dir) from this via
   `js/kinematics.js`. The **browser picks the level** per run via `log_control`'s
-  `level` (Arena Studio's runner asserts `behavior_v1`, overriding `--log-frames`;
-  a FicTrac plugin's `log_level: full` config opts a run into the full record) —
-  `--log-frames` only sets the launch default. `full` logs the whole 25-column
-  record (`{"type":"fictrac_frame", ..., "fictrac":[…25…]}`) for debug/archival.
+  `level` (Arena Studio's runner asserts the level chosen in File ▾ → Run logging,
+  default `behavior_v1`, overriding `--log-frames`) — `--log-frames` only sets the
+  launch default. `full` logs the whole 25-column record
+  (`{"type":"fictrac_frame", ..., "fictrac":[…25…]}`) for debug/archival.
 - inbound browser `log` messages (e.g. `{"event":"arena_command", ...}` for every
   Web Serial command, or Arena Studio's `{"event":"run_metadata", ...}` header
   line at recorded-run start), each stamped with `dir` and `rx_ms`.

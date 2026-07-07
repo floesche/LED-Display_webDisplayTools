@@ -632,20 +632,6 @@ var BUILTIN_PLUGINS = {
                 type: 'number',
                 label: 'Heading offset (deg)',
                 default: 0
-            },
-            // Bridge frame-logging level (web-runner only; MATLAB has no FicTracPlugin).
-            // Empty (the default) ⇒ the runner logs the compact behavior_v1 row
-            // [ms,fc,idx,ft,x,y,hd] — plenty for the scope + analysis dashboard. Pick
-            // "full" for a debug/archival run that needs the whole 25-column record.
-            // Empty default ⇒ omitted from YAML (createPluginEntry skips it).
-            log_level: {
-                type: 'select',
-                label: 'Frame logging',
-                default: '',
-                options: [
-                    { value: '', label: 'behavior_v1 (compact — default)' },
-                    { value: 'full', label: 'full 25-column (debug/archival)' }
-                ]
             }
         },
         commands: {

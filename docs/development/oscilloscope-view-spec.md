@@ -11,7 +11,9 @@
 > (`centralDiff` = simple offline central-difference; `windowedDerived` = the
 > smoothed live OLS path) with `tests/test-kinematics.js`. The bridge WS payload and
 > `behavior_v1` log rows are produced in `fictrac-bridge/bridge.py`; the client
-> re-emits a `'sample'` event (`js/fictrac-bridge-client.js`). Everything else below
+> re-emits a `'sample'` event (`js/fictrac-bridge-client.js`). The frame-logging level
+> (`behavior_v1` default / `full`) is a runtime setting in **File ▾ → Run logging** (v0.17),
+> asserted at run start; the scope is full-width (v0.16). Everything else below
 > (rows, overlays, dock, autoscale, window/span controls) shipped as written.
 
 **Original spec (design record) follows.**
