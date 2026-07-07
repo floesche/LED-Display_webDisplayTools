@@ -42,8 +42,10 @@ JSON.parse() per line and dispatches on Array.isArray (frame array vs event obje
     "cols":["ms","fc","idx","ft","x","y","hd"]} header, then each frame as the
     positional array [ms, fc, idx, ft, x, y, hd]. Compact behavioral state the live
     scope + offline dashboard recompute all derived channels from (see js/kinematics.js).
-    ft = FicTrac timestamp (col 22) as relative ms — NOT col-24 dt, which cannot
+    ft = FicTrac col-22 timestamp as relative ms — NOT col-24 dt, which cannot
     recover elapsed time across a frame dropped before logging (Frank, #143).
+    col 22 is the camera hardware clock in ns on our rigs, normalized to ms here
+    (FT_TS_NS_PER_MS); downstream dt is per-frame ft differences (variable-rate safe).
   - full (--log-frames): the whole 25-column record under a "fictrac" key (debug/archival).
 Session/runner events stay JSON objects on their own lines. `minimal` and gzip are deferred.
 """
@@ -72,6 +74,15 @@ WS_MAX_SIZE = 16 * 1024 * 1024
 # rows in this column order; the live scope + offline dashboard recompute every
 # derived channel (turning/forward/side/speed/dir) from this compact state.
 BEHAVIOR_V1_COLS = ["ms", "fc", "idx", "ft", "x", "y", "hd"]
+
+# FicTrac col-22 is the camera's hardware-clock timestamp. Our rigs run identical
+# cameras + software that emit it in NANOSECONDS (FicTrac's docs nominally call it
+# ms, but this hardware clock is ns). behavior_v1's `ft` is defined as
+# MILLISECONDS, so the pipeline divides col 22 by this constant. dt is taken from
+# per-frame `ft` differences downstream, so a variable frame rate is handled for
+# free — only the fixed unit is applied here. (If a future rig's camera differs,
+# this one constant is the only knob.)
+FT_TS_NS_PER_MS = 1_000_000.0
 
 
 def now_ms() -> int:
@@ -324,13 +335,19 @@ class Pipeline:
         index = frame_index_from_fictrac(fields, self.n_frames, self.gain, self.offset)
         # behavior_v1 compact state (issue #140): the live scope + offline dashboard
         # recompute every derived channel from these. ft = col-22 timestamp
-        # (fields[21]) as relative ms rounded to 0.1 ms — NOT col-24 dt. x/y = lab
-        # integrated position (fields 14/15), hd = integrated heading (field 16),
-        # all rad at fixed 5-decimal precision (small frame-to-frame deltas survive).
+        # (fields[21]) as relative MILLISECONDS — NOT col-24 dt. col 22 is the
+        # camera hardware clock in ns, so subtract the first-frame value in native
+        # units (keeps the ~2e13 magnitude from losing precision) THEN scale to ms.
+        # x/y = lab integrated position (fields 14/15), hd = integrated heading
+        # (field 16), all rad at fixed 5-decimal precision.
         has_ft = len(fields) > 21
         if self.ft0 is None and has_ft:
             self.ft0 = fields[21]
-        ft_rel = round(fields[21] - self.ft0, 1) if (has_ft and self.ft0 is not None) else None
+        ft_rel = (
+            round((fields[21] - self.ft0) / FT_TS_NS_PER_MS, 3)
+            if (has_ft and self.ft0 is not None)
+            else None
+        )
         beh = {
             "ms": int(now_ms() - self.t0_ms),
             "fc": int(fields[0]),

@@ -4,6 +4,20 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.20 — 2026-07-07 · Scope velocities: fix FicTrac timestamp units (ns→ms)
+
+Testing the scope against a real recorded run (bench02, 2026-07-06) exposed a
+units bug in the behavior stream: FicTrac's col-22 timestamp is the camera's
+**nanosecond** hardware clock on our rigs, but the bridge treated it as
+milliseconds. That inflated the velocity time-base ~1,000,000×, so **turning /
+forward / side / speed collapsed to ≈0** on real data (heading, a position, was
+unaffected). The bridge now normalizes col-22 to milliseconds
+(`FT_TS_NS_PER_MS`), so `behavior_v1`'s `ft` is genuinely ms and the scope shows
+real velocities again (turning up to hundreds of °/s, forward in mm/s). Per-frame
+`ft` differencing is unchanged, so variable frame rates are still handled without
+any calibration. Fixes the same bug for the offline analysis dashboard, which
+shares the contract. (Bridge + `js/kinematics.js` docs; no UI change.)
+
 ## v0.19 — 2026-07-07 · Safe mode: view-everything, block-only-the-destructive
 
 Safe mode was a blunt whole-view lockout — Edit and Console were unreachable behind

@@ -12,7 +12,8 @@
  *     ms  bridge-relative ms since run start (integer)      — display/alignment axis
  *     fc  FicTrac frame counter (col 1)                     — drop detection / join key
  *     idx bridge/arena displayed frame index                — closed-loop diagnostics
- *     ft  FicTrac timestamp (col 22) as relative ms         — the derivative time base
+ *     ft  FicTrac col-22 timestamp as relative ms           — the derivative time base
+ *         (the bridge normalizes it to ms; col 22 is a ns hardware clock on our rigs)
  *     x   integrated lab-frame x position (rad)             \_ velocity by differencing
  *     y   integrated lab-frame y position (rad)             /  (NOT col 19 fwd/col 24 dt)
  *     hd  integrated heading (col 17, rad)                  — turning + heading channel
