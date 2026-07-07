@@ -2805,7 +2805,7 @@
 </div>
 
 <footer id="footer">
-  <span class="foot-left">Arena Studio v0.36 | 2026-07-07 19:33 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
+  <span class="foot-left">Arena Studio v0.37 | 2026-07-07 19:56 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
   <!-- Course-repo quick-links: open protocols / logs / patterns in a new tab.
        Hrefs built from the configured repo + bench id (updateGhQuickLinks). -->
   <span id="ghQuickLinks" title="Open the course repo on GitHub (new tab)">
@@ -3769,7 +3769,7 @@
             for (const c of ov.cond) { if (c.ms <= mt && (!best || c.ms > best.ms)) best = c; }
             if (!best) { if (tipEl) tipEl.style.display = 'none'; return; }
             if (!tipEl) { tipEl = document.createElement('div'); tipEl.className = 'scope-tip'; cwrap.appendChild(tipEl); }
-            tipEl.textContent = best.label;
+            tipEl.textContent = best.label + (best.dir ? '  ' + (best.dir > 0 ? '▶' : '◀') : '');
             tipEl.style.display = 'block';
             // keep the tip inside the wrap
             const maxLeft = cwrap.clientWidth - tipEl.offsetWidth - 4;
@@ -3804,6 +3804,17 @@
                 const nm = (s.step && (s.step.conditionName || s.step.label)) || 'step ' + ((s.index || 0) + 1);
                 ov.cond.push({ ms: t, label: nm });
                 if (visOpen) { visOpen.endMs = t; visOpen = null; } // close prior open visual span
+            } else if (s.phase === 'trial-running') {
+                // LIVE trialParams: open the "pattern displaying" visual span and tag
+                // the current trial's direction from the open-loop frame_rate SIGN
+                // (Mode 2). (The runlog-replay path emits phase:'command' op:'trialParams'
+                // instead — handled below — but carries no params, so no glyph there.)
+                const dur = typeof s.durationSec === 'number' ? s.durationSec : null;
+                visOpen = { startMs: t, endMs: dur != null ? t + dur * 1000 : null };
+                ov.visual.push(visOpen);
+                const fr = s.params && typeof s.params.frameRate === 'number' ? s.params.frameRate : 0;
+                const last = ov.cond[ov.cond.length - 1];
+                if (last) last.dir = fr > 0 ? 1 : fr < 0 ? -1 : 0; // 0 = no glyph (blank / closed-loop)
             } else if (s.phase === 'command') {
                 if (s.op === 'trialParams') {
                     const dur = typeof s.value === 'number' ? s.value : null; // durationSec
@@ -3964,6 +3975,22 @@
                 ctx.fillText(txt, left + 1, y);
                 laneRight[row] = left + tw;
             });
+            // ── DIRECTION GLYPHS: a large ►/◄ centered in each open-loop trial's span,
+            //    from the frame_rate sign — so ± variants read at a glance. Blanks /
+            //    closed-loop trials carry dir 0 and get none. Faint so it doesn't fight
+            //    the trace; drawn just under the label lane.
+            ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+            ctx.font = 'bold 17px monospace';
+            for (let k = 0; k < ov.cond.length; k++) {
+                const c = ov.cond[k];
+                if (!c.dir) continue;
+                const endMs = k + 1 < ov.cond.length ? ov.cond[k + 1].ms : t1;
+                if (endMs < t0 || c.ms > t1) continue;
+                const midX = (clipX(c.ms) + clipX(endMs)) / 2;
+                ctx.fillStyle = 'rgba(0,230,118,0.55)';
+                ctx.fillText(c.dir > 0 ? '▶' : '◀', midX, plotTop + 18);
+            }
+            ctx.textAlign = 'left';
             // ── x-axis time ticks (seconds relative to now) ───────────────────
             ctx.fillStyle = '#8b949e'; ctx.font = '11px monospace'; ctx.textAlign = 'center';
             const tickStep = cfg.spanS <= 10 ? 2 : cfg.spanS <= 30 ? 5 : cfg.spanS <= 60 ? 10 : cfg.spanS <= 120 ? 20 : 60;

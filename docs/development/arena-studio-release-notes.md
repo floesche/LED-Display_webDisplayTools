@@ -4,6 +4,17 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.37 — 2026-07-07 · Scope: per-trial direction glyph + live trial shading
+
+- **Direction glyph on the scope.** Open-loop trials now show a large ►/◄ centered in
+  their span, driven by the trial's `frame_rate` **sign** (Mode 2) — so ± variants read
+  at a glance without reading the name. Blanks and closed-loop trials show none. The
+  direction also appears in the hover tooltip.
+- **Live "pattern displaying" shading fixed.** The green trial-span underlay listened
+  for an event the runner only emits on log replay (`command`/`trialParams`); it now
+  also handles the live `trial-running` event, so the shading (and the new glyph)
+  appear during real FicTrac runs.
+
 ## v0.36 — 2026-07-07 · Scope: hover to reveal full trial name
 
 - **Hover the scope to reveal the full condition name** for whichever trial the cursor
