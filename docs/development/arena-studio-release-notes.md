@@ -4,6 +4,21 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.16 — 2026-07-07 · Full-width scope + behavior_v1 logging is the runner default
+
+- **The oscilloscope now spans the full width of the Run view** — edge to edge, matching
+  the metadata column's right edge — instead of only the left column. The Log shares the
+  same wider dock. (The dock moved to a full-width row below the two columns; it's still
+  drag-resizable.)
+- **Recorded runs log the compact `behavior_v1` frame by default.** The web runner now
+  *asserts* that level to the bridge when it starts logging, so every run is captured as the
+  compact `[ms, fc, idx, ft, x, y, hd]` row regardless of how `pixi run bridge` was launched
+  — the same data the scope and analysis dashboard use.
+- **Change the logging level per protocol via a FicTrac-plugin field.** The `fictrac` plugin
+  gains a **Frame logging** option — leave it on `behavior_v1` (compact, the default) or pick
+  **full 25-column** for a debug/archival run. It rides in the protocol YAML (`log_level:`)
+  and the bridge honors it for that run.
+
 ## v0.15 — 2026-07-07 · Live oscilloscope (watch the fly's behavior during a run)
 
 - **The Run-view dock now offers a live oscilloscope.** A `Log | Scope | —` switch in

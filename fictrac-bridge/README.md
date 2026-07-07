@@ -117,7 +117,9 @@ bridge → browser:  {"type":"frame", "index":<int>, "seq":<int>, "t":<ms>,
 browser → bridge:  {"type":"hello", "client":"arena_console", "v":1}   (on connect)
                    {"type":"config", "fictrac_port":<int>, "gain":<float>,
                                      "offset":<float>, "frames":<int>}  (any subset)
-                   {"type":"log_control", "enabled":<bool>}   (open the log file)
+                   {"type":"log_control", "enabled":<bool>, "level":"behavior_v1"|"full"}
+                                                              (open the log file; level
+                                                               picks the frame-row format)
                    {"type":"log", "event":<str>, ...arbitrary fields, "ms":<int>}
                    {"type":"log_export"}   (close the active log, stream it back whole)
 ```
@@ -140,8 +142,11 @@ active the bridge records:
   which can't recover elapsed time across a dropped frame), `x`/`y`/`hd` integrated
   position + heading (rad, 5-decimal). The live scope + offline dashboard recompute
   every derived channel (turning/forward/side/speed/dir) from this via
-  `js/kinematics.js`. `--log-frames` switches to the full 25-column record
-  (`{"type":"fictrac_frame", ..., "fictrac":[…25…]}`) for debug/archival.
+  `js/kinematics.js`. The **browser picks the level** per run via `log_control`'s
+  `level` (Arena Studio's runner asserts `behavior_v1`, overriding `--log-frames`;
+  a FicTrac plugin's `log_level: full` config opts a run into the full record) —
+  `--log-frames` only sets the launch default. `full` logs the whole 25-column
+  record (`{"type":"fictrac_frame", ..., "fictrac":[…25…]}`) for debug/archival.
 - inbound browser `log` messages (e.g. `{"event":"arena_command", ...}` for every
   Web Serial command, or Arena Studio's `{"event":"run_metadata", ...}` header
   line at recorded-run start), each stamped with `dir` and `rx_ms`.

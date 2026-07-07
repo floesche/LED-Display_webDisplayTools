@@ -16,7 +16,8 @@
  *                 {"type":"log_export_result","name":..,"content":..}  (or {"error":..})
  *   us → bridge:  {"type":"hello","client":...,"v":1}
  *                 {"type":"config","fictrac_port":..,"gain":..,"offset":..,"frames":..}
- *                 {"type":"log_control","enabled":<bool>}   (opens/closes the log file)
+ *                 {"type":"log_control","enabled":<bool>,"level":"behavior_v1"|"full"}
+ *                     (opens/closes the log file; level picks the frame-row format)
  *                 {"type":"log", ...}                        (an event to append)
  *                 {"type":"log_export"}                      (close + stream back the log)
  *
@@ -85,7 +86,16 @@
             this._lastBlockedMs = 0;
 
             // Bridge config (mirrors the console inputs). Sent on connect + on change.
-            this._config = { fictrac_port: 60000, gain: 1.8, offset: 0, frames: null };
+            // logLevel is the frame-logging level requested when logging starts
+            // ('behavior_v1' default | 'full'); the browser ASSERTS it so the runner
+            // logs behavior_v1 regardless of how the bridge process was launched.
+            this._config = {
+                fictrac_port: 60000,
+                gain: 1.8,
+                offset: 0,
+                frames: null,
+                logLevel: 'behavior_v1'
+            };
         }
 
         // ---- events ----------------------------------------------------------
@@ -165,7 +175,12 @@
                 this._emit('log', 'bridge: connected to ' + this._url, 'info');
                 this._send({ type: 'hello', client: 'webDisplayTools', v: 1 });
                 this.sendConfig();
-                if (this._logging) this._send({ type: 'log_control', enabled: true });
+                if (this._logging)
+                    this._send({
+                        type: 'log_control',
+                        enabled: true,
+                        level: this._config.logLevel
+                    });
                 this._startRateTimer();
                 this._emit('stats', this.stats);
             };
@@ -249,10 +264,22 @@
             if (changed) this._emit('apply', this._apply);
         }
 
-        /** Turn the bridge's session log file on/off (sends log_control). */
+        /**
+         * Select the frame-logging level for the NEXT log the bridge opens:
+         * 'behavior_v1' (compact, the runner default) or 'full' (25-column). Takes
+         * effect at the next setLogging(true) / reconnect (the bridge applies it
+         * when it opens a fresh file). Unknown values are ignored.
+         */
+        setLogLevel(level) {
+            if (level === 'behavior_v1' || level === 'full') this._config.logLevel = level;
+        }
+
+        /** Turn the bridge's session log file on/off (sends log_control + the level). */
         setLogging(on) {
             this._logging = !!on;
-            this._send({ type: 'log_control', enabled: this._logging });
+            const msg = { type: 'log_control', enabled: this._logging };
+            if (this._logging) msg.level = this._config.logLevel;
+            this._send(msg);
         }
 
         /** Append an event to the bridge log (only when logging is on + connected). */

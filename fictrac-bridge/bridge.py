@@ -27,7 +27,9 @@ WebSocket message schema (also documented in README.md):
   browser → bridge:  {"type":"hello", "client":"arena_console", "v":1}   (on connect)
                      {"type":"config", "fictrac_port":<int>, "gain":<float>,
                                        "offset":<float>, "frames":<int>}  (any subset)
-                     {"type":"log_control", "enabled":<bool>}   (open/close the log file)
+                     {"type":"log_control", "enabled":<bool>, "level":"behavior_v1"|"full"}
+                       (open/close the log file; level picks the frame-row format,
+                        overriding --log-frames — the runner asserts behavior_v1)
                      {"type":"log",   "event":<str>, ...arbitrary, "ms":<int>}
                      {"type":"log_export"}   (close the active log, stream it back whole)
 
@@ -183,6 +185,12 @@ class LogWriter:
     @property
     def active(self) -> bool:
         return self._fh is not None
+
+    def set_level(self, level: str) -> None:
+        """Select the frame-logging level for the NEXT log file (browser-driven,
+        overriding the --log-frames launch flag): 'full' = 25-column record,
+        anything else = the compact behavior_v1 array."""
+        self.log_frames = level == "full"
 
     def _open(self, name: str, event: str) -> None:
         self._fh = open(name, "a", buffering=1, encoding="utf-8")
@@ -469,6 +477,8 @@ def make_dispatcher(pipeline: Pipeline, log: LogWriter, inputs: InputManager):
             log.write_inbound(raw)
         elif kind == "log_control":
             if obj.get("enabled"):
+                if obj.get("level") in ("behavior_v1", "full"):
+                    log.set_level(obj["level"])  # browser asserts the level per run
                 pipeline.reset_base()  # zero behavior_v1 ms/ft at the run boundary
                 log.start_new_log()  # fresh timestamped file per activation
                 log.write_inbound(raw)

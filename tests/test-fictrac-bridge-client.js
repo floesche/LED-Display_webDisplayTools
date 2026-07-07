@@ -262,6 +262,30 @@ async function main() {
         client.disconnect();
     }
 
+    console.log('\n=== log level (behavior_v1 default / full override) ===');
+    {
+        const client = new FicTracBridgeClient({ WebSocketImpl: FakeWS });
+        client.connect('ws://localhost:8765');
+        const ws = FakeWS.last;
+        ws.open();
+        const lastEnable = () => ws.sent.filter((m) => m.type === 'log_control' && m.enabled).pop();
+        client.setLogging(true);
+        check('setLogging asserts default level behavior_v1', lastEnable().level, 'behavior_v1');
+        client.setLogLevel('full');
+        client.setLogging(true);
+        check('setLogLevel(full) → level full', lastEnable().level, 'full');
+        client.setLogLevel('bogus'); // ignored
+        client.setLogging(true);
+        check('unknown level ignored (stays full)', lastEnable().level, 'full');
+        client.setLogging(false);
+        const off = ws.sent[ws.sent.length - 1];
+        checkBool(
+            'disabling sends log_control without a level',
+            off.type === 'log_control' && off.enabled === false && off.level === undefined,
+            JSON.stringify(off)
+        );
+    }
+
     console.log('\n=== Summary ===');
     console.log(`${totalChecks - failures} / ${totalChecks} checks passed`);
     process.exit(failures === 0 ? 0 : 1);
