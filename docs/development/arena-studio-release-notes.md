@@ -4,6 +4,14 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.22 — 2026-07-07 · Run view opens on the Scope (≈⅓ screen); smaller Notes
+
+- The Run view now **opens with the oscilloscope** by default, sized to about a third
+  of the screen. (A one-time migration flips existing browsers to Scope once; a
+  deliberate Log choice is kept, and you can still collapse it.)
+- The **Notes** field in Run details is much shorter by default (it was ~⅓-screen tall) —
+  still resizable.
+
 ## v0.21 — 2026-07-07 · Scope colors: readable, saturated traces
 
 The turning trace (formerly light green) was invisible against the green trial

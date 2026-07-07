@@ -289,8 +289,8 @@
   .mp-field input,.mp-field select,.mp-field textarea{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:5px;padding:6px 8px;font-family:var(--mono);font-size:12px}
   .mp-field select{cursor:pointer}
   .mp-field textarea{resize:vertical;min-height:44px}
-  /* Notes: roomy by default (plenty of space on the Run screen); still resizable */
-  #mNotes{min-height:38vh}
+  /* Notes: compact by default (the Scope now takes the lower third); still resizable */
+  #mNotes{min-height:90px}
   .mp-field.invalid input,.mp-field.invalid select{border-color:var(--danger)}
   .mp-field .hint{font-size:10px;color:var(--danger);margin-top:3px;display:none}
   .mp-field.invalid .hint{display:block}
@@ -329,7 +329,10 @@
   body.dock-scope .dock-pane{display:none}          /* Scope active → hide the log pane */
   /* Scope needs vertical room for 3 stacked traces — taller default than the log
      (still user-resizable via the strip's drag handle). */
-  body.dock-scope .run-view .run-log-strip{min-height:260px;max-height:60vh}
+  /* Scope opens at ~1/3 screen. Pin the flex-basis (0 0 33vh) so the canvas's
+     intrinsic size can't inflate it to max-height; the drag-resizer's inline
+     height overrides this afterwards. */
+  body.dock-scope .run-view .run-log-strip{flex:0 0 33vh;min-height:0;max-height:60vh}
   body:not(.dock-scope) .dock-scope-pane{display:none}
   body.log-collapsed .dock-scope-pane{display:none} /* collapsed → hide both panes */
   body.dock-scope .dock-h .log-only{display:none}   /* log-only actions hidden in Scope */
@@ -2746,7 +2749,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.21 | 2026-07-07 12:27 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
+<footer id="footer">Arena Studio v0.22 | 2026-07-07 12:57 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -3836,10 +3839,18 @@
     Studio.setDockView = setDockView;
     document.querySelectorAll('#dockSeg button').forEach((b) => b.addEventListener('click', () => setDockView(b.dataset.dock)));
     (function initDockView() {
-        // Remembered dock view, else migrate the legacy runlog-collapsed flag.
+        // Default: open on the live Scope. A remembered choice wins — but because
+        // setDockView() auto-stores on every load, the first-ever load (before Scope
+        // was the default) already persisted 'collapsed'. So run a one-time migration
+        // (marker studio_dock_default_v) that re-applies 'scope' once, keeping only a
+        // deliberate 'log' choice.
         let v = localStorage.getItem('studio_dock_view');
+        if (localStorage.getItem('studio_dock_default_v') !== '2') {
+            localStorage.setItem('studio_dock_default_v', '2');
+            if (v !== 'log') v = 'scope';
+        }
         if (v !== 'log' && v !== 'scope' && v !== 'collapsed') {
-            v = localStorage.getItem('studio_runlog_collapsed') === '0' ? 'log' : 'collapsed';
+            v = 'scope'; // fresh browser → Scope
         }
         setDockView(v);
     })();
