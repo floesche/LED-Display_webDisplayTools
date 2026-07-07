@@ -4,6 +4,12 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.30 — 2026-07-07 · Course-repo quick-links moved into the footer
+
+- The **course repo ↗ protocols / logs / patterns** links moved from the fixed
+  bottom-left box (which overlapped the timeline preview) to the **right side of the
+  footer**, on the same row as the version / timestamp / GitHub link.
+
 ## v0.29 — 2026-07-07 · Metadata vocabs come from the connected course repo
 
 - **The connected course repo is now the source of truth for all metadata
