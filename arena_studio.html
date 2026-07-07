@@ -2804,7 +2804,7 @@
 </div>
 
 <footer id="footer">
-  <span class="foot-left">Arena Studio v0.33 | 2026-07-07 18:31 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
+  <span class="foot-left">Arena Studio v0.34 | 2026-07-07 18:42 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
   <!-- Course-repo quick-links: open protocols / logs / patterns in a new tab.
        Hrefs built from the configured repo + bench id (updateGhQuickLinks). -->
   <span id="ghQuickLinks" title="Open the course repo on GitHub (new tab)">
@@ -10962,10 +10962,16 @@ async function initFromUrl() {
             }
 
             const inputType = typeHint === 'number' ? 'number' : 'text';
+            // Strip IEEE float noise from the displayed value (e.g. a duration stored
+            // as 2.2199999999999998 shows as 2.22). toPrecision(12) drops the noise
+            // tail while preserving any genuine precision; parseFloat trims the zeros.
+            const showVal = typeof value === 'string'
+                ? value
+                : (Number.isFinite(Number(value)) ? String(parseFloat(Number(value).toPrecision(12))) : String(value));
             const input = el('input', {
                 type: inputType,
                 class: 'field-edit ' + (typeHint === 'number' ? 'num' : 'str'),
-                value: typeof value === 'string' ? value : String(value)
+                value: showVal
             });
             // Numeric range hints from the schema: enforce with native min/max/step,
             // surface the allowed range in the hover tooltip, and clamp on commit so

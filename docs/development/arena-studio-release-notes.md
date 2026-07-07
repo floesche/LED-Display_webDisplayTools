@@ -4,6 +4,16 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.34 — 2026-07-07 · Clean duration display (no float artifacts)
+
+- **Durations no longer show IEEE float noise.** A condition whose waits summed to,
+  say, `0.74 × 3` used to display as `2.2199999999999998 s` in the Run view; the
+  duration math now rounds to millisecond precision (→ `2.22 s`). This flows to the
+  Run chips, the finish estimate, and the Edit timeline (actual arena timing is
+  unchanged — it uses each command's own duration, not this display value).
+- **Editor number fields strip float noise too**, so a value stored with a long
+  floating tail (e.g. from another tool) shows cleanly in the inspector.
+
 ## v0.33 — 2026-07-07 · Readable scope overlay labels
 
 - **LED label is just the level** — the pink opto-stim box now reads `25%` instead of

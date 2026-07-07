@@ -311,6 +311,17 @@ async function main() {
     check('waits-only condition', Runner.conditionDuration(intertrialCond), 2);
     check('null condition -> 0', Runner.conditionDuration(null), 0);
     check(
+        'summed float waits round clean (no 2.21999… artifact)',
+        Runner.conditionDuration({
+            commands: [
+                { type: 'wait', duration: 0.74 },
+                { type: 'wait', duration: 0.74 },
+                { type: 'wait', duration: 0.74 }
+            ]
+        }),
+        2.22
+    );
+    check(
         'string durations coerce',
         Runner.conditionDuration({
             commands: [{ type: 'controller', command_name: 'trialParams', duration: '5' }]

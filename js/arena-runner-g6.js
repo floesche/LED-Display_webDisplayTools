@@ -200,7 +200,10 @@ var ArenaRunnerG6 = (function () {
      * The wall-clock duration of a condition, in seconds: max(trialParams.duration,
      * sum of wait durations). Mirrors the v3 designer's timeline math; pure so the
      * runner and the timeline preview share ONE definition. Number()-coerces to
-     * defend against string YAML scalars.
+     * defend against string YAML scalars. Rounded to ms precision so summed floats
+     * don't surface IEEE artifacts (0.74×3 = 2.2199999999999998 → 2.22) in the Run
+     * chips / estimate / timeline; the actual arena timing uses each command's own
+     * duration (not this), so the rounding is display/estimate-only.
      */
     function conditionDuration(cond) {
         if (!cond || !Array.isArray(cond.commands)) return 0;
@@ -212,7 +215,7 @@ var ArenaRunnerG6 = (function () {
             }
             if (c && c.type === 'wait') wait += Number(c.duration) || 0;
         }
-        return Math.max(tp, wait);
+        return Math.round(Math.max(tp, wait) * 1000) / 1000;
     }
 
     /**
