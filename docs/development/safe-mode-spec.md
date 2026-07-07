@@ -1,8 +1,26 @@
 # Safe Mode — Implementation Handoff Spec
 
-**Status:** ✅ IMPLEMENTED in Arena Studio v0.14 (2026-07-07). All locked decisions below
-are shipped; the open questions (§5) were resolved this session — see the resolutions note
-at the end of §5. This doc is kept as the design record.
+> **⚠ REVISED in v0.19 (2026-07-07).** The original v0.14 model below made safe mode a
+> **whole-view lockout** — Edit and Console were unreachable behind the password. On review
+> the PI clarified the intent: safe mode should **keep every view reachable and block only
+> destructive actions.** As shipped in v0.19:
+> - **Edit is READ-ONLY, not hidden** — students open and inspect any protocol; the §6
+>   `canMutate` chokepoint (now also requiring `Studio.advanced`) makes every edit a silent
+>   no-op.
+> - **Console is USABLE** — connect, query, run test trials, step frames, and drive the
+>   analog/digital outputs. Only destructive/config ops are greyed + refused
+>   (`SAFE_BLOCKED_CMDS` + `applyConsoleSafeGating`): pattern add/delete (`csdpurge`,
+>   `csdarchive`, `cloadfile`, `crawsend`, `cispcopy`), panel/firmware programming
+>   (`cispbatch`, `cfwpick`, `cfwflash`), controller settings (`setpanelmode`, `setrate`,
+>   `setspi`, `sysreset`).
+> - Bench setup (GitHub/repo/bench-id) stays visible-but-locked; the session rig stays
+>   hard-locked; the mode segments are ordinary view switches (unlock via the 🛡 chip).
+>
+> Sections 1–3 below are kept as the historical v0.14 record; where they say "Edit/Console
+> disabled/unreachable," read the v0.19 model above instead.
+
+**Status:** ✅ IMPLEMENTED in Arena Studio v0.14 (2026-07-07), **reworked in v0.19** (see the
+revision banner above). This doc is kept as the design record.
 **Owner:** Reiser Lab (CSHL course). **Target:** `arena_studio.html` (the primary tool).
 **Origin:** colleagues felt the full Studio is intimidating for students; the PI wants a
 locked-down default and a password-gated "advanced" mode for the second half of the course.
