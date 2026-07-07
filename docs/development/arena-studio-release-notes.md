@@ -4,6 +4,25 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.19 — 2026-07-07 · Safe mode: view-everything, block-only-the-destructive
+
+Safe mode was a blunt whole-view lockout — Edit and Console were unreachable behind
+a password. It's now the guardrail it was meant to be: **every view is reachable; only
+destructive actions are blocked.**
+
+- **Edit is read-only** in safe mode (not hidden). Students can open and inspect any
+  protocol; the §6 `canMutate` chokepoint turns every edit into a silent no-op, and a
+  one-line "viewing read-only" notice explains why.
+- **The Console is usable** — connect, query, run test trials, step frames, and drive
+  the analog/digital outputs all work. Only the destructive/config ops are greyed and
+  refused: pattern add/delete (SD purge/archive, load .pat/.bin, raw-hex send, ISP
+  copy), panel + firmware programming (ISP batch, firmware pick/flash), and controller
+  settings (panel mode, frame rate, SPI, system reset).
+- **Bench setup** (GitHub token / repo / bench-id) stays visible but its unlock padlock
+  is hidden, and the session-rig selector stays hard-locked — instructor-only, as before.
+- Unlock advanced mode from the **🛡 Safe mode** chip (soft password); the Edit/Console
+  tabs are now ordinary view switches.
+
 ## v0.18 — 2026-07-07 · Scope fixes: LED overlay on/off + working auto-Y
 
 - **The scope's LED band now reads the BuckPuck driver correctly.** The LED (BuckPuck)

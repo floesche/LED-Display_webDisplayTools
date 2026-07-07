@@ -156,8 +156,11 @@
   .gear .menu .sep{height:1px;background:var(--border);margin:4px 2px}
 
   /* ===== SAFE MODE (default student mode; advanced behind ?advanced=1 + a soft
-     password — see docs/development/safe-mode-spec.md). A gating/affordance
-     feature: it hides/disables existing surfaces, adds no run/edit capability.
+     password — see docs/development/safe-mode-spec.md). It keeps every VIEW
+     reachable — students can Run/Test, Open and VIEW a protocol read-only, and use
+     the Console non-destructively (query, test trials, step frames, drive analog/
+     digital outputs) — while GATING the destructive actions: protocol edits, the
+     destructive Console ops, panel/firmware programming, and bench/repo setup.
      Everything below keys off body.safemode (set by applyModeGating). ===== */
   /* The indicator must show even with NO protocol loaded, so these per-state
      reveal rules outrank the body:not(.hasproto) .chip hide (higher specificity):
@@ -167,14 +170,15 @@
   .chip.safemode-ind.adv-label{color:var(--accent);border-color:var(--accent);background:rgba(0,230,118,.08)}
   body.safemode .chip.safemode-ind.safe-label{display:inline-block}
   body:not(.safemode) .chip.safemode-ind.adv-label{display:inline-block}
-  /* Edit/Console segments: dimmed + padlocked in safe mode; a click prompts to
-     unlock (they are the discoverable unlock path alongside the indicator). */
-  body.safemode #modeSeg [data-mode="edit"],
-  body.safemode #modeSeg [data-mode="console"]{opacity:.42}
-  body.safemode #modeSeg [data-mode="edit"]::after,
-  body.safemode #modeSeg [data-mode="console"]::after{content:'🔒';font-size:.72em;margin-left:4px}
-  /* GitHub sign-in / repo / bench-id setup is instructor-only. */
-  body.safemode #ghBlock{display:none}
+  /* Destructive Console ops greyed in safe mode: applyConsoleSafeGating toggles
+     .safe-blocked on the buttons named in SAFE_BLOCKED_CMDS. Kept CLICKABLE so the
+     dispatcher can explain (banner) why nothing happens — the dispatcher gate is
+     the functional backstop. NOT the disabled attribute (that would fight the
+     connection-state enable/disable logic). */
+  .safe-blocked{opacity:.5;cursor:not-allowed}
+  /* Bench GitHub / repo / bench-id setup is instructor-only: the block stays
+     VISIBLE but its unlock padlock is hidden, so the kiosk lock can't be lifted. */
+  body.safemode #ghLock{display:none}
   /* Session-rig selector stays hard-locked (its unlock padlock is hidden). */
   body.safemode #sessionRigLock{display:none}
   /* Run-lock (STANDARD, all modes): while a run is active, the Edit/Console
@@ -2742,7 +2746,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.18 | 2026-07-07 09:23 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
+<footer id="footer">Arena Studio v0.19 | 2026-07-07 10:29 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -2794,7 +2798,13 @@
         activeRunLog: null,
         TOOL_VERSION: TOOL_VERSION
     };
-    Studio.canMutate = () => Meta.canMutate({ mode: Studio.mode, importMode: Studio.importMode });
+    // Safe mode makes Edit VIEW-ONLY: the §6 pushUndo chokepoint reads this, so a
+    // false here turns every protocol mutation into a silent no-op (the same lever
+    // import mode uses). `!!Studio.advanced` defaults undefined→false (it's set
+    // just below during load) — the safe default — and canMutate is only ever
+    // called on a mutation attempt, long after advanced is resolved.
+    Studio.canMutate = () =>
+        !!Studio.advanced && Meta.canMutate({ mode: Studio.mode, importMode: Studio.importMode });
     window.Studio = Studio;
 
     // ---- GitHub token + course-repo settings (CSHL pipeline) ------------------
@@ -3335,10 +3345,21 @@
     // guardrail against students wandering into destructive surfaces — NOT a
     // security boundary (all client-side). See docs/development/safe-mode-spec.md.
     const ADVANCED_DEFAULT_PW = 'reiser'; // built-in default; instructor overrides via studio_advanced_pw
-    // Destructive/config Console ops, blocked even if the Console view is somehow
-    // reached without advanced. Console is unreachable in safe mode (setMode
-    // refuses), so this dispatcher gate is the belt-and-suspenders second line.
-    const SAFE_BLOCKED_CMDS = new Set(['csdpurge', 'csdarchive', 'cfwpick', 'cfwflash', 'cispbatch']);
+    // Destructive/config Console ops disabled in safe mode. The Console VIEW is
+    // reachable by students (query/test/step-frames/drive outputs); only the ops
+    // that add or delete patterns, reprogram panels/firmware, or change controller
+    // config are gated. applyConsoleSafeGating() greys these; the dispatcher refuses
+    // them (banner). Kept OFF the list on purpose: the analog/digital output drives
+    // (caoset/cdoset/cdohigh/cdolow), display test (callon/calloff/ctrial/frame +
+    // stream), all queries, connect, and cispstop (an abort — always safe).
+    const SAFE_BLOCKED_CMDS = new Set([
+        // add / delete patterns (SD + on-arena writes)
+        'csdpurge', 'csdarchive', 'cloadfile', 'crawsend', 'cispcopy',
+        // program panels / firmware
+        'cispbatch', 'cfwpick', 'cfwflash',
+        // change controller / advanced settings
+        'setpanelmode', 'setrate', 'setspi', 'sysreset'
+    ]);
     Studio.advancedUrlRequested = false; // set true by initFromUrl on ?advanced=1
     function advancedPassword() {
         return (localStorage.getItem('studio_advanced_pw') || '').trim() || ADVANCED_DEFAULT_PW;
@@ -3359,8 +3380,20 @@
             if (rigSel) rigSel.disabled = true;
             if (rigLock) rigLock.textContent = '🔒';
         }
+        applyConsoleSafeGating();
     }
     Studio.applyModeGating = applyModeGating;
+    // Grey the destructive Console ops in safe mode (visual cue only — the
+    // dispatcher enforces). Buttons are static markup, so a class toggle sticks;
+    // .safe-blocked is separate from the connection-state `disabled` so the two
+    // don't fight. Advanced ⇒ clear the class everywhere.
+    function applyConsoleSafeGating() {
+        const safe = !Studio.advanced;
+        document.querySelectorAll('#consoleView [data-cmd]').forEach((b) => {
+            b.classList.toggle('safe-blocked', safe && SAFE_BLOCKED_CMDS.has(b.dataset.cmd));
+        });
+    }
+    Studio.applyConsoleSafeGating = applyConsoleSafeGating;
     // Prompt for the soft password; on match, grant + remember advanced. Returns
     // true iff advanced was granted. Called ONLY on explicit user intent (clicking
     // the indicator or a locked Edit/Console segment) — never from a programmatic
@@ -3391,7 +3424,7 @@
         applyModeGating();
         if (Studio.mode !== 'run') setMode('run'); // setMode emits the URL update
         else Studio.updateUrl({ push: false }); // already in Run → scrub advanced=1
-        showBanner('Safe mode — Edit, Console and setup are locked.');
+        showBanner('Safe mode — Edit is read-only, destructive Console ops and setup are locked.');
     }
     Studio.lockSafe = lockSafe;
     applyModeGating(); // set body.safemode from the remembered state, before first paint
@@ -3404,10 +3437,13 @@
             showBanner('A run is active — press STOP before leaving the Run view.');
             return;
         }
-        // Safe mode: Edit/Console are locked. Refuse SILENTLY here so a programmatic
-        // jump (a protocol load landing in Edit) just stays in Run with no prompt;
-        // the password prompt lives on the explicit click paths only.
-        if ((m === 'edit' || m === 'console') && !Studio.advanced) return;
+        // Safe mode keeps every VIEW reachable: Edit is read-only (the §6
+        // canMutate chokepoint blocks all mutations) and Console has its
+        // destructive ops greyed/refused. So we DON'T refuse the switch here —
+        // just surface the read-only state once when a student enters Edit.
+        if (m === 'edit' && !Studio.advanced) {
+            showBanner('Viewing read-only — unlock advanced mode (🛡 chip) to edit.');
+        }
         Studio.mode = m;
         document.body.classList.toggle('editmode', m === 'edit');
         document.body.classList.toggle('consolemode', m === 'console');
@@ -3860,16 +3896,9 @@
         $('fileMenu').classList.remove('open');
     });
     document.querySelectorAll('#modeSeg button').forEach((b) =>
-        b.addEventListener('click', () => {
-            const target = b.dataset.mode;
-            // Safe mode: a click on a locked Edit/Console segment is an explicit
-            // request to unlock — prompt, and switch only if the password matches.
-            if ((target === 'edit' || target === 'console') && !Studio.advanced) {
-                if (unlockAdvanced()) setMode(target);
-                return;
-            }
-            setMode(target);
-        })
+        // Every view is reachable in safe mode now (Edit read-only, Console gated),
+        // so a segment click just switches views; the unlock path is the 🛡 chip.
+        b.addEventListener('click', () => setMode(b.dataset.mode))
     );
     // Safe-mode indicator (unlock) + advanced indicator (re-lock).
     $('safeModeChip') && $('safeModeChip').addEventListener('click', () => unlockAdvanced());
@@ -4620,8 +4649,9 @@
         const btn = e.target.closest('[data-cmd]');
         if (!btn || btn.disabled) return;
         const cmd = btn.dataset.cmd;
-        // Safe-mode belt-and-suspenders: the Console view is unreachable in safe
-        // mode, but if it ever is reached, refuse the destructive/config ops.
+        // Safe mode: the Console view is reachable, but its destructive/config ops
+        // (pattern add/delete, panel+firmware programming, controller settings) are
+        // refused here — this is the functional gate behind the greyed buttons.
         if (!Studio.advanced && SAFE_BLOCKED_CMDS.has(cmd)) {
             e.preventDefault();
             showBanner('Locked in safe mode — unlock advanced mode (🛡 Safe mode chip) to use this.');
