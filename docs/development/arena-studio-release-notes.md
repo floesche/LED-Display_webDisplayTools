@@ -4,6 +4,14 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.21 — 2026-07-07 · Scope colors: readable, saturated traces
+
+The turning trace (formerly light green) was invisible against the green trial
+underlay. Traces are now saturated and distinct — **turning = bright blue,
+forward = bright red, heading = bright green** — and the overlays are backed off
+to faint underlays (the trial block is a very light green tint; the LED band is a
+light pink) so they never wash out the traces.
+
 ## v0.20 — 2026-07-07 · Scope velocities: fix FicTrac timestamp units (ns→ms)
 
 Testing the scope against a real recorded run (bench02, 2026-07-06) exposed a

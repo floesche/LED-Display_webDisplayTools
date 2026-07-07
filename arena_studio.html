@@ -2746,7 +2746,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.20 | 2026-07-07 11:09 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
+<footer id="footer">Arena Studio v0.21 | 2026-07-07 12:27 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -3552,9 +3552,9 @@
     const Scope = (function () {
         const Kin = window.Kinematics;
         const ROWS = [
-            { key: 'turning_deg_s', label: 'turning', unit: '°/s', color: '#00e676' },
-            { key: 'forward_mm_s', label: 'forward', unit: 'mm/s', color: '#4aa3ff' },
-            { key: 'heading_deg', label: 'heading', unit: '°', color: '#ffb300', fixed: [-180, 180], wrap: true }
+            { key: 'turning_deg_s', label: 'turning', unit: '°/s', color: '#1e90ff' }, // bright blue
+            { key: 'forward_mm_s', label: 'forward', unit: 'mm/s', color: '#ff2e2e' }, // bright red
+            { key: 'heading_deg', label: 'heading', unit: '°', color: '#22e84a', fixed: [-180, 180], wrap: true } // bright green
         ];
         let canvas = null, ctx = null, cwrap = null, cssW = 0, cssH = 0, dpr = 1;
         let raw = []; // behavior_v1 samples {ms, ft, x, y, hd, idx, fc}
@@ -3723,7 +3723,7 @@
                 const e = v.endMs != null ? v.endMs : t1;
                 if (e < t0 || v.startMs > t1) return;
                 const x0 = clipX(v.startMs), x1 = clipX(e);
-                ctx.fillStyle = 'rgba(0,230,118,0.10)';
+                ctx.fillStyle = 'rgba(0,230,118,0.045)'; // very light green underlay (trial span)
                 ctx.fillRect(x0, plotTop, Math.max(1, x1 - x0), plotH);
             });
             ROWS.forEach((row, i) => drawRow(row, series ? series[row.key] : null, plotTop + i * (rowH + gap), rowH, padL, plotW, xOf));
@@ -3746,7 +3746,7 @@
                 const e = l.endMs != null ? l.endMs : t1;
                 if (e < t0 || l.startMs > t1) return;
                 const x0 = clipX(l.startMs), x1 = clipX(e);
-                ctx.fillStyle = 'rgba(255,64,64,0.6)';
+                ctx.fillStyle = 'rgba(255,105,160,0.55)'; // light pink LED band
                 ctx.fillRect(x0, ledY, Math.max(1, x1 - x0), ledH - 2);
             });
             // x-axis time ticks (seconds relative to now)
