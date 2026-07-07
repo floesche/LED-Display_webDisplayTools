@@ -2804,7 +2804,7 @@
 </div>
 
 <footer id="footer">
-  <span class="foot-left">Arena Studio v0.34 | 2026-07-07 18:42 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
+  <span class="foot-left">Arena Studio v0.35 | 2026-07-07 19:15 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
   <!-- Course-repo quick-links: open protocols / logs / patterns in a new tab.
        Hrefs built from the configured repo + bench id (updateGhQuickLinks). -->
   <span id="ghQuickLinks" title="Open the course repo on GitHub (new tab)">
@@ -3842,7 +3842,7 @@
             const W = cssW, H = cssH;
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctx.clearRect(0, 0, W, H);
-            const padL = 52, padR = 8, padT = 30, xAxisH = 16;
+            const padL = 52, padR = 8, padT = 24, xAxisH = 16;
             const plotW = Math.max(10, W - padL - padR);
             const plotTop = padT, plotBottom = H - xAxisH, plotH = Math.max(30, plotBottom - plotTop);
             const gap = 6, rowH = (plotH - 2 * gap) / 3;
@@ -3914,9 +3914,10 @@
                 ctx.strokeStyle = 'rgba(255,255,255,0.92)';
                 ctx.beginPath(); ctx.moveTo(x, plotTop); ctx.lineTo(x, plotBottom); ctx.stroke();
             });
-            // labels in a separate pass so lines never draw over a backing box
-            ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-            const laneY = [plotTop - 18, plotTop - 5]; // two stacked rows above the plot
+            // labels in a separate pass so lines never draw over a backing box.
+            // Small, non-bold, dim: they annotate the trace without dominating it.
+            ctx.font = '9px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+            const laneY = [plotTop - 15, plotTop - 5]; // two stacked rows above the plot
             const laneRight = [-Infinity, -Infinity];  // right edge of last label per row
             ov.cond.forEach((c) => {
                 if (c.ms < t0 || c.ms > t1) return;
@@ -3932,8 +3933,8 @@
                 if (row < 0) return; // both rows busy here → skip (line still marks it)
                 const y = laneY[row];
                 ctx.fillStyle = 'rgba(15,20,25,0.82)';
-                ctx.fillRect(left - 1, y - 9, tw + 4, 12);
-                ctx.fillStyle = '#e6edf3';
+                ctx.fillRect(left - 1, y - 7, tw + 3, 9);
+                ctx.fillStyle = 'rgba(200,209,217,0.9)';
                 ctx.fillText(txt, left + 1, y);
                 laneRight[row] = left + tw;
             });
@@ -3984,8 +3985,10 @@
             ctx.fillText(fmt(hi), padL - 4, top + 10);
             ctx.fillText(fmt(lo), padL - 4, bottom - 2);
             const cur = pts ? lastFinite(pts) : null;
+            // Live value at the BOTTOM of the row — keeps the top of row 0 clear for
+            // the stim/LED overlay labels (they used to collide with "turning …").
             ctx.fillStyle = row.color; ctx.font = 'bold 13px monospace'; ctx.textAlign = 'left';
-            ctx.fillText(row.label + (cur != null ? '  ' + fmt(cur) + ' ' + row.unit : '  ' + row.unit), padL + 4, top + 10);
+            ctx.fillText(row.label + (cur != null ? '  ' + fmt(cur) + ' ' + row.unit : '  ' + row.unit), padL + 4, bottom - 4);
         }
         function loop() {
             if (!running) return;
