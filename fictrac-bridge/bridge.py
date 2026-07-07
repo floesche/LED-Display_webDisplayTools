@@ -89,6 +89,34 @@ def now_ms() -> int:
     return int(time.time() * 1000)
 
 
+def behavior_v1_row(fields: list[float], index: int, rel_ms: int, ft0: float | None) -> dict:
+    """Build one behavior_v1 record from a parsed FicTrac line. PURE (no clocks,
+    no I/O) so it is unit-testable offline — this is where the col-22 ns→ms
+    normalization that the live scope + offline dashboard depend on happens.
+
+    fields  parsed FicTrac record (>=17 cols; col 22 = fields[21] if present)
+    index   displayed frame index (from frame_index_from_fictrac)
+    rel_ms  ms since run start (caller computes now_ms()-t0; the display axis)
+    ft0     first-frame col-22 value in NATIVE units (ns), or None if unavailable
+
+    `ft` is relative MILLISECONDS: subtract ft0 in native units first (keeps the
+    ~2e13 magnitude from losing precision), THEN divide by FT_TS_NS_PER_MS.
+    """
+    has_ft = len(fields) > 21
+    ft_rel = (
+        round((fields[21] - ft0) / FT_TS_NS_PER_MS, 3) if (has_ft and ft0 is not None) else None
+    )
+    return {
+        "ms": int(rel_ms),
+        "fc": int(fields[0]),
+        "idx": index,
+        "ft": ft_rel,
+        "x": round(fields[14], 5),
+        "y": round(fields[15], 5),
+        "hd": round(fields[16], 5),
+    }
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Processing policy — THE part you customise.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -334,29 +362,12 @@ class Pipeline:
         self.parsed += 1
         index = frame_index_from_fictrac(fields, self.n_frames, self.gain, self.offset)
         # behavior_v1 compact state (issue #140): the live scope + offline dashboard
-        # recompute every derived channel from these. ft = col-22 timestamp
-        # (fields[21]) as relative MILLISECONDS — NOT col-24 dt. col 22 is the
-        # camera hardware clock in ns, so subtract the first-frame value in native
-        # units (keeps the ~2e13 magnitude from losing precision) THEN scale to ms.
-        # x/y = lab integrated position (fields 14/15), hd = integrated heading
-        # (field 16), all rad at fixed 5-decimal precision.
-        has_ft = len(fields) > 21
-        if self.ft0 is None and has_ft:
+        # recompute every derived channel from these. The ns→ms + column mapping
+        # lives in behavior_v1_row() (pure, offline-tested); the Pipeline only owns
+        # the stateful clocks (t0_ms wall base, ft0 first-frame col-22).
+        if self.ft0 is None and len(fields) > 21:
             self.ft0 = fields[21]
-        ft_rel = (
-            round((fields[21] - self.ft0) / FT_TS_NS_PER_MS, 3)
-            if (has_ft and self.ft0 is not None)
-            else None
-        )
-        beh = {
-            "ms": int(now_ms() - self.t0_ms),
-            "fc": int(fields[0]),
-            "idx": index,
-            "ft": ft_rel,
-            "x": round(fields[14], 5),
-            "y": round(fields[15], 5),
-            "hd": round(fields[16], 5),
-        }
+        beh = behavior_v1_row(fields, index, now_ms() - self.t0_ms, self.ft0)
         # Legacy index/seq/t kept alongside the behavior_v1 fields for back-compat.
         msg = {"type": "frame", "index": index, "seq": beh["fc"], "t": now_ms()}
         msg.update(beh)
