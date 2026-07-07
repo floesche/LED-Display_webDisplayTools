@@ -1949,6 +1949,7 @@
         <div class="gh-row"><label for="ghBenchId">Bench id</label><input type="text" id="ghBenchId" placeholder="e.g. bench03" title="Instructor-set bench identity — namespaces course-repo protocol saves (protocols/&lt;bench-id&gt;/) and run-log commits (runlogs/&lt;bench-id&gt;/); stored in this browser's localStorage"></div>
         <label class="gh-check"><input type="checkbox" id="ghPR" title="Save opens a branch + Pull Request on the target repo (review-gated — the default for reiserlab/webDisplayTools)"> Save as Pull Request</label>
         <label class="gh-check"><input type="checkbox" id="ghDirect" title="Save commits straight to the target repo's default branch — no branch, no PR. Course-repo mode: safe there because bench-id namespacing means no two rigs write the same file"> Commit directly to default branch</label>
+        <label class="gh-check"><input type="checkbox" id="ghArchivePatterns" title="Advanced: after each completed run, snapshot the SD card's patterns to pattern-sets/&lt;hash&gt;/patterns.zip in the repo (content-hash deduped) — redundancy for on-card edits. OFF by default: the SD bulk-download is still under investigation (it can disconnect the arena on large cards)."> Archive SD patterns to repo after each run <span class="dim">(advanced)</span></label>
         <div class="gh-dest" id="ghDest">→ writes a local .yaml file (sign in to GitHub to open a PR instead)</div>
       </div>
     </div>
@@ -2645,7 +2646,7 @@
   </div>
 </div>
 
-<footer id="footer">Arena Studio v0.12 | 2026-07-07 00:58 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
+<footer id="footer">Arena Studio v0.13 | 2026-07-07 01:28 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -2717,6 +2718,7 @@
         return {
             repo: m && !raw.includes('..') ? { owner: m[1], name: m[2], full: raw } : null,
             direct: localStorage.getItem('studio_gh_direct') === '1',
+            archivePatterns: localStorage.getItem('studio_archive_patterns') === '1',
             benchId: (localStorage.getItem('studio_bench_id') || '').trim()
         };
     };
@@ -2959,6 +2961,10 @@
         const GH = window.StudioGitHub;
         const session = Studio.session;
         if (!GH || !cs || !cs.repo || !token || !cs.benchId) return null;
+        // OFF by default — opt in via File ▾ → "Archive SD patterns…". The 0x8A bulk
+        // download can abort with a serial break + drop the arena connection on large
+        // cards (bench 2026-07-07), so it must never run unless deliberately enabled.
+        if (!cs.archivePatterns) return { skipped: 'archiving off (enable via File ▾ → Archive SD patterns)' };
         if (!session || !session.connected) return { skipped: 'arena disconnected' };
         if (!Wire || typeof Wire.encodeGetSdArchive !== 'function') return { skipped: 'firmware has no SD-archive command' };
         await Studio.quiesceDisplay(); // 0x8A requires the display stopped
@@ -6469,6 +6475,13 @@ function wireCourseSettings() {
         if (direct.checked && $('ghPR').checked) $('ghPR').checked = false;
         updateSaveLabel();
     });
+    const archive = $('ghArchivePatterns');
+    if (archive) {
+        archive.checked = localStorage.getItem('studio_archive_patterns') === '1';
+        archive.addEventListener('change', () => {
+            localStorage.setItem('studio_archive_patterns', archive.checked ? '1' : '0');
+        });
+    }
     bench.addEventListener('change', () => {
         const v = bench.value.trim();
         if (v) localStorage.setItem('studio_bench_id', v);

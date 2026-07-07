@@ -14,7 +14,9 @@ history lives here. Newest first. (Per-session engineering detail stays in
   exactly once. It's best-effort and needs the arena connected + a firmware build with the
   SD-archive command. **Known issue (bench, 2026-07-07):** on a large (~1.7 MB) card the
   `GET_SD_ARCHIVE` bulk download aborts with a serial "Break received" and drops the arena
-  connection — under investigation (see `docs/development/bench-testing-2026-07-08.md`).
+  connection — under investigation (see `docs/development/bench-testing-2026-07-08.md`). So the
+  auto-archive is **OFF by default**; opt in via File ▾ → "Archive SD patterns to repo after
+  each run" (an advanced course-pipeline checkbox) once the transfer is fixed.
 
 ## v0.11 — 2026-07-07 · Run log: paired two-color TX/RX lines
 

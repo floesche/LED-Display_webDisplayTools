@@ -29,9 +29,10 @@ read currently disconnects the arena, which in course mode would happen after *e
 still streaming on the serial link right after a closed-loop run; (d) a firmware-asserted
 serial BREAK mid-transfer that `ArenaLink` treats as a disconnect.
 
-**Merge state:** see the batch's final commit — the auto-pull was **[gated off / left as-is]**
-before merge (record which). The `snapshotPatternArchive` code path is otherwise complete
-(pull → SHA-256 → dedup `pattern-sets/<hash>/patterns.zip` → binary `directCommit`).
+**Merge state:** the auto-pull is **gated OFF by default** behind File ▾ → "Archive SD patterns
+to repo after each run" (`localStorage studio_archive_patterns`). To debug at the bench, tick
+that box, then run. The `snapshotPatternArchive` code path is otherwise complete (pull →
+SHA-256 → dedup `pattern-sets/<hash>/patterns.zip` → binary `directCommit`).
 
 ## 2. ledDrive — verify the % → voltage mapping with a scope (NOT yet tested)
 
