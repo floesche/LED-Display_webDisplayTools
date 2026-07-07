@@ -4,6 +4,17 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.28 — 2026-07-07 · Scope mode maximizes the canvas
+
+- **Scope controls (win / span / ball / auto-Y / clear) now ride the dock header
+  row** in Scope mode, and the **STOP / All-on / All-off** buttons hide there (they
+  live in the Console) — so the scope canvas gets the whole dock.
+- **The "waiting for FicTrac…" message is now large, centered on the scope** instead
+  of a small line in the controls; the live rate/samples status sits on the header
+  when data is flowing.
+- **LED intervals are labeled with the commanded power** (e.g. "LED 50%") at the top
+  of the pink box — the % rides from `ledDrive` through the run-status to the scope.
+
 ## v0.27 — 2026-07-07 · Course-repo quick-links (bottom corner)
 
 - A small **course repo ↗** widget in the bottom-left opens the configured repo's

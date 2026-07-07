@@ -337,8 +337,13 @@
   body:not(.dock-scope) .dock-scope-pane{display:none}
   body.log-collapsed .dock-scope-pane{display:none} /* collapsed → hide both panes */
   body.dock-scope .dock-h .log-only{display:none}   /* log-only actions hidden in Scope */
-  .dock-scope-pane{flex:1;min-height:0;display:flex;flex-direction:column;padding:6px 8px 4px}
-  .scope-ctrls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--dim);margin-bottom:4px}
+  /* Scope mode: controls ride the header row; the STOP/All-on/off actions hide to
+     keep it tidy (those live in the Console). Log mode: hide the scope controls. */
+  body.dock-scope .dock-h .acts{display:none}
+  body:not(.dock-scope) #scopeCtrls{display:none}
+  .dock-scope-pane{flex:1;min-height:0;display:flex;flex-direction:column;padding:0}
+  #scopeCtrls{margin-left:14px;flex:1 1 auto;text-transform:none;letter-spacing:normal}
+  .scope-ctrls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:11px;color:var(--dim)}
   .scope-ctrls label{display:flex;align-items:center;gap:4px}
   .scope-ctrls input[type=number]{width:52px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 4px;font-size:11px}
   .scope-ctrls select{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:2px 4px;font-size:11px}
@@ -2135,20 +2140,9 @@
             <button class="pill log-only" id="btnLogSave" title="Download the recorded run log (.json + .txt)" disabled>⬇ Save</button>
             <button class="pill log-only" id="btnLogPush" title="Push this run's log to the course repo (runlogs/&lt;bench-id&gt;/) — use after an auto-commit was skipped (aborted/disconnected) or failed. Needs the bridge still connected; it re-serves the last run until the next one." disabled>⇪ Push log</button>
           </span>
-        </div>
-        <div class="dock-pane">
-          <div class="runlog-head">
-            <span class="tag test" id="rlTag">—</span>
-            <span class="ctr" id="rlCtr">idle</span>
-          </div>
-          <div class="logbox" id="runlogBox"><span class="dim">No run yet. Click ▶ Run experiment to start a recorded run, or ▶ Test experiment to run un-recorded.</span></div>
-          <div class="runlog-saved" id="rlSaved"></div>
-        </div>
-        <!-- SCOPE PANE (oscilloscope-view-spec.md) — a live 3-channel scrolling
-             view of the fly's behavior; same channels/units the offline dashboard
-             plots. Read-only ⇒ fully permitted in safe mode. -->
-        <div class="dock-scope-pane" id="scopePane">
-          <div class="scope-ctrls">
+          <!-- Scope controls live ON the header row in scope mode (maximizes the
+               canvas); hidden in log mode. The .acts group is hidden in scope mode. -->
+          <div class="scope-ctrls" id="scopeCtrls">
             <label title="Smoothing window for the velocity traces (windowed least-squares slope, centered). Default 0.25 s.">win <input id="scopeWin" type="number" min="0.05" max="5" step="0.05" value="0.25"> s</label>
             <label title="Time span shown (the scrolling X range)">span
               <select id="scopeSpan">
@@ -2162,8 +2156,21 @@
             <label title="Fly-on-ball diameter (mm) — converts forward velocity to mm/s. Defaults to the rig's ball_diameter_mm, else 9 mm.">ball ⌀ <input id="scopeBallDia" type="number" min="1" max="50" step="0.5" value="9"> mm</label>
             <button class="pill on" id="scopeAutoY" title="Auto-scale each row's Y axis to its data">auto-Y</button>
             <button class="pill" id="scopeClear" title="Clear the scope buffer">clear</button>
-            <span class="scope-status" id="scopeStatus">waiting for FicTrac bridge…</span>
+            <span class="scope-status" id="scopeStatus"></span>
           </div>
+        </div>
+        <div class="dock-pane">
+          <div class="runlog-head">
+            <span class="tag test" id="rlTag">—</span>
+            <span class="ctr" id="rlCtr">idle</span>
+          </div>
+          <div class="logbox" id="runlogBox"><span class="dim">No run yet. Click ▶ Run experiment to start a recorded run, or ▶ Test experiment to run un-recorded.</span></div>
+          <div class="runlog-saved" id="rlSaved"></div>
+        </div>
+        <!-- SCOPE PANE (oscilloscope-view-spec.md) — a live 3-channel scrolling
+             view of the fly's behavior; same channels/units the offline dashboard
+             plots. Read-only ⇒ fully permitted in safe mode. -->
+        <div class="dock-scope-pane" id="scopePane">
           <div class="scope-canvas-wrap"><canvas id="scopeCanvas"></canvas></div>
         </div>
       </div>
@@ -2791,7 +2798,7 @@
   <a class="ql-link" id="qlPatterns" target="_blank" rel="noopener">patterns</a>
 </div>
 
-<footer id="footer">Arena Studio v0.27 | 2026-07-07 14:51 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
+<footer id="footer">Arena Studio v0.28 | 2026-07-07 15:01 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></footer>
 
 <!-- ============================================================ -->
 <!-- (1) CLASSIC SUBSTRATE — window globals, dodges ES-import gotcha -->
@@ -3705,7 +3712,10 @@
                     // also reads off. Threshold comes from the runner (one source).
                     const mv = typeof s.value === 'number' ? s.value : 0;
                     const on = mv > 0 && mv < LED_OFF_MV;
-                    if (on) { if (!ledOpen) { ledOpen = { startMs: t, endMs: null }; ov.led.push(ledOpen); } }
+                    // Label the box with the commanded power: ledDrive carries the %
+                    // (s.ledPercent); a raw setAnalogOut falls back to the mV.
+                    const label = typeof s.ledPercent === 'number' ? s.ledPercent + '%' : mv + ' mV';
+                    if (on) { if (!ledOpen) { ledOpen = { startMs: t, endMs: null, label: label }; ov.led.push(ledOpen); } }
                     else if (ledOpen) { ledOpen.endMs = t; ledOpen = null; }
                 }
             } else if (s.phase === 'sequence-complete' || s.phase === 'aborted') {
@@ -3763,14 +3773,27 @@
             const clipX = (ms) => Math.max(padL, Math.min(padL + plotW, xOf(ms)));
             const statusEl = document.getElementById('scopeStatus');
             const b = Studio.session && Studio.session.bridge;
+            // Header status shows the live rate/samples only when data is flowing;
+            // the "waiting" state is a big message drawn on the canvas (below).
+            const waitMsg = b && b.connected
+                ? 'waiting for FicTrac frames…'
+                : 'waiting for FicTrac bridge — Console → FicTrac';
             if (statusEl) {
                 statusEl.textContent = raw.length
                     ? 'FicTrac ' + ((b && b.stats && b.stats.rateHz) || 0) + ' Hz · ' + raw.length + ' samples · ⌀' + cfg.ballDiaMm + ' mm'
-                    : b && b.connected
-                        ? 'bridge up — waiting for FicTrac frames…'
-                        : 'waiting for FicTrac bridge (Console → FicTrac, then run closed-loop)';
+                    : '';
             }
-            const series = raw.length ? computeSeries(t0, t1) : null;
+            if (!raw.length) {
+                // No data yet: a large centered message ON the scope (per request).
+                ctx.fillStyle = 'rgba(139,148,158,0.85)';
+                ctx.font = 'bold 22px monospace';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(waitMsg, padL + plotW / 2, plotTop + plotH / 2);
+                ctx.textBaseline = 'alphabetic';
+                return; // nothing else to draw
+            }
+            const series = computeSeries(t0, t1);
             // ── UNDERLAYS (behind the data) ──────────────────────────────────
             // trial (pattern-displaying) span — very light green
             ov.visual.forEach((v) => {
@@ -3788,6 +3811,13 @@
                 const x0 = clipX(l.startMs), x1 = clipX(e);
                 ctx.fillStyle = 'rgba(255,64,140,0.15)';
                 ctx.fillRect(x0, plotTop, Math.max(1, x1 - x0), plotH);
+                // LED power/level label at the top of the box (e.g. "50%").
+                if (l.label) {
+                    ctx.fillStyle = 'rgba(255,120,170,0.95)';
+                    ctx.font = 'bold 11px monospace';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('LED ' + l.label, x0 + 3, plotTop + 11);
+                }
             });
             // ── DATA ROWS ────────────────────────────────────────────────────
             ROWS.forEach((row, i) => drawRow(row, series ? series[row.key] : null, plotTop + i * (rowH + gap), rowH, padL, plotW, xOf));

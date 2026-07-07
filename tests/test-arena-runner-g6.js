@@ -473,6 +473,13 @@ async function main() {
         Runner.translateCommand({ type: 'controller', command_name: 'ledDrive', percent: 100 }).mv <
             Runner.LED_OFF_MV
     );
+    // ledDrive carries the commanded % so the scope can label the LED box.
+    check(
+        'ledDrive 50% -> ledPercent passthrough',
+        Runner.translateCommand({ type: 'controller', command_name: 'ledDrive', percent: 50 })
+            .ledPercent,
+        50
+    );
     const trDO = Runner.translateCommand({
         type: 'controller',
         command_name: 'setDigitalOut',

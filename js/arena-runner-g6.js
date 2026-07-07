@@ -445,7 +445,9 @@ var ArenaRunnerG6 = (function () {
                             JSON.stringify(cmd.percent)
                     };
                 }
-                return { op: 'setAnalogOut', mv: ledPercentToMv(pct) };
+                // ledPercent rides along so the scope can label the LED box with
+                // the commanded % (the mv is the inverted BuckPuck control voltage).
+                return { op: 'setAnalogOut', mv: ledPercentToMv(pct), ledPercent: pct };
             }
             if (name === 'setDigitalOut') {
                 // G6-only: drive the "Digital IO 1/2 (5V)" BNCs (J3/J4) as TTL outputs
@@ -914,7 +916,14 @@ var ArenaRunnerG6 = (function () {
                     return;
                 case 'setAnalogOut':
                     await this._link.send(W.encodeSetAoVoltage(ir.mv));
-                    emit({ phase: 'command', index, step, op: ir.op, value: ir.mv });
+                    emit({
+                        phase: 'command',
+                        index,
+                        step,
+                        op: ir.op,
+                        value: ir.mv,
+                        ledPercent: ir.ledPercent
+                    });
                     return;
                 case 'setDigitalOut':
                     await this._link.send(W.encodeSetDigitalOut(ir.channel, ir.state));
