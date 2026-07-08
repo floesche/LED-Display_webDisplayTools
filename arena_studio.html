@@ -84,9 +84,13 @@
   .open-proto-btn{display:none}
   body:not(.editmode) #fileMenu .edit-only{display:none}
   .filemenu{position:relative}
-  .filemenu .menu{position:absolute;top:120%;right:0;background:var(--surface);border:1px solid var(--border);
+  /* Opens LEFT-ALIGNED (extends rightward) — File ▾ sits at the left end of the
+     top bar, so the old right:0 alignment pushed the menu off-screen left. The
+     open handler adds .flip-left (right-align) only if it would overflow. */
+  .filemenu .menu{position:absolute;top:120%;left:0;background:var(--surface);border:1px solid var(--border);
         border-radius:7px;min-width:288px;padding:4px;display:none;z-index:60;box-shadow:0 8px 22px rgba(0,0,0,.55)}
   .filemenu.open .menu{display:block}
+  .filemenu .menu.flip-left{left:auto;right:0}
   .filemenu .menu button{display:block;width:100%;text-align:left;background:transparent;border:0;color:var(--text);padding:7px 10px;border-radius:5px;font-size:12px}
   .filemenu .menu button:hover{background:var(--surface2)}
   .filemenu .menu .sep{height:1px;background:var(--border);margin:4px 2px}
@@ -2810,7 +2814,7 @@
 </div>
 
 <footer id="footer">
-  <span class="foot-left">Arena Studio v0.41 | 2026-07-08 07:17 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
+  <span class="foot-left">Arena Studio v0.42 | 2026-07-08 11:49 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
   <!-- Course-repo quick-links: open protocols / logs / patterns in a new tab.
        Hrefs built from the configured repo + bench id (updateGhQuickLinks). -->
   <span id="ghQuickLinks" title="Open the course repo on GitHub (new tab)">
@@ -4191,7 +4195,21 @@
     // (the ⚙ gear menu is gone — its links became the always-visible
     // "Pattern Designer ↗" + "Other tools"; legacy tools live on the index)
     $('connectBtn').addEventListener('click', toggleConnect);
-    $('fileMenuBtn').addEventListener('click', (e) => { e.stopPropagation(); $('fileMenu').classList.toggle('open'); });
+    $('fileMenuBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        const fm = $('fileMenu');
+        fm.classList.toggle('open');
+        // Smart alignment: default opens rightward (left-aligned to the button);
+        // flip to right-aligned only if that would run past the viewport edge.
+        if (fm.classList.contains('open')) {
+            const menu = fm.querySelector('.menu');
+            menu.classList.remove('flip-left');
+            const r = menu.getBoundingClientRect();
+            if (r.right > window.innerWidth - 8 && r.width < fm.getBoundingClientRect().right) {
+                menu.classList.add('flip-left');
+            }
+        }
+    });
     document.addEventListener('click', (e) => {
         // Close only on a click OUTSIDE the menu — clicks on its own controls (the
         // Run-logging <select>, checkboxes, inputs) must NOT close it. Explicit

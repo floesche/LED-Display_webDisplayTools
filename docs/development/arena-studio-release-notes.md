@@ -4,6 +4,13 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.42 — 2026-07-08 · File ▾ menu opens on-screen
+
+- **The File ▾ dropdown now opens to the right of the button** (it kept its old
+  right-side alignment from when File lived at the other end of the top bar, so it
+  slid off the left edge of the screen). If a future layout ever puts it where
+  opening rightward would overflow, it flips back automatically.
+
 ## v0.41 — 2026-07-08 · Per-trial brightness (duty) in protocols + Run view
 
 - **`duty` is now a first-class protocol field.** A `trialParams` command can carry
