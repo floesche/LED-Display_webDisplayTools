@@ -3502,6 +3502,10 @@
         // change controller / advanced settings
         'setpanelmode', 'setrate', 'setspi', 'sysreset'
     ]);
+    // Exposed on Studio for the ConsoleView dispatcher (separate IIFE/script) —
+    // referencing the bare const there threw a ReferenceError, which killed EVERY
+    // console button in safe mode (the && short-circuit hid it in advanced mode).
+    Studio.safeBlockedCmds = SAFE_BLOCKED_CMDS;
     Studio.advancedUrlRequested = false; // set true by initFromUrl on ?advanced=1
     function advancedPassword() {
         return (localStorage.getItem('studio_advanced_pw') || '').trim() || ADVANCED_DEFAULT_PW;
@@ -4968,9 +4972,9 @@
         // Safe mode: the Console view is reachable, but its destructive/config ops
         // (pattern add/delete, panel+firmware programming, controller settings) are
         // refused here — this is the functional gate behind the greyed buttons.
-        if (!Studio.advanced && SAFE_BLOCKED_CMDS.has(cmd)) {
+        if (!Studio.advanced && Studio.safeBlockedCmds && Studio.safeBlockedCmds.has(cmd)) {
             e.preventDefault();
-            showBanner('Locked in safe mode — unlock advanced mode (🛡 Safe mode chip) to use this.');
+            Studio.showBanner('Locked in safe mode — unlock advanced mode (🛡 Safe mode chip) to use this.');
             return;
         }
         if (handlers[cmd]) { e.preventDefault(); handlers[cmd](e); }

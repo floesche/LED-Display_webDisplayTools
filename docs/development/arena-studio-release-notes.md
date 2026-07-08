@@ -18,6 +18,12 @@ history lives here. Newest first. (Per-session engineering detail stays in
 - **Full trial provenance in the console log** — the TRIAL_PARAMS log line now records
   rate, start frame, gain, duration, and duty (when sent), so a bench session's log
   is a complete record of what each trial actually ran with.
+- **Fixed: Console buttons were dead in safe mode.** The console's click dispatcher
+  referenced two helpers (`SAFE_BLOCKED_CMDS`, `showBanner`) that live in a different
+  script scope, so in safe mode (the student default) every console button threw a
+  silent ReferenceError instead of working — advanced-mode machines never saw it.
+  Blocked ops now show the "Locked in safe mode" banner again and everything else
+  dispatches normally.
 
 ## v0.39 — 2026-07-08 · Scope opens bigger, dead gap trimmed
 
