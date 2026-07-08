@@ -4,6 +4,27 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.53 — 2026-07-08 · Repo open/save clarity, non-linear sound, test-mode scope
+
+- **Open-from-repo is now grouped by source.** The picker (File ▾ → Open from Repo…)
+  shows two clearly-titled sections — **This bench — `<id>` (rig-specific)** first,
+  then a divider and **Shared protocols (class-wide)** — instead of one flat gray
+  list. A protocol that exists in both is flagged (`⚠ also on your bench`), and empty
+  sections say so. The window title reads **"Open protocol — choose a source"**.
+- **Save no longer silently forks a shared protocol onto your bench.** If you open a
+  **shared** protocol and hit Save, you now get an explicit confirm that a
+  bench-specific copy is being made (the shared copy is left untouched) — with the
+  option to pick a different name. Same-name overwrites in your own bench already
+  prompted; this closes the one remaining silent-copy path.
+- **Non-linear sound response.** The ▾ sound popover gains **Pitch curve** and **Vol
+  curve** dropdowns — linear, **log** (low-end emphasis), **exp** (high-end emphasis),
+  or **squared** — shaping how behavior maps to pitch and volume.
+- **The oscilloscope now runs during Test experiment** (and single-condition tests):
+  starting a run or test switches the dock to the live scope so you can watch trial
+  parsing, annotations, and the LED indicator go by.
+- **CLOSED LOOP marker.** When a closed-loop trial (Mode 3/4) starts, a bright-green
+  **CLOSED LOOP** tag appears at the top of the heading row of the scope.
+
 ## v0.52 — 2026-07-08 · Sonification: editable pitch frequency range
 
 - **The tone's frequency range is now editable** in the ▾ popover — a **Freq lo → hi

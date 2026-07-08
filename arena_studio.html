@@ -142,6 +142,10 @@
   .rlup-msg.err{color:var(--danger)}
   .rlup-box button{margin-top:14px}
   .picker-item .sub{font-size:10.5px;color:var(--dim)}
+  /* grouped-source picker: clear titled sections (bench-specific vs shared) instead of one flat gray list */
+  .picker-group{padding:9px 10px 3px;font-family:var(--head);font-weight:700;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--accent);border-top:1px solid var(--border);margin-top:5px}
+  .picker-group:first-child{border-top:0;margin-top:0}
+  .picker-note{padding:3px 10px 8px;font-size:11px;color:var(--dim);font-style:italic}
   .picker-foot{padding:8px 12px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;justify-content:flex-end}
   .picker-foot .foot-count{margin-right:auto;color:var(--dim);font-size:11px}
   .pill.primary{background:var(--accent);color:#06210f;border-color:var(--accent);font-weight:700}
@@ -2844,7 +2848,7 @@
 </div>
 
 <footer id="footer">
-  <span class="foot-left">Arena Studio v0.52 | 2026-07-08 18:03 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
+  <span class="foot-left">Arena Studio v0.53 | 2026-07-08 19:26 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
   <!-- Course-repo quick-links: open protocols / logs / patterns in a new tab.
        Hrefs built from the configured repo + bench id (updateGhQuickLinks). -->
   <span id="ghQuickLinks" title="Open the course repo on GitHub (new tab)">
@@ -3796,7 +3800,23 @@
         // overall speed. pitchSigned flips the tone to signed turning (an option).
         const SND_DEF = { on: false, pitchSrc: 'turning_deg_s', pitchSigned: false, pitchMin: 0, pitchMax: 200,
             volSrc: 'speed', volMin: 0, volMax: 200, wave: 'triangle', scale: 'pentatonic', master: 0.6,
-            fLo: SND_FLO, fHi: SND_FHI }; // output pitch range (Hz), editable in the popover
+            fLo: SND_FLO, fHi: SND_FHI, // output pitch range (Hz), editable in the popover
+            pitchCurve: 'linear', volCurve: 'linear' }; // response shape behavior→output (see applyCurve)
+        // Response curve applied to the normalized [0,1] fraction BEFORE it maps to
+        // output pitch/volume — so the behavior→sound mapping need not be linear.
+        // All keep 0→0 and 1→1: log = low-end emphasis (small changes near rest are
+        // audible), exp = high-end emphasis, squared = strong high-end emphasis.
+        function applyCurve(x, mode) {
+            if (!(x > 0)) return 0;
+            if (!(x < 1)) return 1;
+            switch (mode) {
+                case 'log': return Math.log1p(x * (Math.E - 1));
+                case 'exp': return (Math.exp(x) - 1) / (Math.E - 1);
+                case 'squared': return x * x;
+                default: return x; // linear
+            }
+        }
+        const SND_CURVES = [['linear', 'linear'], ['log', 'log (low)'], ['exp', 'exp (high)'], ['squared', 'squared']];
         // Natural value range of a behavioral channel, tied to the scope's fixed axis
         // limits — so the sound spans exactly the metric's low→high (absolute channels
         // start at 0; signed spans ±limit). Drives the default pitch/volume min/max and
@@ -3959,7 +3979,8 @@
                 let v = channelVal(snd.pitchSrc);
                 if (!snd.pitchSigned && isFinite(v)) v = Math.abs(v);
                 const span = (snd.pitchMax - snd.pitchMin) || 1;
-                const n = isFinite(v) ? Math.max(0, Math.min(1, (v - snd.pitchMin) / span)) : (snd.pitchSigned ? 0.5 : 0);
+                const n0 = isFinite(v) ? Math.max(0, Math.min(1, (v - snd.pitchMin) / span)) : (snd.pitchSigned ? 0.5 : 0);
+                const n = applyCurve(n0, snd.pitchCurve);
                 let freq;
                 if (snd.scale === 'continuous' || !sndNotes) {
                     const flo = snd.fLo || SND_FLO, fhi = snd.fHi || SND_FHI;
@@ -3973,6 +3994,7 @@
                 const v = Math.abs(channelVal(snd.volSrc));
                 const span = (snd.volMax - snd.volMin) || 1;
                 a = isFinite(v) ? Math.max(0, Math.min(1, (v - snd.volMin) / span)) : 0;
+                a = applyCurve(a, snd.volCurve);
             }
             const master = snd.master == null ? 0.6 : snd.master;
             const vol = SND_MAX_GAIN * master * (SND_VOL_FLOOR + (1 - SND_VOL_FLOOR) * a);
@@ -3996,15 +4018,19 @@
             const pSignedLbl = document.createElement('label'); pSignedLbl.style.flex = '0 0 auto'; pSignedLbl.title = 'On: tone follows SIGNED turning (direction). Off (default): tone follows turning SPEED (|value|).';
             pSignedLbl.appendChild(pSigned); pSignedLbl.appendChild(document.createTextNode(' signed'));
             const vSel = mkSel(VOL_CH, snd.volSrc), vMin = mkNum(snd.volMin), vMax = mkNum(snd.volMax);
+            const pCurve = mkSel(SND_CURVES, snd.pitchCurve || 'linear');
+            const vCurve = mkSel(SND_CURVES, snd.volCurve || 'linear');
             const fLo = mkNum(snd.fLo), fHi = mkNum(snd.fHi);
             const wSel = mkSel([['triangle', 'triangle'], ['sine', 'sine'], ['square', 'square'], ['sawtooth', 'saw']], snd.wave);
             const scSel = mkSel([['pentatonic', 'pentatonic'], ['chromatic', 'chromatic'], ['continuous', 'continuous']], snd.scale);
             const mv = document.createElement('input'); mv.type = 'range'; mv.min = '0'; mv.max = '1'; mv.step = '0.05'; mv.value = snd.master;
             m.appendChild(row(lbl('Pitch'), pSel, pSignedLbl));
             m.appendChild(row(dim('range'), pMin, dim('to'), pMax));
+            m.appendChild(row(lbl('Pitch curve'), pCurve));
             m.appendChild(row(lbl('Freq'), fLo, dim('to'), fHi, dim('Hz')));
             m.appendChild(row(lbl('Volume'), vSel));
             m.appendChild(row(dim('range'), vMin, dim('to'), vMax));
+            m.appendChild(row(lbl('Vol curve'), vCurve));
             m.appendChild(row(lbl('Wave'), wSel));
             m.appendChild(row(lbl('Notes'), scSel));
             m.appendChild(row(lbl('Vol %'), mv));
@@ -4014,6 +4040,7 @@
                 snd.fLo = parseFloat(fLo.value); snd.fHi = parseFloat(fHi.value);
                 snd.volSrc = vSel.value; snd.volMin = parseFloat(vMin.value); snd.volMax = parseFloat(vMax.value);
                 snd.wave = wSel.value; snd.scale = scSel.value; snd.master = parseFloat(mv.value);
+                snd.pitchCurve = pCurve.value; snd.volCurve = vCurve.value;
                 if (osc) osc.type = snd.wave;
                 rebuildNotes(); saveSnd();
             };
@@ -4024,7 +4051,7 @@
             pSel.addEventListener('change', syncPitchRange);
             pSigned.addEventListener('change', syncPitchRange);
             vSel.addEventListener('change', syncVolRange);
-            [pMin, pMax, fLo, fHi, vMin, vMax, wSel, scSel, mv].forEach((el) => el.addEventListener('change', commit));
+            [pMin, pMax, fLo, fHi, vMin, vMax, wSel, scSel, mv, pCurve, vCurve].forEach((el) => el.addEventListener('change', commit));
             mv.addEventListener('input', commit);
             m.addEventListener('click', (e) => e.stopPropagation()); // keep clicks inside from closing
             document.body.appendChild(m);
@@ -4115,8 +4142,12 @@
                 visOpen = { startMs: t, endMs: dur != null ? t + dur * 1000 : null };
                 ov.visual.push(visOpen);
                 const fr = s.params && typeof s.params.frameRate === 'number' ? s.params.frameRate : 0;
+                const md = s.params && typeof s.params.mode === 'number' ? s.params.mode : 0;
                 const last = ov.cond[ov.cond.length - 1];
-                if (last) last.dir = fr > 0 ? 1 : fr < 0 ? -1 : 0; // 0 = no glyph (blank / closed-loop)
+                if (last) {
+                    last.dir = fr > 0 ? 1 : fr < 0 ? -1 : 0; // 0 = no glyph (blank / closed-loop)
+                    last.closedLoop = md === 3 || md === 4; // Mode 3 (FicTrac) / 4 (analog) = closed loop
+                }
             } else if (s.phase === 'command') {
                 if (s.op === 'trialParams') {
                     const dur = typeof s.value === 'number' ? s.value : null; // durationSec
@@ -4292,6 +4323,24 @@
                 const midX = (clipX(c.ms) + clipX(endMs)) / 2;
                 ctx.fillStyle = 'rgba(0,230,118,0.55)';
                 ctx.fillText(c.dir > 0 ? '▶' : '◀', midX, plotTop + 18);
+            }
+            // ── CLOSED LOOP tag: bright green, at the TOP of the heading row (row 2) —
+            //    where closed-loop control is most interesting to watch. Shown for the
+            //    span of each closed-loop trial (Mode 3/4). Backing box like the LED label.
+            const headTop = plotTop + 2 * (rowH + gap);
+            ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.font = 'bold 10px monospace';
+            for (let k = 0; k < ov.cond.length; k++) {
+                const c = ov.cond[k];
+                if (!c.closedLoop) continue;
+                const endMs = k + 1 < ov.cond.length ? ov.cond[k + 1].ms : t1;
+                if (endMs < t0 || c.ms > t1) continue;
+                const x0 = clipX(c.ms);
+                const txt = 'CLOSED LOOP';
+                const tw = ctx.measureText(txt).width;
+                ctx.fillStyle = 'rgba(15,20,25,0.82)';
+                ctx.fillRect(x0 + 2, headTop + 3, tw + 6, 13);
+                ctx.fillStyle = '#00e676';
+                ctx.fillText(txt, x0 + 5, headTop + 13);
             }
             ctx.textAlign = 'left';
             // ── x-axis time ticks (seconds relative to now) ───────────────────
@@ -7240,6 +7289,9 @@ Studio.beginRun = async function (isExperiment) {
     const conditionsByName = new Map((exp.conditions || []).map((c) => [c.name, c]));
     startRunLog(isExperiment);
     document.body.classList.toggle('testing', !isExperiment);
+    // Surface the live scope for BOTH run and test — the whole point of a test is
+    // to watch the trial parsing / annotations / LED + closed-loop markers go by.
+    if (Studio.setDockView) Studio.setDockView('scope');
     // Estimated total = sum of step durations PLUS per-command serial overhead
     // (host-timed); the timer ticks wall-time since now. conditionDuration alone
     // undercounts — every wire command costs a serial round-trip the display time
@@ -7275,6 +7327,7 @@ Studio.runCondition = async function (name) {
     const conditionsByName = new Map([[name, cond]]);
     startRunLog(false); // per-condition test is never recorded
     document.body.classList.add('testing');
+    if (Studio.setDockView) Studio.setDockView('scope');
     if (Studio.startRunTimer) Studio.startRunTimer(RunnerLib.conditionDuration(cond) || 0);
     await runSteps(steps, conditionsByName, doc.experiment, false);
 };
@@ -7591,7 +7644,27 @@ async function resolveRepoSaveTarget(cs, doc, token) {
             const chk = await GH.run(fetch, GH.reqGetContents(cs.repo.owner, cs.repo.name, path, null, token));
             exists = !!(chk && chk.ok && chk.data && chk.data.sha);
         } catch (_) { exists = false; }
-        if (!exists) { doc.filename = base + '.yaml'; return path; } // new file — no prompt
+        if (!exists) {
+            // Silent-fork guard: opening a SHARED protocol and hitting Save writes a
+            // NEW bench-specific copy (Save always targets protocols/<bench>/). Never
+            // do that silently — duplicating a shared doc onto the bench must be an
+            // explicit choice, or a student "just saves" and unknowingly forks it.
+            const fromShared = !!(doc.repoRef && doc.repoRef.repo === cs.repo.full &&
+                /^protocols\/shared\//i.test(doc.repoRef.path || ''));
+            if (fromShared) {
+                if (!confirm(
+                    'You opened a SHARED protocol:\n  ' + doc.repoRef.path + '\n\n' +
+                    'Save makes a bench-specific copy at:\n  ' + path + '\n\n' +
+                    'The shared copy is left unchanged.\nOK = save your bench copy · Cancel = pick a different name.'
+                )) {
+                    const nn = prompt('New .yaml filename for your bench copy:', base + '.yaml');
+                    if (!nn || !nn.trim()) return null;
+                    base = nn.trim().replace(/\.ya?ml$/i, '');
+                    continue;
+                }
+            }
+            doc.filename = base + '.yaml'; return path; // new bench file
+        }
         // Existing file → always confirm the overwrite. The message distinguishes
         // "the file you opened" from "a different file", but BOTH require a yes.
         const own = !!(doc.repoRef && doc.repoRef.repo === cs.repo.full && doc.repoRef.path === path);
@@ -7926,6 +7999,23 @@ function showPicker(title, items, onPick) {
         list.innerHTML = '<div class="dim" style="padding:8px">Nothing found.</div>';
     }
     items.forEach((it) => {
+        // Pseudo-rows for grouped sources: a titled section header or an empty-state
+        // note. Lets callers cluster (e.g. bench-specific vs shared) under clear
+        // headers instead of one flat gray list. Flat callers just omit these.
+        if (it.header) {
+            const h = document.createElement('div');
+            h.className = 'picker-group';
+            h.textContent = it.header;
+            list.appendChild(h);
+            return;
+        }
+        if (it.note) {
+            const n = document.createElement('div');
+            n.className = 'picker-note';
+            n.textContent = it.note;
+            list.appendChild(n);
+            return;
+        }
         const b = document.createElement('button');
         b.className = 'picker-item';
         b.title = it.tooltip || 'Open ' + it.label;
@@ -8053,21 +8143,36 @@ $('fmOpenCourse').addEventListener('click', async () => {
     const token = ghToken();
     if (!cs.repo) { Studio.showBanner('Set the course repo (owner/name) in File ▾ first.'); return; }
     if (!token) { Studio.showBanner('Sign in to GitHub first.'); return; }
-    const dirs = [];
-    if (cs.benchId) dirs.push('protocols/' + cs.benchId);
-    dirs.push('protocols/shared');
-    const items = [];
-    for (const dir of dirs) {
+    // Two sources, kept clearly separate: THIS bench's own saves (rig-specific)
+    // first, then the class-wide SHARED protocols. Grouped under titled headers
+    // with a divider — not one flat gray list — so which is which is obvious and
+    // a same-named file appearing in both is flagged instead of a silent duplicate.
+    const fetchDir = async (dir) => {
         try {
             const res = await GH.run(fetch, GH.reqGetContents(cs.repo.owner, cs.repo.name, dir, null, token));
             if (res.ok && Array.isArray(res.data)) {
-                res.data
+                return res.data
                     .filter((f) => f && f.type === 'file' && /\.ya?ml$/i.test(f.name))
-                    .forEach((f) => items.push({ label: f.name, sub: dir + '/', value: f.path }));
+                    .map((f) => ({ label: f.name, value: f.path }));
             }
         } catch (_) { /* 404 before the first save is normal */ }
+        return [];
+    };
+    const benchItems = cs.benchId ? await fetchDir('protocols/' + cs.benchId) : [];
+    const sharedItems = await fetchDir('protocols/shared');
+    const benchNames = new Set(benchItems.map((i) => i.label.toLowerCase()));
+    const items = [];
+    if (cs.benchId) {
+        items.push({ header: 'This bench — ' + cs.benchId + ' (rig-specific)' });
+        if (benchItems.length) items.push(...benchItems);
+        else items.push({ note: 'No protocols saved to this bench yet.' });
     }
-    showPicker('Open from course repo (' + cs.repo.full + ')', items, (path) =>
+    items.push({ header: 'Shared protocols (class-wide)' });
+    if (sharedItems.length) {
+        sharedItems.forEach((i) => { if (benchNames.has(i.label.toLowerCase())) i.sub = '⚠ also on your bench'; });
+        items.push(...sharedItems);
+    } else items.push({ note: 'No shared protocols yet.' });
+    showPicker('Open protocol — choose a source (' + cs.repo.full + ')', items, (path) =>
         openFromCourseRepo(cs.repo, path, token)
     );
 });
