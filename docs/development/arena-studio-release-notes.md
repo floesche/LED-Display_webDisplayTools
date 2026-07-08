@@ -4,6 +4,13 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.49 — 2026-07-08 · LED tool: brightness slider
+
+- **The Console LED tool now has a brightness slider** (like the Test-display
+  level/duty sliders) instead of a number box, with a live readout showing the
+  power **%** and the resolved BuckPuck control voltage (e.g. `50% · 3000 mV`). Set
+  applies it; OFF still drops to 0% / 5000 mV.
+
 ## v0.48 — 2026-07-08 · Scope lines under data + pre-run estimate
 
 - **Scope trial-boundary lines now draw underneath the traces** instead of on top, so

@@ -2729,7 +2729,8 @@
           <div class="panel-h"><span class="panel-title" title="Stimulus LED via the BuckPuck driver on the 'Analog Out (0-5V)' BNC (0xA0). Power % maps to control voltage (mV); OFF = 5000 mV dark.">LED</span><span class="spacer"></span><span class="panel-x" data-close="led" role="button" title="Collapse to the rail">✕</span></div>
           <div class="panel-b">
           <div class="crow" style="margin-bottom:0"><span class="lbl" title="LED power — % of max brightness (0 = off)">power</span>
-            <input id="cLedPct" type="number" min="0" max="100" step="1" value="50" style="width:64px" title="LED power % (0 = off)"><span class="dim">%</span>
+            <input id="cLedPct" type="range" min="0" max="100" step="1" value="50" style="width:120px" title="LED power (% of max brightness; 0 = off)">
+            <span class="dim" id="cLedVal" style="min-width:80px">50% · 3000 mV</span>
             <button class="pill" data-cmd="cledset" title="Set LED power — SET_AO_VOLTAGE 0xA0 to the BuckPuck level for this %">Set</button>
             <button class="pill led-off" data-cmd="cledoff" title="Turn the LED off — Analog Out 5000 mV (BuckPuck dark)">OFF</button></div>
           </div>
@@ -2842,7 +2843,7 @@
 </div>
 
 <footer id="footer">
-  <span class="foot-left">Arena Studio v0.48 | 2026-07-08 14:47 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
+  <span class="foot-left">Arena Studio v0.49 | 2026-07-08 14:51 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
   <!-- Course-repo quick-links: open protocols / logs / patterns in a new tab.
        Hrefs built from the configured repo + bench id (updateGhQuickLinks). -->
   <span id="ghQuickLinks" title="Open the course repo on GitHub (new tab)">
@@ -4721,7 +4722,7 @@
         },
         cledoff: () => {
             const off = (window.ArenaRunnerG6 && window.ArenaRunnerG6.LED_OFF_MV) || 5000;
-            if ($('cLedPct')) $('cLedPct').value = 0;
+            if ($('cLedPct')) { $('cLedPct').value = 0; $('cLedPct').dispatchEvent(new Event('input')); }
             send(Wire.encodeSetAoVoltage(off), 'LED OFF → SET_AO_VOLTAGE 0xA0 ' + off + ' mV');
         },
         caoget: async () => {
@@ -5226,6 +5227,19 @@
     // level slider readout + duty → module-block stream state. The duty slider
     // and its number box stay in lockstep; typed values clamp to 0–255.
     $('cLevel').addEventListener('input', () => { $('cLevelVal').textContent = $('cLevel').value + '/15'; });
+    // LED tool slider readout: show % and the resolved BuckPuck control voltage.
+    (function () {
+        const sl = $('cLedPct');
+        if (!sl) return;
+        const upd = () => {
+            const p = Number(sl.value) || 0;
+            const conv = window.ArenaRunnerG6 && window.ArenaRunnerG6.ledPercentToMv;
+            const el = $('cLedVal');
+            if (el) el.textContent = p + '%' + (conv ? ' · ' + conv(p) + ' mV' : '');
+        };
+        sl.addEventListener('input', upd);
+        upd();
+    })();
     function applyDuty(v) {
         // A number input holding garbage reports '' (and Number('') === 0), so
         // treat empty as "keep the current value", not as zero.
