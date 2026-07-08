@@ -2842,7 +2842,7 @@
 </div>
 
 <footer id="footer">
-  <span class="foot-left">Arena Studio v0.47 | 2026-07-08 13:59 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
+  <span class="foot-left">Arena Studio v0.48 | 2026-07-08 14:47 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
   <!-- Course-repo quick-links: open protocols / logs / patterns in a new tab.
        Hrefs built from the configured repo + bench id (updateGhQuickLinks). -->
   <span id="ghQuickLinks" title="Open the course repo on GitHub (new tab)">
@@ -3413,6 +3413,29 @@
     }
     Studio.isUntitledDoc = isUntitledDoc;
 
+    // Pre-run estimate: flattened step count + wall-clock (Σ conditionDuration +
+    // per-command overhead). Nominal order (no shuffle); returns null when there's
+    // no runnable sequence. Mirrors beginRun's timer math so the preview matches.
+    function runEstimate(doc) {
+        const RL = window.ArenaRunnerG6;
+        if (!doc || !doc.experiment || !RL) return null;
+        let steps;
+        try { steps = RL.flattenStructure(doc.experiment).steps; } catch (_) { return null; }
+        if (!steps || !steps.length) return null;
+        const byName = new Map((doc.experiment.conditions || []).map((c) => [c.name, c]));
+        const over = Studio.runOverheadPerCmd ? Studio.runOverheadPerCmd() : 0;
+        let sec = 0;
+        for (const st of steps) {
+            const c = byName.get(st.conditionName);
+            if (c) sec += (RL.conditionDuration(c) || 0) + (RL.conditionCommandCount(c) || 0) * over;
+        }
+        return { steps: steps.length, sec };
+    }
+    function fmtEstClock(sec) {
+        sec = Math.max(0, Math.round(sec));
+        return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+    }
+
     function updateRunGate() {
         const doc = Studio.currentDoc;
         const bridge = Studio.session && Studio.session.bridge;
@@ -3433,7 +3456,12 @@
         });
         const runBtn = $('btnRunExp');
         runBtn.disabled = !gate.ok;
-        $('runHint').textContent = gate.ok ? '' : gate.reason;
+        // Show the experiment length up front (steps + estimated wall-clock) so you
+        // know how long it runs BEFORE hitting Run. Same math the run timer uses
+        // (durations + learned per-command overhead). Shown alongside any gate reason.
+        const est = runEstimate(doc);
+        const estTxt = est ? est.steps + ' step' + (est.steps === 1 ? '' : 's') + ' · ~' + fmtEstClock(est.sec) : '';
+        $('runHint').textContent = gate.ok ? estTxt : (estTxt ? estTxt + ' · ' + gate.reason : gate.reason);
         const testBtn = $('btnTestExp');
         testBtn.disabled = !(Studio.session && Studio.session.connected && doc);
         // Non-blocking warning: a pattern NAME doesn't match the SD but a
@@ -4149,21 +4177,19 @@
                     ctx.fillText(l.label, x0 + 3, plotTop + 11);
                 }
             });
-            // ── DATA ROWS ────────────────────────────────────────────────────
-            ROWS.forEach((row, i) => drawRow(row, series ? series[row.key] : null, plotTop + i * (rowH + gap), rowH, padL, plotW, xOf));
-            // ── TRIAL BOUNDARIES: bright white lines (always) + names in a 2-row
-            //    header lane. The line always marks WHERE a trial starts; the name
-            //    is drawn only when it won't overlap the previous name in its row,
-            //    so names thin out gracefully as the span grows instead of colliding
-            //    into an unreadable smear. Two staggered rows + a dark backing let
-            //    ~2× as many names show, legibly, before thinning kicks in.
-            ctx.lineWidth = 2;
+            // ── TRIAL BOUNDARY LINES: bright white, drawn UNDERNEATH the data so they
+            //    mark where each trial starts without obscuring the traces.
+            ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,0.85)';
             ov.cond.forEach((c) => {
                 if (c.ms < t0 || c.ms > t1) return;
                 const x = xOf(c.ms);
-                ctx.strokeStyle = 'rgba(255,255,255,0.92)';
                 ctx.beginPath(); ctx.moveTo(x, plotTop); ctx.lineTo(x, plotBottom); ctx.stroke();
             });
+            // ── DATA ROWS (over the boundary lines) ───────────────────────────
+            ROWS.forEach((row, i) => drawRow(row, series ? series[row.key] : null, plotTop + i * (rowH + gap), rowH, padL, plotW, xOf));
+            // ── TRIAL NAMES: a 2-row header lane above the plot. The name is drawn
+            //    only when it won't overlap the previous name in its row, so names thin
+            //    out gracefully as the span grows instead of colliding into a smear.
             // labels in a separate pass so lines never draw over a backing box.
             // Small, non-bold, dim: they annotate the trace without dominating it.
             ctx.font = '9px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';

@@ -4,6 +4,14 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.48 — 2026-07-08 · Scope lines under data + pre-run estimate
+
+- **Scope trial-boundary lines now draw underneath the traces** instead of on top, so
+  they mark where trials start without obscuring the data.
+- **The Run button shows the experiment length before you run it** — e.g. `58 steps ·
+  ~5:36` (flattened step count + estimated wall-clock, same math the run timer uses).
+  Shown whether or not you're connected, alongside any "why can't I run yet" reason.
+
 ## v0.47 — 2026-07-08 · Console: LED as a proper tool panel
 
 - **The LED control is now an 8th Console tool** (rail toggle + panel), alongside
