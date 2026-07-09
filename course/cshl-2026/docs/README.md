@@ -1,4 +1,4 @@
-# Vision In Flies — Course Guide
+# Visual Behavior in Flies — Course Guide
 
 Welcome! These pages are your reference for running fly-on-ball experiments on
 the G6 LED-arena rigs. Read them in roughly this order; each page is short and
