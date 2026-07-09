@@ -247,6 +247,26 @@
       max-width: 100%;
     }
 
+    .content .image-with-credit {
+      display: inline-block;
+      max-width: 100%;
+      position: relative;
+    }
+
+    .content .image-with-credit img {
+      display: block;
+    }
+
+    .content .image-with-credit span {
+      background: rgba(255, 255, 255, 0.86);
+      bottom: 6px;
+      color: var(--ink);
+      font-size: 12px;
+      padding: 2px 5px;
+      position: absolute;
+      right: 6px;
+    }
+
     .content a,
     .content td,
     .content th {
@@ -366,7 +386,7 @@
       {
         title: 'Reference',
         items: [
-          ['genotypes', 'Genotype shorthand'],
+          ['genotypes', 'Fly Stock Genotypes'],
           ['references', 'References']
         ]
       }

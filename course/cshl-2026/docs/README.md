@@ -53,7 +53,7 @@ practical.
 
 ## Reference
 
-- **[Genotype shorthand](genotypes.md)** — the line shorthand names used in Arena Studio metadata.
+- **[Fly Stock Genotypes](genotypes.md)** — the stock names and full genotypes used in Arena Studio metadata.
 - **[References and links](references.md)** — panel-system, FicTrac, Arena Studio, and reading links.
 
 > **TBD: add images.** Useful first images: tethering station, fly on the ball,
