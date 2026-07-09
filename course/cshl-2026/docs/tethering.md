@@ -87,7 +87,8 @@ touching experimental ones. Time spent here pays off in every experiment after.
 
 ## Reference
 
-- Loesche & Reiser (2021), *An inexpensive, high-precision fly-on-ball setup*:
+- Loesche & Reiser (2021), *An Inexpensive, High-Precision, Modular Spherical
+  Treadmill Setup Optimized for Drosophila Experiments*:
   [doi:10.3389/fnbeh.2021.689573](https://doi.org/10.3389/fnbeh.2021.689573).
 
 ---

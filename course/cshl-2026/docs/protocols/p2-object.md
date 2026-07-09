@@ -113,6 +113,14 @@ Planned first-look plots:
   B-right versions combined only after checking side bias.
 - Forward velocity over the run, using a centered 0.5 s window.
 
+## References
+
+- Horn E (1978). The mechanism of object fixation and its relation to
+  spontaneous pattern preferences in Drosophila melanogaster.
+  <https://doi.org/10.1007/BF00337000>
+- Cheng KY, Frye MA (2021). Odour boosts visual object approach in flies.
+  <https://doi.org/10.1098/rsbl.2020.0770>
+
 > **TBD:** add the front-column calibration procedure and which genotypes run P2
 > tonic, P2 burst, or both.
 

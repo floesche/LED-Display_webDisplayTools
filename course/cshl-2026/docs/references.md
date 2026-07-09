@@ -15,19 +15,23 @@ references will be added to the individual protocol pages.
   <https://github.com/reiserlab/webDisplayTools/blob/main/PATTERN_EDITOR_QUICKSTART.md>
 - Generation 3 Modular LED Display guide:
   <https://reiserlab.github.io/Modular-LED-Display/Generation%203/Software/docs/g3_user-guide.html>
-- TBD: add the G4 LED-panel bioRxiv/preprint link.
+- Isaacson MD et al. (2022), *A high-speed, modular display system for diverse
+  neuroscience applications* (G4 display preprint):
+  [doi:10.1101/2022.08.02.502550](https://doi.org/10.1101/2022.08.02.502550).
 
 ## Fly-on-ball and tracking
 
-- FicTrac website: <https://rjdmoore.net/fictrac/>
-- FicTrac repository: <https://github.com/rjdmoore/fictrac>
-- Loesche & Reiser (2021), *An inexpensive, high-precision fly-on-ball setup*:
+- FicTrac software and documentation: <https://github.com/rjdmoore/fictrac>
+- Loesche & Reiser (2021), *An Inexpensive, High-Precision, Modular Spherical
+  Treadmill Setup Optimized for Drosophila Experiments*:
   [doi:10.3389/fnbeh.2021.689573](https://doi.org/10.3389/fnbeh.2021.689573).
 
 ## Optogenetic hardware
 
-- TBD: add the optogenetic LED spec sheet.
-- TBD: add the BuckPuck/current-driver spec sheet.
+- Cree LED, *XLamp XP-E2 LED product-family data sheet*:
+  <https://downloads.cree-led.com/files/ds/x/XLamp-XPE2.pdf>
+- LEDdynamics/LUXdrive, *3021/3023 BuckPuck wide-range LED power module data
+  sheet entry*: <https://leddynamics.com/products?id=4&pdf=3021_3023-BuckPuck.pdf>
 - TBD: add per-rig optical power or LED percent calibration notes.
 
 ## Behavioral protocols
@@ -37,7 +41,11 @@ references will be added to the individual protocol pages.
   [doi:10.1016/j.neuron.2017.03.010](https://doi.org/10.1016/j.neuron.2017.03.010).
 - Morimoto MM et al. (2020), *Spatial readout of visual looming in the central
   brain of Drosophila*: <https://elifesciences.org/articles/57685>.
-- TBD: add object fixation and object-choice references for p2.
+- Horn E (1978), *The mechanism of object fixation and its relation to
+  spontaneous pattern preferences in Drosophila melanogaster*:
+  [doi:10.1007/BF00337000](https://doi.org/10.1007/BF00337000).
+- Cheng KY, Frye MA (2021), *Odour boosts visual object approach in flies*:
+  [doi:10.1098/rsbl.2020.0770](https://doi.org/10.1098/rsbl.2020.0770).
 
 ### P3 visual conditioning
 

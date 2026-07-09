@@ -42,7 +42,10 @@ this document for interpretation.
 
 ## Selecting flies: markers to avoid
 
-Ed's [current genotype sheet](https://docs.google.com/spreadsheets/d/137YhVIqUZIHw5ivI6FurzA0Xw9QlqHab4Iy3C277J-E/edit?gid=0#gid=0) lists visible markers to **select against** for specific stocks. In other words, choose flies that do **not** show the marker(s) in this table.
+The course repository's [current genotype YAML](https://github.com/reiserlab/cshl-2026-course/blob/main/genotypes.yaml)
+lists visible markers to **select against** for specific stocks. In other words,
+choose flies that do **not** show the marker(s) in this table. The repository is
+private, so open this link while signed in with the course GitHub account.
 
 | Course line | Select against | Practical reading rule |
 | --- | --- | --- |

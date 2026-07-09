@@ -16,10 +16,8 @@ motion. That signal drives the live oscilloscope in Arena Studio and powers
 
 <div class="fictrac-example-clear"></div>
 
-Useful external links:
-
-- FicTrac website: <https://rjdmoore.net/fictrac/>
-- FicTrac repository: <https://github.com/rjdmoore/fictrac>
+FicTrac software and documentation:
+<https://github.com/rjdmoore/fictrac>
 
 ## The mental model
 
@@ -120,8 +118,9 @@ closed-loop block responds to nudging the ball, the bridge is working.
 ## Reference
 
 - Moore et al. FicTrac software and documentation:
-  <https://rjdmoore.net/fictrac/>
-- Loesche & Reiser (2021), *An inexpensive, high-precision fly-on-ball setup*:
+  <https://github.com/rjdmoore/fictrac>
+- Loesche & Reiser (2021), *An Inexpensive, High-Precision, Modular Spherical
+  Treadmill Setup Optimized for Drosophila Experiments*:
   [doi:10.3389/fnbeh.2021.689573](https://doi.org/10.3389/fnbeh.2021.689573).
 
 ---
