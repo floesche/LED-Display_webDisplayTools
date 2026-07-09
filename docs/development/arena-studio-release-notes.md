@@ -4,6 +4,29 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.58 — 2026-07-09 · Duplicate SD pattern names: surfaced, pickable, and gated
+
+Two same-named patterns on the SD card (e.g. `002_grating.pat` + `005_grating.pat`
+from two protocols' sets) used to be resolved silently — the picker showed one
+entry and whichever file the name lookup happened to keep is what ran,
+"regardless of which version you choose" (reported by Hannah-Marie). Now:
+
+- **Duplicates are visible**: the Patterns status line shows `⚠ N duplicate
+  names`, and the bench log lists exactly which files collide.
+- **You can pick a specific copy**: each same-named file gets its own picker
+  entry (`5 · grating ⚠ dup — 005_grating.pat`), and clicking its SD row selects
+  that exact file — index-precise, no more guessing. Thumbnails show the right
+  file's preview too.
+- **Protocols can't silently play the wrong file**: name-based resolution
+  refuses ambiguous names, and the Run gate says why — "matches multiple SD
+  files — delete or rename the extra copy" — instead of running a coin-flip.
+  (Names that fall back to an explicit numeric pattern_ID still run, with a
+  warning naming the duplicate.)
+
+The real fix at the bench remains: don't keep two patterns with the same name on
+one card — but now the Studio tells you when it happens instead of picking one
+silently.
+
 ## v0.57 — 2026-07-09 · `?advanced=0` forces safe mode
 
 - **A link with `?advanced=0` now forces safe mode** and forgets any remembered

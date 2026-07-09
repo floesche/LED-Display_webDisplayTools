@@ -2858,7 +2858,7 @@
 </div>
 
 <footer id="footer">
-  <span class="foot-left">Arena Studio v0.57 | 2026-07-09 00:25 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
+  <span class="foot-left">Arena Studio v0.58 | 2026-07-09 08:03 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
   <!-- Course-repo quick-links: open protocols / logs / patterns in a new tab.
        Hrefs built from the configured repo + bench id (updateGhQuickLinks). -->
   <span id="ghQuickLinks" title="Open the course repo on GitHub (new tab)">
@@ -3455,7 +3455,7 @@
     function updateRunGate() {
         const doc = Studio.currentDoc;
         const bridge = Studio.session && Studio.session.bridge;
-        const gate = Meta.canRunExperiment({
+        let gate = Meta.canRunExperiment({
             connected: !!(Studio.session && Studio.session.connected),
             hasProtocol: !!doc,
             dirty: false,
@@ -3470,6 +3470,18 @@
             // helper; optional-guarded for the stale-cache gotcha.
             missingPatterns: Studio.missingPatternNames ? Studio.missingPatternNames(doc) : []
         });
+        // Duplicate-name preflight: a referenced name matching SEVERAL SD files
+        // lands in the missing-pattern block (name lookup refuses to guess), but
+        // "not on SD — upload it" would mislead: it IS on the card, twice. Say so.
+        const ambiguous = Studio.ambiguousPatternNames ? Studio.ambiguousPatternNames(doc) : [];
+        if (!gate.ok && ambiguous.length && gate.reason.indexOf('not on SD') !== -1) {
+            gate = {
+                ok: false,
+                reason: 'Pattern name' + (ambiguous.length === 1 ? ' ' : 's ') +
+                    ambiguous.map((n) => '"' + n + '"').join(', ') +
+                    ' matches multiple SD files — delete or rename the extra copy (Console → Patterns)'
+            };
+        }
         const runBtn = $('btnRunExp');
         runBtn.disabled = !gate.ok;
         // Show the experiment length up front (steps + estimated wall-clock) so you
@@ -3486,10 +3498,21 @@
         // the missing-pattern BLOCK above (which fires when nothing resolves).
         const warnEl = $('runPatWarn');
         if (warnEl) {
-            const unresolved = Studio.unresolvedPatternNames ? Studio.unresolvedPatternNames(doc) : [];
+            // Ambiguous names get their own wording (they'd otherwise show up in
+            // `unresolved` with misleading "not on the SD" advice) — filter them out.
+            const unresolved = (Studio.unresolvedPatternNames ? Studio.unresolvedPatternNames(doc) : [])
+                .filter((n) => ambiguous.indexOf(n) === -1);
+            const msgs = [];
+            if (ambiguous.length) {
+                msgs.push('⚠ pattern ' + ambiguous.map((n) => '"' + n + '"').join(', ') +
+                    ' matches MULTIPLE same-named files on the SD — the run would fall back to the numeric pattern_ID (whatever sits at that index). Delete or rename the extra copy (Console → Patterns).');
+            }
             if (unresolved.length) {
-                warnEl.textContent = '⚠ pattern ' + unresolved.map((n) => '"' + n + '"').join(', ') +
-                    ' not on the SD by name — the run will fall back to the numeric pattern_ID (whatever sits at that index), which may not be the intended pattern. Upload it via Console → SD upload, or fix the reference.';
+                msgs.push('⚠ pattern ' + unresolved.map((n) => '"' + n + '"').join(', ') +
+                    ' not on the SD by name — the run will fall back to the numeric pattern_ID (whatever sits at that index), which may not be the intended pattern. Upload it via Console → SD upload, or fix the reference.');
+            }
+            if (msgs.length) {
+                warnEl.textContent = msgs.join(' ');
                 warnEl.style.display = '';
             } else {
                 warnEl.style.display = 'none';
@@ -6341,12 +6364,36 @@ function patEntry(name) {
 }
 Studio.patternIndexByName = function (name) {
     const p = patEntry(name);
+    if (p && p.ambiguous) return null; // duplicate names on the card never guess (see onSdListing)
     return p && p.index != null ? p.index : null;
 };
 Studio.patternFramesByName = function (name) {
     const p = patEntry(name);
+    if (p && p.ambiguous) return null; // frame count would be a coin flip between the copies
     return p && p.preview && Number.isFinite(p.preview.frames) ? p.preview.frames : null;
 };
+// Duplicate-name introspection: the colliding files for a (logical) name, or
+// null when the name is unique. Drives the preflight + picker messaging.
+Studio.patternDuplicates = function (name) {
+    const m = Studio.patternSet;
+    if (!m || !m.duplicates) return null;
+    return m.duplicates[name] || m.duplicates[sdLogicalName(name)] || null;
+};
+// Resolve a PICKER value to its SD entry. Unique names use the logical key;
+// duplicated names get one option per FILE (value = the raw filename), looked
+// up in the duplicates table so each option drives ITS OWN index + preview.
+function sdEntryForValue(value) {
+    const m = Studio.patternSet;
+    if (!m) return null;
+    if (m.patterns && m.patterns[value]) return m.patterns[value];
+    if (m.duplicates) {
+        for (const k of Object.keys(m.duplicates)) {
+            const hit = m.duplicates[k].find((d) => d.sd_name === value);
+            if (hit) return { index: hit.index, sd_name: hit.sd_name, preview: null };
+        }
+    }
+    return patEntry(value);
+}
 // Recorded-run preflight (course pipeline): pattern names the SEQUENCE
 // actually reaches that resolve to nothing — same resolution the runner uses
 // (name via the SD-first picker, else a raw pattern_ID). Non-empty blocks
@@ -6403,6 +6450,32 @@ Studio.unresolvedPatternNames = function (doc) {
     });
     return Array.from(warn);
 };
+// Duplicate-name preflight: sequence-reachable pattern NAMES that match MORE
+// THAN ONE file on the card. Name resolution refuses to guess for these, so a
+// run either blocks (no pattern_ID) or falls back to the numeric index —
+// either way the operator should delete/rename the extra copy. Own message in
+// updateRunGate (the generic "not on SD — upload it" advice would mislead).
+Studio.ambiguousPatternNames = function (doc) {
+    if (!doc || !doc.experiment || !RunnerLib) return [];
+    const exp = doc.experiment;
+    let reachable;
+    try {
+        reachable = new Set(RunnerLib.flattenStructure(exp).steps.map((s) => s.conditionName).filter(Boolean));
+    } catch (_) {
+        reachable = new Set(((exp.conditions || []).map((c) => c && c.name)).filter(Boolean));
+    }
+    const hits = new Set();
+    (exp.conditions || []).forEach((c) => {
+        if (!c || !reachable.has(c.name)) return;
+        (c.commands || []).forEach((cmd) => {
+            if (!cmd || typeof cmd.pattern !== 'string' || !cmd.pattern) return;
+            if (Studio.patternDuplicates && Studio.patternDuplicates(cmd.pattern)) {
+                hits.add(cmd.pattern);
+            }
+        });
+    });
+    return Array.from(hits);
+};
 
 function manifestFromTxt(parsed, arenaConfig) {
     const m = { arenaConfig: arenaConfig || null, set_id: parsed.pattern_set_id || null, patterns: {} };
@@ -6416,21 +6489,37 @@ function populatePatDropdown() {
     const m = Studio.patternSet;
     if (!sel) return;
     sel.innerHTML = '';
-    const names = Object.keys((m && m.patterns) || {});
-    if (!names.length) { $('cPatThumb').innerHTML = ''; if ($('cPat')) $('cPat').readOnly = false; return; }
-    names.sort((a, b) => (m.patterns[a].index || 0) - (m.patterns[b].index || 0));
-    for (const n of names) {
+    const entries = [];
+    for (const [key, p] of Object.entries((m && m.patterns) || {})) {
+        if (p.ambiguous && m.duplicates && m.duplicates[key]) continue; // per-file options below
+        entries.push({ value: key, idx: p.index, label: (p.index != null ? p.index + ' · ' : '') + key });
+    }
+    // Duplicated logical names list each FILE as its own option, valued by the
+    // RAW filename — so picking a row/option always means that exact file (the
+    // row-click glue prefers an exact data-name match over the logical one).
+    for (const [key, list] of Object.entries((m && m.duplicates) || {})) {
+        for (const d of list) {
+            entries.push({ value: d.sd_name, idx: d.index, label: d.index + ' · ' + key + ' ⚠ dup — ' + d.sd_name });
+        }
+    }
+    if (!entries.length) { $('cPatThumb').innerHTML = ''; if ($('cPat')) $('cPat').readOnly = false; return; }
+    entries.sort((a, b) => (a.idx || 0) - (b.idx || 0));
+    for (const e of entries) {
         const o = document.createElement('option');
-        o.value = n;
-        o.textContent = (m.patterns[n].index != null ? m.patterns[n].index + ' · ' : '') + n;
+        o.value = e.value;
+        o.textContent = e.label;
+        if (e.idx != null) o.dataset.idx = e.idx;
         sel.appendChild(o);
     }
-    sel.value = names[0];
-    applyPatPick(names[0]);
+    sel.value = entries[0].value;
+    applyPatPick(entries[0].value, entries[0].idx);
     if ($('cPat')) $('cPat').readOnly = true; // a set drives the SD index
 }
-function applyPatPick(name) {
-    const idx = Studio.patternIndexByName(name);
+// forcedIdx: the picked OPTION's own SD index (data-idx) — required for
+// duplicate-name options, whose values are raw filenames that name lookup
+// deliberately refuses; harmless (same value) for unique names.
+function applyPatPick(name, forcedIdx) {
+    const idx = forcedIdx != null ? forcedIdx : Studio.patternIndexByName(name);
     if (idx != null && $('cPat')) $('cPat').value = idx; // trial-params reads cPat
     renderPatThumb(name);
     if (Studio.refreshPatternInfo) Studio.refreshPatternInfo(); // 0x88, quiet
@@ -6439,7 +6528,7 @@ async function renderPatThumb(name) {
     const host = $('cPatThumb');
     if (host) host.innerHTML = '';
     const m = Studio.patternSet;
-    const p = m && m.patterns[name];
+    const p = m && sdEntryForValue(name);
     if (!p || !PP || !host) return;
     host.title = webPreviewBySdName.has(p.sd_name)
         ? 'Pattern preview (multi-frame patterns animate automatically)'
@@ -6530,25 +6619,63 @@ Studio.onSdListing = function (names) {
         source: 'sd',
         arenaConfig: (Studio.currentRig && Studio.currentRig.arenaConfig) || 'G6_2x10',
         set_id: 'SD card',
-        patterns: {}
+        patterns: {},
+        duplicates: {} // logical name -> [{index, sd_name}, ...] when >1 file shares it
     };
+    let fileCount = 0;
     names.forEach((nm, i) => {
         if (!nm) return; // unreadable filename — index still selectable via cPat
+        fileCount++;
         // Key by the LOGICAL name (strip the NNN_ index prefix + .pat) so a
         // protocol's `pattern: "all_on"` resolves against `001_all_on.pat` on
         // the card; keep the raw filename as sd_name for preview bytes + upload.
-        m.patterns[sdLogicalName(nm)] = { index: i + 1, sd_name: nm, preview: null };
+        const key = sdLogicalName(nm);
+        const prior = m.patterns[key];
+        if (prior) {
+            // Two SD files share a logical name (e.g. 002_grating.pat +
+            // 005_grating.pat from two protocols' sets). Name-based resolution
+            // used to silently keep the LAST — "pulls the wrong one regardless
+            // of which you choose" (Hannah-Marie, 2026-07-08). Record the
+            // collision instead: name lookups refuse to guess, the picker
+            // lists each FILE separately, and the run preflight names it.
+            if (!m.duplicates[key]) {
+                m.duplicates[key] = [{ index: prior.index, sd_name: prior.sd_name }];
+            }
+            m.duplicates[key].push({ index: i + 1, sd_name: nm });
+            prior.ambiguous = true;
+            return;
+        }
+        m.patterns[key] = { index: i + 1, sd_name: nm, preview: null };
     });
-    const n = Object.keys(m.patterns).length;
+    const dupKeys = Object.keys(m.duplicates);
     Studio.patternSet = m; // once listed, the CARD owns the picker — even empty
     patPreviewCache = {};
-    cPatStatus(n ? 'SD card · ' + n + ' patterns' : 'SD card empty — upload .pats or use a raw pat idx');
+    cPatStatus(
+        fileCount
+            ? 'SD card · ' + fileCount + ' patterns' +
+              (dupKeys.length ? ' · ⚠ ' + dupKeys.length + ' duplicate name' + (dupKeys.length === 1 ? '' : 's') : '')
+            : 'SD card empty — upload .pats or use a raw pat idx'
+    );
+    dupKeys.forEach((k) => {
+        // module block — the console logger lives on Studio (classic IIFE scope)
+        (Studio.clog || Studio.rawLog || function () {})(
+            '⚠ duplicate pattern name "' + k + '" on the SD: ' +
+                m.duplicates[k].map((d) => d.index + ' · ' + d.sd_name).join(', ') +
+                ' — protocols referencing "' + k + '" cannot resolve it by name; delete or rename the extra copy',
+            'err'
+        );
+    });
     populatePatDropdown(); // empty set clears the dropdown + unlocks cPat
     Studio.updateRunGate(); // the missing-pattern preflight tracks the SD listing
 };
 function wirePatPicker() {
     const sel = $('cPatName');
-    if (sel) sel.addEventListener('change', () => applyPatPick(sel.value));
+    if (sel) sel.addEventListener('change', () => {
+        // Carry the picked option's OWN index — duplicate-name options need it
+        // (their raw-filename values are refused by name lookup on purpose).
+        const o = sel.selectedOptions && sel.selectedOptions[0];
+        applyPatPick(sel.value, o && o.dataset.idx != null ? Number(o.dataset.idx) : null);
+    });
     // (Pattern-set previews now come from device memory → Upload ▾, which
     // registers uploaded bytes as preview sources — see Studio.registerUploadedPreviews.)
 }
