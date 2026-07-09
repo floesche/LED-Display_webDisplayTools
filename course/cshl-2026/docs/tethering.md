@@ -5,8 +5,8 @@ its head and body are held still while its legs walk freely. Tethering is a
 craft — the single biggest factor in getting clean data. A well-tethered, happy
 fly gives you hours of behavior; a crooked or over-glued one won't walk.
 
-*Adapted from the lab's CSHL tethering protocol (Loesche & Reiser) and*
-*[Loesche & Reiser 2021](https://doi.org/10.3389/fnbeh.2021.689573).*
+> **TBD: add images.** Add a photo of the tethering station, a close-up of a
+> good tether, and a photo of a fly correctly positioned on the ball.
 
 ## The idea
 
@@ -20,12 +20,12 @@ fly gives you hours of behavior; a crooked or over-glued one won't walk.
 
 ## What you need
 
-Tethers (pins), a micromanipulator + a Peltier-cooled tethering platform (the
-"sarcophagus"), light-curing (UV) glue + a curing LED, a glass slide, a pin
+Tethers (pins), a micromanipulator plus a Peltier-cooled tethering platform
+(the "sarcophagus"), light-curing glue plus a curing LED, a glass slide, a pin
 vice, a fine paintbrush, a vacuum pen, Kimwipes, and a dissecting scope.
 
-> ✍️ **Instructor to confirm:** the exact tether type, glue product, and station
-> model on your bench.
+> **TBD:** add the exact tether type, glue product, curing LED, and station
+> model used on each bench.
 
 ## Prepare the flies
 
@@ -75,13 +75,18 @@ vice, a fine paintbrush, a vacuum pen, Kimwipes, and a dissecting scope.
 3. Confirm it walks: the ball turns under it, and once
    [FicTrac](fictrac.md) is running you'll see motion on the oscilloscope.
 
-> ✍️ **Instructor to confirm:** target fly height above the ball, and glue
-> cure/recovery times for your setup.
+> **TBD:** add target fly height above the ball and typical glue cure/recovery
+> times for this setup.
 
 ## Practice first
 
 Tethering takes reps — everyone should tether several practice flies before
 touching experimental ones. Time spent here pays off in every experiment after.
+
+## Reference
+
+- Loesche & Reiser (2021), *An inexpensive, high-precision fly-on-ball setup*:
+  [doi:10.3389/fnbeh.2021.689573](https://doi.org/10.3389/fnbeh.2021.689573).
 
 ---
 *Last updated 2026-07-09.*

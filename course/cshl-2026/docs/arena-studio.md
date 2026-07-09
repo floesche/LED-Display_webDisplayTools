@@ -5,13 +5,15 @@ runs entirely in your browser (Chrome or Edge) — nothing to install.
 
 **Open it:** <https://reiserlab.github.io/webDisplayTools/arena_studio.html>
 
+> **TBD: add images.** Add screenshots of the Run view, metadata panel, Connect
+> dialog, oscilloscope, protocol picker, and safe-mode indicator.
+
 ## Useful links
 
 - **Arena Studio:** <https://reiserlab.github.io/webDisplayTools/arena_studio.html>
 - **Course repo:** `reiserlab/cshl-2026-course`
-- **Course docs:** this `docs/` folder, soon to be rendered as stylish HTML pages.
-- **Pattern design:** use the Pattern Editor/Designer link provided by the
-  instructor for the current webDisplayTools deployment.
+- **Pattern Editor:** <https://reiserlab.github.io/webDisplayTools/pattern_editor.html>
+- **Pattern Editor quick start:** <https://github.com/reiserlab/webDisplayTools/blob/main/PATTERN_EDITOR_QUICKSTART.md>
 
 ## The three views
 
@@ -78,9 +80,8 @@ setup (rig + GitHub settings are locked).
 **Still available:** viewing any protocol, connecting, **running and testing**,
 the oscilloscope, Console queries, the display test, driving the LED, and STOP.
 
-Safe mode is a **guardrail, not a lock** — instructors can unlock it with a
-password (🛡 chip). Full details:
-[safe-mode-and-links.md in webDisplayTools](https://github.com/reiserlab/webDisplayTools/blob/main/docs/development/safe-mode-and-links.md).
+Safe mode is a **guardrail, not a lock** — instructors can unlock it when a
+team needs to edit a protocol or make a new pattern set.
 
 ## Course workflow in one pass
 
@@ -90,6 +91,8 @@ password (🛡 chip). Full details:
 4. Check that the completed recorded run appears in `runlogs/<bench-id>/`.
 5. After core runs, make or modify a pattern and mark that run as
    `innovation`.
+
+See [Pattern Editor](pattern-editor.md) for the separate pattern-making workflow.
 
 ## Troubleshooting
 

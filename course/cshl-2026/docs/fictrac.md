@@ -5,8 +5,14 @@ into the fly's locomotion — **turning**, **forward** walking, and **sideways**
 motion. That signal drives the live oscilloscope in Arena Studio and powers
 **closed-loop** experiments, where the fly's own turning steers the visual scene.
 
-*Background: [Loesche & Reiser 2021](https://doi.org/10.3389/fnbeh.2021.689573)*
-*describes the low-cost fly-on-ball setup this rig is based on.*
+> **TBD: add images.** Add screenshots of `configGUI`, a good ball outline, the
+> ignore regions, the coordinate transform, and a working Arena Studio
+> oscilloscope trace.
+
+Useful external links:
+
+- FicTrac website: <https://rjdmoore.net/fictrac/>
+- FicTrac repository: <https://github.com/rjdmoore/fictrac>
 
 ## The mental model
 
@@ -44,7 +50,8 @@ Keeping one folder per config means you never lose a working setup. A shared
 "starter" config is a good starting point but will **not** work as-is on every
 rig — you must tune it per rig.
 
-> 📎 The current working config is shared on the course Slack — start from that.
+The current July 8 working configs are archived in the course repo under
+[`configs/fictrac`](../configs/fictrac/README.md), one folder per rig.
 
 ## Calibrating with `configGUI`
 
@@ -71,9 +78,6 @@ Run the config GUI (`configGUI.bat`) and work through its steps:
   blobs confuse tracking; if that happens, add asymmetry (e.g. a hand-drawn
   L-shape or a lopsided star with a Sharpie).
 
-> Long-term the lab wants engineered, identical balls so one map works
-> everywhere — for now, per-rig maps are normal.
-
 ## Connecting FicTrac to Arena Studio (the bridge)
 
 Closed-loop and the live scope need the **bridge** running on the rig computer:
@@ -89,8 +93,8 @@ Closed-loop and the live scope need the **bridge** running on the rig computer:
 open-loop motion first, then a closed-loop block that the fly steers. If the
 closed-loop block responds to nudging the ball, the bridge is working.
 
-> ✍️ **Instructor to confirm:** exact camera model / lens, the Windows path to
-> `configGUI.bat`, and any per-rig gain/offset defaults.
+> **TBD:** add exact camera model/lens, the Windows path to `configGUI.bat`, and
+> any per-rig gain/offset defaults.
 
 ## Common problems
 
@@ -100,6 +104,13 @@ closed-loop block responds to nudging the ball, the bridge is working.
 | Turning and forward look swapped/flipped | Coordinate transform wrong — redo the X-center / Y-right / Z-below step. |
 | Tracking jumps or drifts | Stale/!confused map — re-learn the map, or add asymmetric marks to the ball. |
 | Ball jittery or stuck | Air flow too high/low — adjust the roller clamp for a gentle, stable float. |
+
+## Reference
+
+- Moore et al. FicTrac software and documentation:
+  <https://rjdmoore.net/fictrac/>
+- Loesche & Reiser (2021), *An inexpensive, high-precision fly-on-ball setup*:
+  [doi:10.3389/fnbeh.2021.689573](https://doi.org/10.3389/fnbeh.2021.689573).
 
 ---
 *Last updated 2026-07-09.*

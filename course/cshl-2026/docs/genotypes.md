@@ -1,18 +1,23 @@
-# CSHL 2026 Genotype Shorthand
+# Genotype shorthand
 
-Source: Ed Rogers, "Flies For CHSL 2026" Google Sheet, live tab `Sheet1`, read on 2026-07-06.
+Use these line shorthand names when entering run metadata in Arena Studio. The
+same names appear in the saved run metadata, so they are what you will use later
+to group and compare experiments.
 
-Arena Studio's genotype dropdown uses short labels so students and instructors can enter metadata quickly. The convention is:
+The convention is:
 
 ```text
 driver > effector
 ```
 
-Parentheses hold the driver or stock identifier when the common name alone is ambiguous. Sex, food, cross date, and full chromosome-level genotype are not encoded in the dropdown label; record sex separately in run metadata and use this document for interpretation.
+Parentheses hold the driver or stock identifier when the common name alone is
+ambiguous. Sex, food, cross date, and full chromosome-level genotype are not
+encoded in the shorthand name; record sex separately in run metadata and use
+this document for interpretation.
 
-## Dropdown Labels
+## Line Shorthand Names
 
-| Dropdown shorthand | Course category | Sexes available in sheet | Food / condition | Cross date |
+| Line shorthand | Course category | Sexes available | Food / condition | Cross date |
 | --- | --- | --- | --- | --- |
 | `CS x w1118` | Wild type/control | F, M | Corn Meal | 18-Jun |
 | `empty split > Kir2.1` | Silencing control | F | Corn Meal | 18-Jun |
@@ -35,7 +40,7 @@ Parentheses hold the driver or stock identifier when the common name alone is am
 ### `CS x w1118`
 
 - Course use: wild type/control.
-- Sheet label: `CS X w1118`
+- Source list name: `CS X w1118`
 - Driver: N/A
 - Effector: N/A
 - Full genotype fields in sheet: blank
@@ -44,7 +49,7 @@ Parentheses hold the driver or stock identifier when the common name alone is am
 ### `empty split > Kir2.1`
 
 - Course use: silencing control.
-- Sheet label: `None`
+- Source list name: `None`
 - Driver: `empty split GAL4`
 - Effector: `Kir2.1`
 - Full driver genotype: `pBPp65ADZp (attP40) ;pBPZpGAL4DBD`
@@ -54,7 +59,7 @@ Parentheses hold the driver or stock identifier when the common name alone is am
 ### `T4/T5 (SS00324) > Kir2.1`
 
 - Course use: silencing experiment.
-- Sheet label: `T4/T5`
+- Source list name: `T4/T5`
 - Driver: `SS00324`
 - Effector: `Kir2.1`
 - Full driver genotype: `59E08-p65ADZp(attP40); 42F06-PZpGdbd(attP2)`
@@ -67,7 +72,7 @@ Parentheses hold the driver or stock identifier when the common name alone is am
 ### `empty split > CsChrimson`
 
 - Course use: optogenetic activation control.
-- Sheet label: `None`
+- Source list name: `None`
 - Driver: `empty split GAL4`
 - Effector: `CsChrimson`
 - Full driver genotype: `pBPp65ADZp (attP40) ;pBPZpGAL4DBD`
@@ -77,18 +82,18 @@ Parentheses hold the driver or stock identifier when the common name alone is am
 ### `LC-6 (R_42E06) > CsChrimson`
 
 - Course use: optogenetic activation / RESET.
-- Sheet label: `LC-6`
+- Source list name: `LC-6`
 - Driver: `R_42E06`
 - Effector: `CsChrimson`
 - Full driver genotype: `GMR42E06-Gal4(attP2)` in the optogenetic activation row; `R_42E06` in the RESET row
 - Full effector genotype: `w+,20XUAS-CsChrimson-mVenus(attP18);;` in the optogenetic activation row; `20XUAS-CsChrimson-mVenus(attP18);;` in the RESET row
 - Sexes: F in the optogenetic activation row; F, M in the RESET row
-- Note: this shorthand intentionally collapses two sheet rows with the same driver-effector shorthand but different course-use notes.
+- Note: this shorthand intentionally collapses two source-list rows with the same driver-effector shorthand but different course-use notes.
 
 ### `P1 (15A01;71G01) > CsChrimson`
 
 - Course use: optogenetic activation.
-- Sheet label: `P1`
+- Source list name: `P1`
 - Driver: `15A01;71G01`
 - Effector: `CsChrimson`
 - Full driver genotype: `15A01-p65ADZp(attP40);71G01-ZpGdbd(attP2)`
@@ -98,7 +103,7 @@ Parentheses hold the driver or stock identifier when the common name alone is am
 ### `Hot Cell (HC-Gal4) > CsChrimson`
 
 - Course use: optogenetic activation.
-- Sheet label: `Hot Cell`
+- Source list name: `Hot Cell`
 - Driver: `HC-Gal4`
 - Effector: `CsChrimson`
 - Full driver genotype: `HC-Gal4`
@@ -108,7 +113,7 @@ Parentheses hold the driver or stock identifier when the common name alone is am
 ### `pC1_19 (SS100895) > CsChrimson`
 
 - Course use: optogenetic activation.
-- Sheet label: `pC1_19`
+- Source list name: `pC1_19`
 - Driver: `SS100895`
 - Effector: `CsChrimson`
 - Full driver genotype: `SS100895`
@@ -118,7 +123,7 @@ Parentheses hold the driver or stock identifier when the common name alone is am
 ### `pC1_17a,b (SS102696) > CsChrimson`
 
 - Course use: optogenetic activation.
-- Sheet label: `pC1_17a,b`
+- Source list name: `pC1_17a,b`
 - Driver: `SS102696`
 - Effector: `CsChrimson`
 - Full driver genotype: `SS102696`
@@ -128,7 +133,7 @@ Parentheses hold the driver or stock identifier when the common name alone is am
 ### `MDN-1 (VT050660) > CsChrimson`
 
 - Course use: RESET stock, moonwalker.
-- Sheet note: `Moonwalker`
+- Source list note: `Moonwalker`
 - Driver: `VT050660-Gal4`
 - Effector: `CsChrimson`
 - Full driver genotype: `VT050660-Gal4`
@@ -138,7 +143,7 @@ Parentheses hold the driver or stock identifier when the common name alone is am
 ### `NP225 > CsChrimson`
 
 - Course use: RESET stock, spins.
-- Sheet note: `Spins`
+- Source list note: `Spins`
 - Driver: `NP225`
 - Effector: `CsChrimson`
 - Full driver genotype: `NP225`
@@ -148,7 +153,7 @@ Parentheses hold the driver or stock identifier when the common name alone is am
 ### `LC-24 (SS02638) > CsChrimson`
 
 - Course use: RESET stock, forward walking.
-- Sheet note: `Forward Walking`
+- Source list note: `Forward Walking`
 - Driver: `SS02638`
 - Effector: `CsChrimson`
 - Full driver genotype: `SS02638`
@@ -158,7 +163,7 @@ Parentheses hold the driver or stock identifier when the common name alone is am
 ### `Avoidance (SS01159) > CsChrimson`
 
 - Course use: RESET stock, avoidance.
-- Sheet note: `Avoidance`
+- Source list note: `Avoidance`
 - Driver: `SS01159`
 - Effector: `CsChrimson`
 - Full driver genotype: `SS01159`
@@ -168,16 +173,17 @@ Parentheses hold the driver or stock identifier when the common name alone is am
 ### `Giant Fiber (17A04-AD;68A06-DBD) > CsChrimson`
 
 - Course use: RESET stock, giant fiber.
-- Sheet note: `Giant Fiber`
+- Source list note: `Giant Fiber`
 - Driver: `17A04-AD;68A06-DBD`
 - Effector: `CsChrimson`
 - Full driver genotype: `17A04-AD;68A06-DBD`
 - Full effector genotype: `20XUAS-CsChrimson-mVenus(attP18);;`
 - Sexes: F, M
 
-## Notes For Metadata Entry
+## Notes for metadata entry
 
-- Use the dropdown shorthand exactly when possible.
+- Use the line shorthand exactly when possible.
 - Record sex separately. Several lines are sex-specific for the planned experiments.
 - Use `none` only for no-fly hardware tests, bridge tests, or placeholder metadata.
-- If a course run uses a genotype not listed here, free text is allowed in Arena Studio, but add the new label to `genotypes.yaml` before repeated use.
+- If a course run uses a genotype not listed here, ask an instructor what
+  shorthand name to use before repeated runs.
