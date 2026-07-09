@@ -1,13 +1,20 @@
 # FicTrac basics & configuration
 
+<div class="image-with-credit fictrac-example">
+  <img src="assets/fictrac_walking_example.gif" alt="A tethered fly walking on a patterned ball with FicTrac tracking overlay">
+  <span>Video by Hannah Marie Santos</span>
+</div>
+
 **FicTrac** watches the air-supported ball with a camera and turns its rotation
 into the fly's locomotion — **turning**, **forward** walking, and **sideways**
 motion. That signal drives the live oscilloscope in Arena Studio and powers
 **closed-loop** experiments, where the fly's own turning steers the visual scene.
 
-> **TBD: add images.** Add screenshots of `configGUI`, a good ball outline, the
-> ignore regions, the coordinate transform, and a working Arena Studio
-> oscilloscope trace.
+> **Still to add:** screenshots of `configGUI`, a good ball outline, the ignore
+> regions, the coordinate transform, and a working Arena Studio oscilloscope
+> trace.
+
+<div class="fictrac-example-clear"></div>
 
 Useful external links:
 
