@@ -198,6 +198,16 @@
   body.safemode #ghLock{cursor:not-allowed;opacity:.6}
   /* Session-rig selector stays hard-locked (its unlock padlock is hidden). */
   body.safemode #sessionRigLock{display:none}
+  /* Pattern WRITES greyed in safe mode: the Add ▾ menu button has no data-cmd
+     (its items do, and are in SAFE_BLOCKED_CMDS), so grey the parent so the menu
+     can't be opened; the per-row × delete bypasses the dispatcher (guarded in JS)
+     so grey it too. Both non-interactive here — this is view-only. */
+  body.safemode #sdUploadMenu > .cmenu-btn{opacity:.5;cursor:not-allowed;pointer-events:none}
+  body.safemode #cSdBody .sd-del{opacity:.4;cursor:not-allowed;pointer-events:none}
+  /* View-only editor cue: the input surfaces are inert/readonly (set in
+     applyModeGating); a faint dim signals they're not editable. */
+  body.safemode #inspectorBody, body.safemode #settingsContent{opacity:.92}
+  body.safemode #edYaml{opacity:.92;cursor:default}
   /* Run-lock (STANDARD, all modes): while a run is active, the Edit/Console
      segments are visibly disabled — no stray view switch mid-experiment. */
   body.running #modeSeg [data-mode="edit"],
@@ -2848,7 +2858,7 @@
 </div>
 
 <footer id="footer">
-  <span class="foot-left">Arena Studio v0.54 | 2026-07-08 19:46 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
+  <span class="foot-left">Arena Studio v0.55 | 2026-07-08 20:17 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
   <!-- Course-repo quick-links: open protocols / logs / patterns in a new tab.
        Hrefs built from the configured repo + bench id (updateGhQuickLinks). -->
   <span id="ghQuickLinks" title="Open the course repo on GitHub (new tab)">
@@ -3563,6 +3573,9 @@
     const SAFE_BLOCKED_CMDS = new Set([
         // add / delete patterns (SD + on-arena writes)
         'csdpurge', 'csdarchive', 'cloadfile', 'crawsend', 'cispcopy',
+        // upload patterns to the SD card (all six Add ▾ sources → SET_PATTERN_FILE 0x8D)
+        'csdup_local_file', 'csdup_local_folder', 'csdup_lib_file',
+        'csdup_lib_folder', 'csdup_repo_file', 'csdup_repo_folder',
         // program panels / firmware
         'cispbatch', 'cfwpick', 'cfwflash',
         // change controller / advanced settings
@@ -3584,6 +3597,18 @@
     function applyModeGating() {
         const safe = !Studio.advanced;
         document.body.classList.toggle('safemode', safe);
+        // True view-only editor in safe mode. The doc model is already frozen by
+        // canMutate(), but the input SURFACES stayed live — a student could type
+        // edits that then silently reverted on the next re-render. Lock the input
+        // surfaces themselves: `inert` on the stable containers cascades to the
+        // command-cards / settings fields that re-render inside them, and the YAML
+        // box is readonly (still readable + copyable). Navigation (Designer/YAML
+        // tab switch, condition selection, scrolling) stays live.
+        ['inspectorBody', 'settingsContent'].forEach((id) => {
+            const el = $(id); if (el) el.inert = safe;
+        });
+        const yamlBox = $('edYaml'); if (yamlBox) yamlBox.readOnly = safe;
+        const yamlApply = $('edApply'); if (yamlApply) yamlApply.disabled = safe;
         // The session-rig selector is unlockable only in advanced mode; force it
         // re-locked whenever we drop back to safe (an unlock may have opened it).
         if (safe) {
@@ -5080,6 +5105,12 @@
         const tr = e.target.closest('tr[data-idx]'); if (!tr) return;
         const idx = parseInt(tr.dataset.idx, 10); if (!Number.isFinite(idx)) return;
         if (e.target.classList.contains('sd-del')) {
+            // Deleting a pattern is a write — blocked in safe mode. This row action
+            // bypasses the [data-cmd] dispatcher, so it needs its own guard.
+            if (!Studio.advanced) {
+                Studio.showBanner('Locked in safe mode — unlock advanced mode (🛡 chip) to delete patterns.');
+                return;
+            }
             e.target.disabled = true;
             const r = await send(Wire.encodeDeletePatternFile(idx), 'DELETE_PATTERN_FILE 0x86 · ' + idx);
             if (r && Wire.decodeResponse(r).ok) sdRefresh(); else e.target.disabled = false;

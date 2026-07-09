@@ -4,6 +4,18 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.55 — 2026-07-08 · Safe mode: true view-only editor + no pattern writes
+
+- **The editor is now genuinely read-only in safe mode.** Previously you could type
+  into command-card fields, settings, and the YAML box and the edits would silently
+  revert (the model was locked, but the inputs weren't). Now those input surfaces are
+  inert / read-only, so nothing accepts edits — you can still browse conditions,
+  switch the Designer/YAML tabs, scroll, and read/copy the YAML.
+- **Adding and deleting SD patterns is blocked in safe mode.** The Console's Add ▾
+  menu (all six upload sources) and the per-row delete are now greyed and refused —
+  they were the last write actions a student could reach. Unlock advanced mode
+  (🛡 chip) to use them.
+
 ## v0.54 — 2026-07-08 · Sonification: chords & scales
 
 - **The Notes dropdown gains chords and scales.** Alongside continuous / chromatic /
