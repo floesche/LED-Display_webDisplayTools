@@ -7,6 +7,21 @@ practical.
 > **Draft.** Anything marked **TBD** still needs instructor review or a missing
 > image/reference before the final student handout.
 
+> **Feedback welcome.** This equipment is brand new: the rigs are less than a
+> month old, and much of the course software, including Arena Studio, is only
+> about 10 days old. If you see something confusing, broken, missing, or worth
+> improving in the course, experiments, rigs, or software, please tell us. You
+> can send feedback directly to the instructors or [open a course feedback
+> issue](https://github.com/reiserlab/cshl-2026-course/issues/new?title=Course%20feedback%3A%20).
+
+## Course team
+
+- **Instructors:** Michael Reiser and Frank Loesche.
+- **Rig assembly and testing:** many people in the Reiser Lab helped assemble,
+  test, and troubleshoot these rigs, especially Hannah Marie Santos and Isabel
+  Lehenbauer.
+- **Fly work and genotypes:** Ed Rogers.
+
 ## Start here
 
 1. **[Tethering basics](tethering.md)** — gluing a fly to a pin and getting it on the ball.
