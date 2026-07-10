@@ -51,8 +51,13 @@ private, so open this link while signed in with the course GitHub account.
 
 ## Full Genotype Reference
 
-References are ordered with the foundational driver or cell-type paper first,
-followed by a later exact driver-effector match when it adds useful confirmation.
+Where possible, references are ordered with a foundational driver or cell-type
+paper first, followed by a later exact driver-effector match when useful.
+
+> **Reference caveat:** These citations are representative examples of how the
+> driver lines and driver-effector combinations have been used. They are not
+> guaranteed to be the original, definitive, or most authoritative reference
+> for every line.
 
 ### `CS x w1118`
 
