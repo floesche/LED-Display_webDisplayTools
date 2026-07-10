@@ -598,8 +598,7 @@
       content.innerHTML = '<p class="loading">Loading guide...</p>';
 
       try {
-        // Course pages change frequently; bypass stale Markdown cached by GitHub Pages.
-        const response = await fetch(`${path}?v=${Date.now()}`, { cache: 'no-store' });
+        const response = await fetch(path, { cache: 'no-cache' });
         if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
         const markdown = await response.text();
         if (!window.marked) throw new Error('Markdown renderer failed to load');

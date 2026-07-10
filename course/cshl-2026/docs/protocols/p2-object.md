@@ -68,7 +68,7 @@ Pick the one your instructor specifies.
    tonic).
 5. **Opto closed-loop stripe:** the front-stripe fixation again, with light.
 6. **Opto A/B choice (closed-loop):** two objects presented; the fly steers
-   between them. 6 combinations, each repeated, ~15 s per trial. Each combo has
+   between them. 6 combinations, each repeated, about 15 s per trial. Each combo has
    B-left and B-right versions to balance side bias.
 
 ## What to watch
@@ -89,9 +89,9 @@ Pick the one your instructor specifies.
 | `p2_object_burst_short` | 4.5 min |
 | `p2_object_burst_full` | 10.2 min |
 
-Full runs contain ~1 min no-opto fixation, ~0.9 min no-opto sweeps, ~0.9 min
-opto sweeps, ~1 min opto fixation, and ~6 min A/B choice, plus the per-trial LED
-bursts in the burst version.
+Full runs contain about 1 min no-opto fixation, about 0.9 min no-opto sweeps,
+about 0.9 min opto sweeps, about 1 min opto fixation, and about 6 min A/B
+choice, plus the per-trial LED bursts in the burst version.
 
 ## Before you run
 

@@ -4,8 +4,8 @@
 turning) and to **looming** stimuli (approaching objects that trigger
 avoidance/escape). Each trial also starts with a brief optogenetic pulse.
 
-**Files:** use the revised `p1_motion_v2_short.yaml` (~2.7 min) and
-`p1_motion_v2_full.yaml` (~7.9 min). Fly-on-ball rig; **open-loop** visual
+**Files:** use the revised `p1_motion_v2_short.yaml` (about 2.7 min) and
+`p1_motion_v2_full.yaml` (about 7.9 min). Fly-on-ball rig; **open-loop** visual
 stimulation. FicTrac is still recorded for behavior, but the fly does not steer
 the display in this protocol.
 

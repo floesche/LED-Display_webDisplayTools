@@ -5,8 +5,8 @@ different brightness levels, while it watches a moving visual pattern. Think of
 it as a **dose–response** check: sham (no light) → increasing light levels →
 sham again.
 
-**Files:** `p0_opto_intensity_short.yaml` (~2.6 min) and
-`p0_opto_intensity_full.yaml` (~10.3 min). Runs on the fly-on-ball rig;
+**Files:** `p0_opto_intensity_short.yaml` (about 2.6 min) and
+`p0_opto_intensity_full.yaml` (about 10.3 min). Runs on the fly-on-ball rig;
 **open-loop** (no FicTrac closed-loop needed).
 
 ## Open in Arena Studio
