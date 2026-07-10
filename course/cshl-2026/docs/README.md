@@ -19,13 +19,13 @@ practical.
   Lehenbauer.
 - **Fly work and genotypes:** Ed Rogers.
 
-## Day plan
+## Plan and schedule
 
 | Time | Focus |
 | --- | --- |
-| **10:30-noon** | Meet at the rigs for a brief setup orientation, tethering demonstration, and hands-on tethering. Before lunch, each group mounts one fly and runs P0 as a rig-and-fly checkout. |
-| **After lunch-5:30** | Instructors assign each group a P1 or P2 fly/genotype. Run short protocols first, then collect as much high-quality P1/P2 data as time allows. We will check in roughly hourly to compare progress and troubleshoot. |
-| **Late afternoon** | Review promising results in the dashboard. Once core data are in hand, teams may try an instructor-approved variation or a new pattern. |
+| **10:30-noon** | Meet at the rigs for a brief setup orientation, tethering demonstration, and hands-on tethering. Before lunch, each group mounts one fly and runs P0. P0 is a calibration protocol: it asks which stimulation levels are most effective for that genotype on that rig. |
+| **After lunch-5:30** | Bootstrap P1 and P2 across genotypes. Different groups begin with different flies, run short protocols first, and collect high-quality data. At roughly hourly check-ins, we will compare results, troubleshoot, and decide together which genotypes or effects deserve more runs. |
+| **Late afternoon** | Review promising results in the dashboard. Once core P1/P2 data are in hand, teams may try an instructor-approved variation or a new pattern. |
 | **After dinner (optional)** | P3 closed-loop conditioning: an exploratory, instructor-led experiment after final validation. It is not a required core run. |
 
 ## Start here
@@ -44,21 +44,6 @@ practical.
   - [p1 — Visual motion (optomotor + looming)](protocols/p1-motion.md)
   - [p2 — Object responses (bar, choice)](protocols/p2-object.md)
   - [p3 — The Heisenberg experiment](protocols/p3.md) *(patterns ready; protocol in validation)*
-
-## Course strategy
-
-1. **Learn the rig with P0.** Run the short intro/calibration protocol so your
-   team sees how the arena, optogenetic LED, FicTrac traces, metadata, and
-   GitHub run logging fit together.
-2. **Collect core data with P1 and P2.** For each assigned fly, run the short
-   version first. If the fly is walking and the setup looks healthy, continue
-   with the matching full version.
-3. **Then make or modify a pattern.** After the core runs, use the
-   [Pattern Editor](pattern-editor.md) to build at least one stimulus and, if
-   time allows, test it in Arena Studio.
-4. **Try P3 after instructor validation.** P3 adapts classic closed-loop visual
-   conditioning to walking flies and lets each team choose a historical
-   Heisenberg/Wolf/Dill pattern pair.
 
 ## Reference
 
