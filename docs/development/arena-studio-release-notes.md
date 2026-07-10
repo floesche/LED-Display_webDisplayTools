@@ -4,6 +4,20 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.64 — 2026-07-10 · Panel edges readable in a lit room; File-menu lock trim
+
+- **Panels/cards now have a crisper edge.** The box borders (Console tool panels
+  and the Run/Edit cards) went from a dim grey to a soft near-white 1.5px edge,
+  so panels stay visually distinct on a dark monitor in a bright room. Internal
+  dividers stay subtle so it doesn't get loud. (Chose a lighter border over a
+  drop-shadow — shadows read as depth on light backgrounds but disappear into a
+  dark theme under ambient light.)
+- **Fixed the File-menu lock's spilling dark box.** The 🔒 GitHub-settings lock
+  was picking up the generic full-width menu-item styling (width:100% + a dark
+  hover fill), so clicking/hovering it drew a wide dark box that spilled past the
+  menu's rounded corner. The lock is now its own compact size with a contained
+  hover.
+
 ## v0.63 — 2026-07-10 · Scope shows conditional-LED activation as pink boxes
 
 - **The oscilloscope now draws the conditional-LED (`led_activation`) ON periods**

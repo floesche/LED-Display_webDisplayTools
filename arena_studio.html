@@ -105,6 +105,12 @@
   .gh-spacer{flex:1}
   .gh-lock{background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:5px;padding:2px 7px;font-size:11px;cursor:pointer;flex:0 0 auto}
   .gh-block:not(.gh-locked) .gh-lock{color:var(--accent);border-color:var(--accent)}
+  /* The generic ".filemenu .menu button" rule sets width:100% + a dark
+     var(--surface2) hover; on the compact gh lock that stretched its box
+     full-width so the dark hover spilled past the menu's rounded corner. Keep
+     the lock its own size with a contained (soft, in-bounds) hover instead. */
+  .filemenu .menu button.gh-lock{width:auto}
+  .filemenu .menu button.gh-lock:hover{background:rgba(255,255,255,.08)}
   .gh-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
   .gh-signin{background:transparent;border:1px solid var(--border);color:var(--beta);border-radius:5px;padding:3px 9px;font-size:11px}
   .gh-who{color:var(--accent);font-weight:600;display:none}
@@ -233,7 +239,7 @@
   @media (max-width:860px){.run-view{grid-template-columns:1fr;grid-template-rows:auto}
     .run-view>.run-main,.run-view>.meta-panel,.run-dock{grid-column:auto;grid-row:auto}}
   .run-main{min-width:0;align-self:stretch;display:flex;flex-direction:column;min-height:0}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:10px}
+  .card{background:var(--surface);border:1.5px solid rgba(255,255,255,.30);border-radius:10px;padding:10px 14px;margin-bottom:10px}
   .launch-card{padding:8px 12px}
   .launch-row{display:flex;gap:10px;align-items:stretch}
   .btn-run{flex:1;background:var(--accent);color:#06210f;border:0;border-radius:8px;font-family:var(--head);font-weight:700;font-size:15px;padding:9px;letter-spacing:.3px}
@@ -1931,7 +1937,10 @@
   .console-view .rail-btn.sel{border-color:var(--accent);background:rgba(0,230,118,.08)}
   .console-view .rail-btn .sub{font-size:9px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:126px}
   .console-view .stage{flex:1 1 auto;overflow:auto;padding:2px 2px 2px 10px;display:flex;flex-direction:column;gap:6px}
-  .console-view .panel{border:1px solid var(--border);border-radius:10px;background:var(--surface);display:none}
+  /* Outer panel box: soft near-white 1.5px edge so panels stay distinct on a
+     dark monitor in a lit room (grey var(--border) washed out). Internal
+     dividers (panel-h border-bottom) stay subtle so it doesn't get loud. */
+  .console-view .panel{border:1.5px solid rgba(255,255,255,.30);border-radius:10px;background:var(--surface);display:none}
   .console-view .panel.open{display:block}
   .console-view .panel-h{display:flex;align-items:center;gap:8px;padding:5px 11px;border-bottom:1px solid var(--border)}
   .console-view .panel-title{font-family:var(--head);font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--text);cursor:help;border-bottom:1px dotted var(--dim);padding-bottom:1px}
@@ -2862,7 +2871,7 @@
 </div>
 
 <footer id="footer">
-  <span class="foot-left">Arena Studio v0.63 | 2026-07-10 00:38 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
+  <span class="foot-left">Arena Studio v0.64 | 2026-07-10 19:21 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
   <!-- Course-repo quick-links: open protocols / logs / patterns in a new tab.
        Hrefs built from the configured repo + bench id (updateGhQuickLinks). -->
   <span id="ghQuickLinks" title="Open the course repo on GitHub (new tab)">
