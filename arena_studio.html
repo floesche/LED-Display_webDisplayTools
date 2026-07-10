@@ -2862,7 +2862,7 @@
 </div>
 
 <footer id="footer">
-  <span class="foot-left">Arena Studio v0.60 | 2026-07-09 23:27 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
+  <span class="foot-left">Arena Studio v0.61 | 2026-07-10 00:04 ET · <a href="https://github.com/reiserlab/webDisplayTools" target="_blank" rel="noopener" title="webDisplayTools on GitHub — source, issues, and release notes (docs/development/arena-studio-release-notes.md)">GitHub</a></span>
   <!-- Course-repo quick-links: open protocols / logs / patterns in a new tab.
        Hrefs built from the configured repo + bench id (updateGhQuickLinks). -->
   <span id="ghQuickLinks" title="Open the course repo on GitHub (new tab)">
@@ -6534,13 +6534,20 @@ async function renderPatThumb(name) {
     const m = Studio.patternSet;
     const p = m && sdEntryForValue(name);
     if (!p || !PP || !host) return;
-    host.title = webPreviewBySdName.has(p.sd_name)
+    // Logical-name tolerant: an SD row "004_frame2.pat" matches a source keyed
+    // "frame2.pat" (a course-repo colocated set stores unprefixed names) —
+    // webBytesForName strips the NNN_ prefix. The site library only avoids this
+    // because it stores files pre-prefixed. Colocated sources are re-wired after
+    // a reload by initFromUrl → rewireRepoPatternPreviews.
+    const src = Studio.webBytesForName(p.sd_name);
+    host.title = src
         ? 'Pattern preview (multi-frame patterns animate automatically)'
         : 'No preview — this pattern is on the SD card but its bytes were not seen this session (upload it via Upload ▾, or open its course-repo protocol, for a thumbnail)';
     try {
         let sampled = patPreviewCache[name];
         if (!sampled) {
-            const ab = await patByteSource(p.sd_name);
+            if (!src) return;
+            const ab = await src();
             const parsed = PatParser.parsePatFile(ab);
             sampled = PP.samplePreviewFrames(parsed, arenaForConfig(m.arenaConfig), {
                 renderIcon: generatePatternIcon,
@@ -8376,10 +8383,39 @@ async function openFromCourseRepo(repo, path, token, landIn) {
             repoRef: { repo: repo.full, path: path },
             landIn: landIn
         });
-        if (ok) registerRepoPatternPreviews(repo, path, token); // async, best-effort
+        if (ok) {
+            // Remember this repo protocol so its colocated _patterns/ preview
+            // sources can be RE-wired after a page reload (they're wired only on
+            // open; in-memory sources don't survive a reload, unlike the site
+            // library which re-wires itself via loadBuiltinPatternSet).
+            try {
+                sessionStorage.setItem('studio_repo_proto',
+                    JSON.stringify({ owner: repo.owner, name: repo.name, full: repo.full, path: path }));
+            } catch (_) { /* sessionStorage unavailable — non-fatal */ }
+            registerRepoPatternPreviews(repo, path, token); // async, best-effort
+        }
     } catch (e) {
         Studio.showBanner('Course-repo open failed: ' + (e && e.message ? e.message : e));
     }
+}
+
+// After a reload, re-wire the LAST-opened course-repo protocol's colocated
+// _patterns/ preview sources. They were wired only on open, and in-memory byte
+// sources don't survive a reload — unlike the site library, which re-registers
+// via loadBuiltinPatternSet(). Best-effort: needs a token AND the same course
+// repo still configured (a signed-out or repo-switched session skips silently).
+async function rewireRepoPatternPreviews() {
+    let rp;
+    try {
+        rp = JSON.parse(sessionStorage.getItem('studio_repo_proto') || 'null');
+    } catch (_) {
+        return;
+    }
+    if (!rp || !rp.path) return;
+    const cs = Studio.courseSettings && Studio.courseSettings();
+    const token = ghToken();
+    if (!token || !cs || !cs.repo || cs.repo.full !== rp.full) return;
+    registerRepoPatternPreviews({ owner: rp.owner, name: rp.name, full: rp.full }, rp.path, token);
 }
 
 // Repo-hosted .pat previews: register byte sources for the protocol's
@@ -8411,6 +8447,11 @@ async function registerRepoPatternPreviews(repo, protoPath, token) {
             // against it, then repaint — the listing arrives after the load.
             Studio.repoPatternNames = names;
             if (Studio.editor && Studio.editor.repaintLibrary) Studio.editor.repaintLibrary();
+            // Repaint the Console picker's current thumb now that sources exist
+            // (mirrors registerUploadedPreviews) — so a reload re-wire restores
+            // the thumbnail without waiting for the next pick.
+            const sel = $('cPatName');
+            if (sel && sel.value) { patPreviewCache = {}; renderPatThumb(sel.value); }
             Studio.rawLog('course repo: ' + n + ' pattern preview(s) wired from ' + dir + '/', 'info');
         }
     } catch (_) { /* no colocated patterns — fine */ }
@@ -8659,6 +8700,7 @@ async function initFromUrl() {
         await populateSessionRig();
         wirePatPicker();
         loadBuiltinPatternSet();
+        rewireRepoPatternPreviews(); // restore last-opened course protocol's colocated thumbs
         let allowedKeys = [];
         let protoIndex = [];
         try {

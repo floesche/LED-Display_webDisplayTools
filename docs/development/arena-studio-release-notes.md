@@ -4,6 +4,19 @@ The Studio's footer used to carry the full changelog inline; it now shows one li
 history lives here. Newest first. (Per-session engineering detail stays in
 `arena-studio-handover.md` and the design docs — this file is the user-facing what-changed list.)
 
+## v0.61 — 2026-07-10 · Course-repo pattern thumbnails survive a reload
+
+- **Fixed: after a page reload, patterns from a course-repo protocol's colocated
+  `_patterns/` set lost their preview GIF** (library patterns were fine). Their
+  byte-sources were wired only when the protocol was opened and didn't survive a
+  reload, so the Console picker showed "no preview." Now the last-opened course
+  protocol is remembered (per tab) and its colocated preview sources are re-wired
+  automatically on load — matching how the site library already re-wires itself.
+  (Needs GitHub sign-in + the same course repo, same as opening the protocol.)
+- Also made the Console thumbnail lookup **logical-name tolerant**, so an SD row
+  like `004_frame2_h_ccw_200f.pat` matches a source keyed `frame2_h_ccw_200f.pat`
+  (course-repo sets store unprefixed names; the SD lists them prefixed).
+
 ## v0.60 — 2026-07-09 · File menu: "Open experimental protocol" header
 
 - **The File ▾ menu now labels its Open items.** A small accent-coloured
