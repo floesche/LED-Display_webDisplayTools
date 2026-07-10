@@ -117,8 +117,11 @@ Planned first-look plots:
   visual motion pathway of Drosophila. *Neuron* 94:168-182.
   <https://doi.org/10.1016/j.neuron.2017.03.010>
 
-> **TBD:** add which genotypes run P1 first and which P1 runs count toward the
-> class aggregate.
+> **Genotype comparison:** The primary P1 comparison is **empty split** versus
+> **T4/T5 > Kir**. This stimulus set should evoke strong optomotor and looming
+> responses in the control flies and reveal a prominent motion-response deficit
+> when T4/T5 output is silenced. Other genotypes may also be informative and can
+> be assigned after the first results are reviewed.
 
 ---
 *Updated 2026-07-10 01:47 ET. Source: `protocols/shared/p1_motion_v2_*.yaml`.*
