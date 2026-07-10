@@ -7,6 +7,8 @@ references will be added to the individual protocol pages.
 
 - Fly-Lab-Gear walking setup hardware files and BOM:
   <https://github.com/reiserlab/Fly-Lab-Gear/tree/G6-treadmill/Walking-Setup>
+- Fly-Lab-Gear tethering-station guide:
+  <https://reiserlab.github.io/Fly-Lab-Gear/tether/station>
 - Modular LED Display repository: <https://github.com/reiserlab/Modular-LED-Display>
 - webDisplayTools repository: <https://github.com/reiserlab/webDisplayTools>
 - Arena Studio: <https://reiserlab.github.io/webDisplayTools/arena_studio.html>

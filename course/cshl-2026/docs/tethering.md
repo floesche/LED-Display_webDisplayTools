@@ -1,12 +1,19 @@
 # Tethering basics
 
+<div class="image-with-credit tethering-station">
+  <img src="assets/tethering_station.png" alt="Rendered design of the tethering station">
+  <span>Design by Frank Loesche</span>
+</div>
+
 To record a fly on the ball you first glue it to a small pin (the "tether") so
 its head and body are held still while its legs walk freely. Tethering is a
 craft — the single biggest factor in getting clean data. A well-tethered, happy
 fly gives you hours of behavior; a crooked or over-glued one won't walk.
 
-> **TBD: add images.** Add a photo of the tethering station, a close-up of a
-> good tether, and a photo of a fly correctly positioned on the ball.
+The [Fly Lab Gear tethering-station guide](https://reiserlab.github.io/Fly-Lab-Gear/tether/station)
+has the station design, hardware details, and source files.
+
+<div class="tethering-station-clear"></div>
 
 ## The idea
 
