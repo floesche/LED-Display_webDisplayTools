@@ -32,13 +32,14 @@ runlogs/<bench-id>/…jsonl                      recorded data, one file per run
 docs/                                          these guides
 ```
 
+<div class="github-overview">
+  <img src="assets/github_course_repo.png" alt="GitHub view of the cshl-2026-course repository showing its top-level folders and shared protocol-pattern folders">
+</div>
+
 There are not separate repositories for each bench. Instead, each bench writes
 to its own folders inside the private course repo. In normal use, Arena Studio
 handles those writes for you: your bench saves into `protocols/<your-bench-id>/`
 and completed recorded runs go into `runlogs/<your-bench-id>/`.
-
-> **TBD: add image.** Add a screenshot of the repository folders and one example
-> runlog file name.
 
 ## How your work gets there (automatically)
 
@@ -86,8 +87,8 @@ New runlog files will appear as teams finish experiments. Instructors may also
 update the shared protocols, metadata lists, or documentation during the course.
 If you see new files appear while the course is running, that is normal.
 
-> **TBD:** confirm how students receive repository access and whether they
-> should open github.com directly or only through Arena Studio.
+Most students will work through Arena Studio. Open GitHub directly only when an
+instructor asks you to inspect the repository.
 
 ---
 *Updated 2026-07-10 01:47 ET.*
