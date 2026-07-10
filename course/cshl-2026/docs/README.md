@@ -4,9 +4,6 @@ Welcome! These pages are your reference for running fly-on-ball experiments on
 the G6 LED-arena rigs. Read them in roughly this order; each page is short and
 practical.
 
-> **Draft.** Anything marked **TBD** still needs instructor review or a missing
-> image/reference before the final student handout.
-
 > **Feedback welcome.** This equipment is brand new: the rigs are less than a
 > month old, and much of the course software, including Arena Studio, is only
 > about 10 days old. If you see something confusing, broken, missing, or worth
