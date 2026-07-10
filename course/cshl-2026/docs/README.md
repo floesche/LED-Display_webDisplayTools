@@ -26,7 +26,7 @@ practical.
 | **10:30-noon** | Meet at the rigs for a brief setup orientation, tethering demonstration, and hands-on tethering. Before lunch, each group mounts one fly and runs P0. P0 is a calibration protocol: it asks which stimulation levels are most effective for that genotype on that rig. |
 | **After lunch-5:30** | Bootstrap P1 and P2 across genotypes. Different groups begin with different flies, run short protocols first, and collect high-quality data. At roughly hourly check-ins, we will compare results, troubleshoot, and decide together which genotypes or effects deserve more runs. The goal is analyzable data: an achievable target is `n>=4` for one genotype in P1 and `n>=4` for one genotype in P2. |
 | **Late afternoon** | Review promising results in the dashboard. Once core P1/P2 data are in hand, teams may try an instructor-approved variation or a new pattern. |
-| **After evening lecture** | P3 closed-loop conditioning: an exploratory, instructor-led experiment after final validation. |
+| **After evening lecture** | P3 closed-loop conditioning: an exploratory, instructor-led experiment. |
 
 ## Start here
 
@@ -43,7 +43,7 @@ practical.
   - [p0 — Optogenetic intensity](protocols/p0-opto-intensity.md)
   - [p1 — Visual motion (optomotor + looming)](protocols/p1-motion.md)
   - [p2 — Object responses (bar, choice)](protocols/p2-object.md)
-  - [p3 — The Heisenberg experiment](protocols/p3.md) *(patterns ready; protocol in validation)*
+  - [p3 — The Heisenberg experiment](protocols/p3.md)
 
 ## Reference
 

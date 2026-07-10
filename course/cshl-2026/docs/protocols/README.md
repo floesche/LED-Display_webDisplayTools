@@ -16,8 +16,8 @@ analysis can pool them.
 
 P0 is the intro/calibration protocol and is worth running once per line when
 possible. P1 and P2 are the core student protocols. P3 is the planned
-Heisenberg flight-simulator tribute: its five visual patterns are built, but
-the protocol remains gated on a physical test of conditional LED activation.
+Heisenberg flight-simulator tribute: its five visual patterns and short/full
+YAMLs are ready for instructor-led runs.
 
 ## Design principle: internal comparisons
 
