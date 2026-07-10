@@ -19,6 +19,15 @@ practical.
   Lehenbauer.
 - **Fly work and genotypes:** Ed Rogers.
 
+## Day plan
+
+| Time | Focus |
+| --- | --- |
+| **10:30-noon** | Meet at the rigs for a brief setup orientation, tethering demonstration, and hands-on tethering. Before lunch, each group mounts one fly and runs P0 as a rig-and-fly checkout. |
+| **After lunch-5:30** | Instructors assign each group a P1 or P2 fly/genotype. Run short protocols first, then collect as much high-quality P1/P2 data as time allows. We will check in roughly hourly to compare progress and troubleshoot. |
+| **Late afternoon** | Review promising results in the dashboard. Once core data are in hand, teams may try an instructor-approved variation or a new pattern. |
+| **After dinner (optional)** | P3 closed-loop conditioning: an exploratory, instructor-led experiment after final validation. It is not a required core run. |
+
 ## Start here
 
 1. **[Tethering basics](tethering.md)** — gluing a fly to a pin and getting it on the ball.
@@ -61,4 +70,4 @@ practical.
 > animations for p0-p3.
 
 ---
-*Last updated 2026-07-09.*
+*Last updated 2026-07-10.*
