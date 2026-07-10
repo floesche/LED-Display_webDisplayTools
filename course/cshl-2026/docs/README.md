@@ -48,8 +48,9 @@ Keep tethering and running flies. The immediate goal is `n=2` good flies in a
 selected protocol; `n=4-5` is a realistic target for analyzable data. Work with
 one or both of **P1** and **P2**, collecting multiple flies in each condition.
 
-> **"Flies are cheap." — Michael Dickinson** Do not hold back on trying another
-> fly when a tether, walking behavior, or result is not good enough.
+> <span class="flies-are-cheap">"Flies are cheap."</span><br>
+> — Michael Dickinson<br><br>
+> **Don't hold back.**
 
 ### Evening — explore conditioning
 
