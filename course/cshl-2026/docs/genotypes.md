@@ -65,7 +65,7 @@ private, so open this link while signed in with the course GitHub account.
 - Source list name: `CS X w1118`
 - Driver: N/A
 - Effector: N/A
-- Full genotype fields in sheet: blank
+- Full genotype fields in the source YAML: blank
 - Sexes: F, M
 
 ### `empty split > Kir2.1`
@@ -77,6 +77,7 @@ private, so open this link while signed in with the course GitHub account.
 - Full driver genotype: `pBPp65ADZp (attP40) ;pBPZpGAL4DBD`
 - Full effector genotype: `w+ (DL); +(DL); pJFRC49-10XUAS- eGFPKir2.1(attP2)`
 - Sexes: F
+- Exact control configuration: [Keleş, Mongeau & Frye (2019), *Object features and T4/T5 motion detectors modulate the dynamics of bar tracking by Drosophila*](https://doi.org/10.1242/jeb.190017) uses the enhancerless `pBPp65ADZp; pBPZpGAL4DBD > eGFP-Kir2.1` cross as the matched silencing control. No cell-type phenotype is expected from this control.
 
 ### `T4/T5 (SS00324) > Kir2.1`
 
@@ -87,6 +88,7 @@ private, so open this link while signed in with the course GitHub account.
 - Full driver genotype: `59E08-p65ADZp(attP40); 42F06-PZpGdbd(attP2)`
 - Full effector genotype: `w+ (DL); +(DL); pJFRC49-10XUAS- eGFPKir2.1(attP2)`
 - Sexes: F
+- Exact driver + effector: [Keleş, Mongeau & Frye (2019), *Object features and T4/T5 motion detectors modulate the dynamics of bar tracking by Drosophila*](https://doi.org/10.1242/jeb.190017) uses `SS00324 > eGFP-Kir2.1`; silencing T4/T5 removes the phase-advanced, co-directional steering component of bar tracking while leaving much of the orientation response intact.
 
 ### `empty split > CsChrimson`
 
@@ -97,6 +99,7 @@ private, so open this link while signed in with the course GitHub account.
 - Full driver genotype: `pBPp65ADZp (attP40) ;pBPZpGAL4DBD`
 - Full effector genotype: `w+,20XUAS-CsChrimson-mVenus(attP18);;`
 - Sexes: F, M
+- Exact control reagents: [Chia & Scott (2020), *Activation of specific mushroom body output neurons inhibits proboscis extension and sucrose consumption*](https://doi.org/10.1371/journal.pone.0223034) lists this enhancerless `pBPp65ADZp; pBPZpGAL4DBD` empty split and `20XUAS-CsChrimson-mVenus(attP18)` for matched split-GAL4 activation controls. No cell-type activation phenotype is expected from this control.
 
 ### `LC-6 (R_42E06) > CsChrimson`
 
@@ -107,6 +110,8 @@ private, so open this link while signed in with the course GitHub account.
 - Full driver genotype: `GMR42E06-Gal4(attP2)`
 - Full effector genotype: `w+,20XUAS-CsChrimson-mVenus(attP18);;`
 - Sexes: F, M
+- Exact driver + effector: [Vilinsky et al. (2018), *Probing Synaptic Transmission and Behavior in Drosophila with Optogenetics: A Laboratory Exercise*](https://pmc.ncbi.nlm.nih.gov/articles/PMC6153003/) tests `R42E06-GAL4 > 20XUAS-CsChrimson-mVenus` as the “Jumping” line and reports red-light-evoked jumping/startle behavior.
+- Cell-type phenotype: [Wu et al. (2016), *Visual projection neurons in the Drosophila lobula link feature detection to distinct behavioral programs*](https://doi.org/10.7554/eLife.21022) finds that LC6-specific split-GAL4 activation with CsChrimson produces high-penetrance jumping; this supports the LC6 assignment and expected phenotype, although it is not the same broad `R42E06-GAL4` driver.
 
 ### `P1 (15A01;71G01) > CsChrimson`
 
@@ -117,6 +122,7 @@ private, so open this link while signed in with the course GitHub account.
 - Full driver genotype: `15A01-p65ADZp(attP40);71G01-ZpGdbd(attP2)`
 - Full effector genotype: `w+,20XUAS-CsChrimson-mVenus(attP18);;`
 - Sexes: M
+- Exact driver + effector: [Hoopfer et al. (2015), *P1 interneurons promote a persistent internal state that enhances inter-male aggression in Drosophila*](https://doi.org/10.7554/eLife.11346) uses the `R15A01-AD;R71G01-DBD` P1 split driver with CsChrimson; weaker stimulation promotes aggression, whereas stronger stimulation evokes wing extension.
 
 ### `Hot Cell (HC-Gal4) > CsChrimson`
 
@@ -127,6 +133,9 @@ private, so open this link while signed in with the course GitHub account.
 - Full driver genotype: `HC-Gal4`
 - Full effector genotype: `w+,20XUAS-CsChrimson-mVenus(attP18);;`
 - Sexes: F
+- Exact driver + effector: [Huda et al. (2022), *Responses of different Drosophila species to temperature changes*](https://pmc.ncbi.nlm.nih.gov/articles/PMC9234498/) tests `HC-Gal4 > UAS-CsChrimson` directly and finds retinal-dependent avoidance of the illuminated area.
+- Exact-driver cell-type characterization: [Gallio et al. (2011), *The coding of temperature in the Drosophila brain*](https://doi.org/10.1016/j.cell.2011.01.028) shows that `HC-Gal4` labels the three aristal hot receptor neurons, characterizes their warming responses and projections, and shows that their silencing disrupts heat avoidance.
+- Exact-driver functional evidence: [Ni et al. (2013), *A gustatory receptor paralogue controls rapid warmth avoidance in Drosophila*](https://doi.org/10.1038/nature12390) uses `HC-Gal4` to show that hot-cell output is required for rapid negative thermotaxis and that restoring Gr28b(D) in these cells rescues the response.
 
 ### `pC1_19 (SS100895) > CsChrimson`
 
@@ -137,6 +146,7 @@ private, so open this link while signed in with the course GitHub account.
 - Full driver genotype: `SS100895`
 - Full effector genotype: `w+,20XUAS-CsChrimson-mVenus(attP18);;`
 - Sexes: M
+- Exact driver + effector (preprint): [Rubin et al. (2025), *Networks of sexually dimorphic neurons that regulate social behaviors in Drosophila*](https://doi.org/10.1101/2025.10.21.683766) maps `SS100895` to P1_19 (the paper's nomenclature) and reports that `SS100895 > 20XUAS-CsChrimson-mVenus` evokes sine song during illumination.
 
 ### `pC1_17a,b (SS102696) > CsChrimson`
 
@@ -147,6 +157,7 @@ private, so open this link while signed in with the course GitHub account.
 - Full driver genotype: `SS102696`
 - Full effector genotype: `w+,20XUAS-CsChrimson-mVenus(attP18);;`
 - Sexes: M
+- Exact driver + effector (preprint): [Rubin et al. (2025), *Networks of sexually dimorphic neurons that regulate social behaviors in Drosophila*](https://doi.org/10.1101/2025.10.21.683766) maps `SS102696` to P1_17a and P1_17b (the paper's nomenclature) and reports that `SS102696 > 20XUAS-CsChrimson-mVenus` evokes a transient pulse-song response at light onset.
 
 ### `MDN-1 (VT050660) > CsChrimson`
 
@@ -157,6 +168,8 @@ private, so open this link while signed in with the course GitHub account.
 - Full driver genotype: `VT050660-Gal4`
 - Full effector genotype: `20XUAS-CsChrimson-mVenus(attP18);;`
 - Sexes: F, M
+- Exact-driver activation: [Bidaye et al. (2014), *Neuronal control of Drosophila walking direction*](https://doi.org/10.1126/science.1249964) uses `VT050660-GAL4` activation to identify moonwalker descending neurons and induce backward walking. This broad driver is less MDN-specific than the later split-GAL4 lines.
+- Exact driver + effector: [Vilinsky et al. (2018), *Probing Synaptic Transmission and Behavior in Drosophila with Optogenetics: A Laboratory Exercise*](https://pmc.ncbi.nlm.nih.gov/articles/PMC6153003/) tests `VT050660-GAL4 > 20XUAS-CsChrimson-mVenus` as the “Moonwalker” line and reports red-light-evoked backward walking.
 
 ### `NP225 > CsChrimson`
 
@@ -165,8 +178,9 @@ private, so open this link while signed in with the course GitHub account.
 - Driver: `NP225`
 - Effector: `CsChrimson`
 - Full driver genotype: `NP225`
-- Full effector genotype: `10XUAS-Chrmson88-tdT`
+- Full effector genotype: `10XUAS-Chrimson88-tdT`
 - Sexes: F, M
+- Exact driver + effector: [Aso et al. (2014), *Mushroom body output neurons encode valence and guide memory-based action selection in Drosophila*](https://doi.org/10.7554/eLife.04580) reports that `NP225-GAL4 > CsChrimson` flies back away from an illuminated region and, when already illuminated, show continuous rotation that typically lasts for the full 30-s light period. “Spins” is course shorthand for that rotation; the paper's primary interpretation is retreat/backward walking from broad projection-neuron activation.
 
 ### `LC-24 (SS02638) > CsChrimson`
 
@@ -177,6 +191,7 @@ private, so open this link while signed in with the course GitHub account.
 - Full driver genotype: `SS02638`
 - Full effector genotype: `20XUAS-CsChrimson-mVenus(attP18);;`
 - Sexes: F, M
+- Exact driver + effector: [Wu et al. (2016), *Visual projection neurons in the Drosophila lobula link feature detection to distinct behavioral programs*](https://doi.org/10.7554/eLife.21022) identifies `SS02638` as LC24 and reports a forward-walking phenotype during CsChrimson activation, especially in the arena assay.
 
 ### `Avoidance (SS01159) > CsChrimson`
 
@@ -187,6 +202,7 @@ private, so open this link while signed in with the course GitHub account.
 - Full driver genotype: `SS01159`
 - Full effector genotype: `20XUAS-CsChrimson-mVenus(attP18);;`
 - Sexes: F, M
+- Exact driver + effector: [Shuai et al. (2025), *Driver lines for studying associative learning in Drosophila*](https://doi.org/10.7554/eLife.94168) reports robust avoidance of illuminated quadrants in `SS01159 > CsChrimson` flies, together with increased movement and turning at the light boundary.
 
 ### `Giant Fiber (17A04-AD;68A06-DBD) > CsChrimson`
 
@@ -197,6 +213,8 @@ private, so open this link while signed in with the course GitHub account.
 - Full driver genotype: `17A04-AD;68A06-DBD`
 - Full effector genotype: `20XUAS-CsChrimson-mVenus(attP18);;`
 - Sexes: F, M
+- Exact-driver characterization: [von Reyn et al. (2014), *A spike-timing mechanism for action selection*](https://doi.org/10.1038/nn.3741) uses the `R17A04-AD;R68A06-DBD` split driver to isolate the giant-fiber pair and relates giant-fiber timing to the selection of short versus long takeoff sequences.
+- Exact driver + effector: [Gaitanidis et al. (2025), *The Drosophila escape motor circuit shows differential vulnerability to aging linked to functional decay*](https://doi.org/10.1371/journal.pbio.3003553) expresses UAS-CsChrimson with this exact giant-fiber split driver and shows that a 50-ms red-light flash reliably evokes escape.
 
 ## Notes for metadata entry
 
