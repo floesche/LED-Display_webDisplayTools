@@ -264,7 +264,7 @@
         return multiplier * magnitude;
     }
 
-    function datasetSharedRange(cells, metric) {
+    function datasetSharedRange(cells, metric, useCourseAxisFloor) {
         const values = [];
         for (const cell of cells) {
             for (const trace of cell.traces || []) {
@@ -289,7 +289,7 @@
             lower = minimum - 1;
             upper = maximum + 1;
         }
-        const floor = COURSE_AXIS_FLOORS[metric];
+        const floor = useCourseAxisFloor === false ? null : COURSE_AXIS_FLOORS[metric];
         if (floor) {
             lower = Math.min(lower, floor[0]);
             upper = Math.max(upper, floor[1]);
@@ -314,8 +314,32 @@
         };
         const gapX = cols > 1 ? 0.025 : 0;
         const gapY = rows > 1 ? 0.035 : 0;
+        const manualRange =
+            opts.axisRanges && Array.isArray(opts.axisRanges[opts.metric])
+                ? opts.axisRanges[opts.metric]
+                : null;
         const sharedRange =
-            opts.yRange || (opts.sharedY === false ? null : datasetSharedRange(cells, opts.metric));
+            opts.yRange ||
+            manualRange ||
+            (opts.sharedY === false
+                ? null
+                : datasetSharedRange(cells, opts.metric, opts.useCourseAxisFloor));
+        const rowRanges = Array.isArray(opts.rowMetrics)
+            ? opts.rowMetrics.map((metric, row) => {
+                  const override =
+                      opts.axisRanges && Array.isArray(opts.axisRanges[metric])
+                          ? opts.axisRanges[metric]
+                          : null;
+                  return (
+                      override ||
+                      datasetSharedRange(
+                          cells.slice(row * cols, (row + 1) * cols),
+                          metric,
+                          opts.useCourseAxisFloor
+                      )
+                  );
+              })
+            : null;
         const legendNames = new Set();
 
         cells.forEach((cell, index) => {
@@ -353,11 +377,17 @@
                 zeroline: true,
                 zerolinecolor: '#aeb8c1',
                 title:
-                    col === 0 && row === Math.floor(rows / 2)
-                        ? { text: opts.yLabel || '', standoff: 5 }
+                    col === 0 && (rowRanges || row === Math.floor(rows / 2))
+                        ? {
+                              text:
+                                  (Array.isArray(opts.rowLabels) && opts.rowLabels[row]) ||
+                                  opts.yLabel ||
+                                  '',
+                              standoff: 5
+                          }
                         : undefined,
                 tickfont: { size: 10 },
-                range: sharedRange
+                range: rowRanges ? rowRanges[row] : sharedRange
             };
             for (const trace of cell.traces || []) {
                 const showlegend = trace.showlegend !== false && !legendNames.has(trace.name);
@@ -374,16 +404,18 @@
                 delete nextShape.dataY;
                 layout.shapes.push(nextShape);
             }
-            layout.annotations.push({
-                x: (x0 + x1) / 2,
-                y: y1 + 0.008,
-                xref: 'paper',
-                yref: 'paper',
-                text: `<b>${cell.title}</b>`,
-                showarrow: false,
-                yanchor: 'bottom',
-                font: { size: 11, color: COLORS.text }
-            });
+            if (!opts.columnTitlesOnly || row === 0) {
+                layout.annotations.push({
+                    x: (x0 + x1) / 2,
+                    y: y1 + 0.008,
+                    xref: 'paper',
+                    yref: 'paper',
+                    text: `<b>${cell.title}</b>`,
+                    showarrow: false,
+                    yanchor: 'bottom',
+                    font: { size: 11, color: COLORS.text }
+                });
+            }
         });
         if (opts.extraShapes) layout.shapes.push(...opts.extraShapes);
         return { data: traces, layout };
@@ -397,6 +429,15 @@
             description,
             figure,
             csvRows: cells.flatMap((cell) => cell.csvRows || [])
+        };
+    }
+
+    function axisGridOptions(options, metric, extra) {
+        return {
+            ...extra,
+            metric,
+            axisRanges: options && options.axisRanges,
+            useCourseAxisFloor: !options || options.useCourseAxisFloor !== false
         };
     }
 
@@ -452,7 +493,10 @@
                         cells,
                         levels.length,
                         1,
-                        { metric, yLabel: A.metricLabel(metric), height: 1180 }
+                        axisGridOptions(options, metric, {
+                            yLabel: A.metricLabel(metric),
+                            height: 1180
+                        })
                     )
                 );
             }
@@ -589,12 +633,11 @@
             cells,
             1,
             2,
-            {
+            axisGridOptions(options, 'turning', {
                 xLabel: 'LED level (0=pre sham, 6=post sham)',
                 yLabel: 'Turning velocity (deg/s)',
-                metric: 'turning',
                 height: 430
-            }
+            })
         );
     }
 
@@ -651,7 +694,10 @@
                     cells,
                     periods.length,
                     frequencies.length,
-                    { metric, yLabel: A.metricLabel(metric), height: 570 }
+                    axisGridOptions(options, metric, {
+                        yLabel: A.metricLabel(metric),
+                        height: 570
+                    })
                 )
             );
         }
@@ -694,33 +740,93 @@
                     cells,
                     classes.length,
                     speeds.length,
-                    { metric, yLabel: A.metricLabel(metric), height: 760 }
+                    axisGridOptions(options, metric, {
+                        yLabel: A.metricLabel(metric),
+                        height: 760
+                    })
                 )
             );
         }
         return pages;
     }
 
+    function p1TuningPoints(run, period, metric, series, alignDirection) {
+        return [0, 1, 2, 4, 8, 16]
+            .map((frequency) => {
+                const direction = frequency === 0 ? 'static' : series.key;
+                const steps = run.steps.filter(
+                    (step) => step.condition === `om_${period}deg_${direction}_${frequency}hz`
+                );
+                let value = A.mean(steps.map((step) => A.stepMean(run, step, metric, 0, 2)));
+                if (
+                    alignDirection &&
+                    metric === 'turning' &&
+                    frequency > 0 &&
+                    series.key === 'ccw'
+                ) {
+                    value *= -1;
+                }
+                return { x: frequency, y: value };
+            })
+            .filter((point) => Number.isFinite(point.y));
+    }
+
+    function p1MatchedTuningPage(runs, options) {
+        const periods = [36, 72];
+        const metrics = ['turning', 'forward'];
+        const cells = [];
+        metrics.forEach((metric) =>
+            periods.forEach((period) => {
+                const result = summarySeries(
+                    runs,
+                    (run, series) => p1TuningPoints(run, period, metric, series, true),
+                    [
+                        { name: 'CW / right', key: 'cw', color: COLORS.cw },
+                        {
+                            name: 'CCW / left',
+                            key: 'ccw',
+                            color: COLORS.ccw
+                        }
+                    ],
+                    options
+                );
+                cells.push({
+                    title: `${period} deg spatial period`,
+                    traces: result.traces,
+                    shapes: [],
+                    csvRows: result.csvRows.map((row) => ({
+                        ...row,
+                        metric,
+                        spatial_period_deg: period,
+                        direction_aligned: metric === 'turning'
+                    }))
+                });
+            })
+        );
+        return pageFromCells(
+            'p1-optomotor-matched-summary',
+            'p1 Matched optomotor summary',
+            'Turning is shown above forward velocity; columns are spatial periods. CCW/left turning is sign-flipped into the CW/right frame. Forward velocity is not flipped. Static 0 Hz is the common control.',
+            cells,
+            metrics.length,
+            periods.length,
+            {
+                xLabel: 'Temporal frequency (Hz)',
+                rowMetrics: metrics,
+                rowLabels: ['Aligned turning (deg/s)', 'Forward velocity (mm/s)'],
+                axisRanges: options.axisRanges,
+                useCourseAxisFloor: options.useCourseAxisFloor !== false,
+                columnTitlesOnly: true,
+                height: 650
+            }
+        );
+    }
+
     function p1TuningPage(runs, options) {
         const cells = [36, 72].map((period) => {
             const result = summarySeries(
                 runs,
-                (run, series) =>
-                    [0, 1, 2, 4, 8, 16]
-                        .map((frequency) => {
-                            const direction = frequency === 0 ? 'static' : series.key;
-                            const steps = run.steps.filter(
-                                (step) =>
-                                    step.condition === `om_${period}deg_${direction}_${frequency}hz`
-                            );
-                            return {
-                                x: frequency,
-                                y: A.mean(
-                                    steps.map((step) => A.stepMean(run, step, 'turning', 0, 2))
-                                )
-                            };
-                        })
-                        .filter((point) => Number.isFinite(point.y)),
+                (run, series) => p1TuningPoints(run, period, 'turning', series, false),
                 [
                     { name: 'CW', key: 'cw', color: COLORS.cw },
                     { name: 'CCW', key: 'ccw', color: COLORS.ccw }
@@ -741,12 +847,11 @@
             cells,
             1,
             2,
-            {
+            axisGridOptions(options, 'turning', {
                 xLabel: 'Temporal frequency (Hz)',
                 yLabel: 'Turning velocity (deg/s)',
-                metric: 'turning',
                 height: 430
-            }
+            })
         );
     }
 
@@ -802,7 +907,10 @@
                     cells,
                     phases.length,
                     speeds.length,
-                    { metric, yLabel: A.metricLabel(metric), height: 570 }
+                    axisGridOptions(options, metric, {
+                        yLabel: A.metricLabel(metric),
+                        height: 570
+                    })
                 )
             );
         }
@@ -844,7 +952,10 @@
                     cells,
                     conditions.length,
                     1,
-                    { metric, yLabel: A.metricLabel(metric), height: 560 }
+                    axisGridOptions(options, metric, {
+                        yLabel: A.metricLabel(metric),
+                        height: 560
+                    })
                 )
             );
         }
@@ -1272,7 +1383,10 @@
                 cells,
                 rows,
                 cols,
-                { metric, yLabel: A.metricLabel(metric), height: Math.max(450, rows * 190 + 100) }
+                axisGridOptions(options, metric, {
+                    yLabel: A.metricLabel(metric),
+                    height: Math.max(450, rows * 190 + 100)
+                })
             );
         });
     }
@@ -1287,6 +1401,7 @@
             return [
                 ...p1OptomotorPages(runs, opts),
                 ...p1LoomPages(runs, opts),
+                p1MatchedTuningPage(runs, opts),
                 p1TuningPage(runs, opts)
             ];
         if (families[0] === 'p2-tonic' || families[0] === 'p2-burst') {

@@ -3,6 +3,7 @@
 const A = window.DashboardAnalysis;
 const P = window.DashboardPlots;
 const G = window.DashboardGitHub;
+const ANALYSIS_AXES_KEY = 'dashboard_analysis_axes';
 
 const state = {
     catalog: [],
@@ -13,6 +14,12 @@ const state = {
     pages: [],
     plotIndex: 0,
     renderedRuns: [],
+    analysisAxes: {
+        mode: 'manual',
+        turningLimit: 300,
+        forwardMin: 0,
+        forwardMax: 25
+    },
     github: {
         branch: 'main',
         user: null,
@@ -98,6 +105,12 @@ const els = Object.fromEntries(
         'downloadPngButton',
         'downloadPlotCsvButton',
         'plotSourceLink',
+        'analysisAxisMode',
+        'analysisTurnLimit',
+        'analysisForwardMin',
+        'analysisForwardMax',
+        'applyAnalysisAxesButton',
+        'fitAnalysisAxesButton',
         'analysisContext',
         'analysisWarnings',
         'plotArea',
@@ -203,6 +216,58 @@ function resetGithubFolderState() {
     state.github.directories = [];
     state.github.selectedFolders = [];
     updateRigSelectionUi();
+}
+
+function analysisAxisBuildOptions() {
+    if (state.analysisAxes.mode !== 'manual') {
+        return { axisRanges: null, useCourseAxisFloor: false };
+    }
+    return {
+        axisRanges: {
+            turning: [-state.analysisAxes.turningLimit, state.analysisAxes.turningLimit],
+            forward: [state.analysisAxes.forwardMin, state.analysisAxes.forwardMax]
+        },
+        useCourseAxisFloor: false
+    };
+}
+
+function analysisAxisSummary() {
+    return state.analysisAxes.mode === 'manual'
+        ? `axes turn +/-${state.analysisAxes.turningLimit} deg/s, forward ${state.analysisAxes.forwardMin} to ${state.analysisAxes.forwardMax} mm/s`
+        : 'axes fit to selected data';
+}
+
+function updateAnalysisAxisUi() {
+    els.analysisTurnLimit.value = String(state.analysisAxes.turningLimit);
+    els.analysisForwardMin.value = String(state.analysisAxes.forwardMin);
+    els.analysisForwardMax.value = String(state.analysisAxes.forwardMax);
+    const manual = state.analysisAxes.mode === 'manual';
+    els.analysisAxisMode.textContent = manual ? 'Manual' : 'Fit selected';
+    els.applyAnalysisAxesButton.classList.toggle('primary', manual);
+    els.fitAnalysisAxesButton.classList.toggle('primary', !manual);
+}
+
+function saveAnalysisAxes() {
+    localStorage.setItem(ANALYSIS_AXES_KEY, JSON.stringify(state.analysisAxes));
+}
+
+function loadAnalysisAxes() {
+    try {
+        const saved = JSON.parse(localStorage.getItem(ANALYSIS_AXES_KEY) || '{}');
+        const turningLimit = Number(saved.turningLimit);
+        const forwardMin = Number(saved.forwardMin);
+        const forwardMax = Number(saved.forwardMax);
+        if (Number.isFinite(turningLimit) && turningLimit > 0)
+            state.analysisAxes.turningLimit = turningLimit;
+        if (Number.isFinite(forwardMin) && Number.isFinite(forwardMax) && forwardMax > forwardMin) {
+            state.analysisAxes.forwardMin = forwardMin;
+            state.analysisAxes.forwardMax = forwardMax;
+        }
+        if (saved.mode === 'fit') state.analysisAxes.mode = 'fit';
+    } catch (_) {
+        /* keep course defaults */
+    }
+    updateAnalysisAxisUi();
 }
 
 function updateGithubUi(user) {
@@ -772,9 +837,11 @@ async function renderSelection() {
             runs.push(await ensureRun(descriptors[index]));
         }
         state.renderedRuns = runs;
+        const axisOptions = analysisAxisBuildOptions();
         state.pages = P.buildPages(runs, {
             mode: state.mode,
-            showIndividuals: els.showIndividualsInput.checked
+            showIndividuals: els.showIndividualsInput.checked,
+            ...axisOptions
         });
         state.plotIndex = Math.min(state.plotIndex, Math.max(0, state.pages.length - 1));
         renderPlotOptions();
@@ -786,7 +853,7 @@ async function renderSelection() {
             state.mode === 'group'
                 ? `${runs.length} fly/run means | ${[...new Set(runs.map((run) => run.descriptor.genotype))].join('; ')} | ${[...new Set(runs.map((run) => run.descriptor.sex))].join(', ')}`
                 : sourceLabelForContext(runs[0]);
-        els.analysisContext.textContent = `${label} | smoothing ${state.scope.smoothWindowS.toFixed(2)} s | ball ${state.scope.ballDiameterMm} mm | ${runs.map((run) => run.id).join(', ')}`;
+        els.analysisContext.textContent = `${label} | ${analysisAxisSummary()} | smoothing ${state.scope.smoothWindowS.toFixed(2)} s | ball ${state.scope.ballDiameterMm} mm | ${runs.map((run) => run.id).join(', ')}`;
         setStatus(
             'ok',
             `${state.pages.length} plots built from ${runs.length} runlog${runs.length === 1 ? '' : 's'}`
@@ -1492,6 +1559,32 @@ els.showIndividualsInput.addEventListener('change', () => {
     if (state.renderedRuns.length) renderSelection();
 });
 
+els.applyAnalysisAxesButton.addEventListener('click', async () => {
+    const turningLimit = Number(els.analysisTurnLimit.value);
+    const forwardMin = Number(els.analysisForwardMin.value);
+    const forwardMax = Number(els.analysisForwardMax.value);
+    if (!(turningLimit > 0) || !Number.isFinite(forwardMin) || !(forwardMax > forwardMin)) {
+        setStatus(
+            'error',
+            'Plot axes require a positive turning limit and forward maximum above minimum'
+        );
+        return;
+    }
+    state.analysisAxes = { mode: 'manual', turningLimit, forwardMin, forwardMax };
+    saveAnalysisAxes();
+    updateAnalysisAxisUi();
+    if (state.renderedRuns.length) await renderSelection();
+    else setStatus('ok', `Saved ${analysisAxisSummary()}`);
+});
+
+els.fitAnalysisAxesButton.addEventListener('click', async () => {
+    state.analysisAxes.mode = 'fit';
+    saveAnalysisAxes();
+    updateAnalysisAxisUi();
+    if (state.renderedRuns.length) await renderSelection();
+    else setStatus('ok', 'Analysis plots will fit shared ranges to the selected data');
+});
+
 els.plotSelect.addEventListener('change', async () => {
     state.plotIndex = Number(els.plotSelect.value);
     await renderPlot();
@@ -1539,6 +1632,7 @@ els.downloadPlotCsvButton.addEventListener('click', () => {
         plot: page.title,
         mode: state.mode,
         runlogs: state.renderedRuns.map((run) => run.sourcePath).join(' | '),
+        analysis_axes: analysisAxisSummary(),
         smoothing_s: state.scope.smoothWindowS,
         ball_diameter_mm: state.scope.ballDiameterMm
     };
@@ -1628,6 +1722,7 @@ window.addEventListener('resize', renderScope);
 
 async function initialize() {
     els.githubRepoInput.value = G.currentRepo();
+    loadAnalysisAxes();
     if (window.location.hostname.endsWith('github.io')) {
         els.plotSourceLink.href =
             'https://github.com/reiserlab/webDisplayTools/tree/main/dashboard/data-browser';

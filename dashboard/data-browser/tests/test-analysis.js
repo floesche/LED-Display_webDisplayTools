@@ -70,7 +70,7 @@ const p0Pages = P.buildPages([p0], { mode: 'single', showIndividuals: true });
 const p1Pages = P.buildPages([p1], { mode: 'single', showIndividuals: true });
 const p2Pages = P.buildPages([p2], { mode: 'single', showIndividuals: true });
 assert.strictEqual(p0Pages.length, 7);
-assert.strictEqual(p1Pages.length, 7);
+assert.strictEqual(p1Pages.length, 8);
 assert.strictEqual(p2Pages.length, 9);
 assert(p0Pages.every((page) => page.figure.data.length > 0));
 assert(p1Pages.every((page) => page.figure.data.length > 0));
@@ -81,6 +81,44 @@ assert(
         .find((page) => page.id === 'p2-polar')
         .figure.data.every((trace) => trace.type === 'scatterpolar')
 );
+
+const p1Matched = p1Pages.find((page) => page.id === 'p1-optomotor-matched-summary');
+assert(p1Matched, 'p1 should include a two-row matched optomotor summary');
+assert.strictEqual(
+    Object.keys(p1Matched.figure.layout).filter((key) => /^yaxis\d*$/.test(key)).length,
+    4
+);
+const rawP1Ccw = A.mean(
+    p1.steps
+        .filter((step) => step.condition === 'om_36deg_ccw_2hz')
+        .map((step) => A.stepMean(p1, step, 'turning', 0, 2))
+);
+const alignedCcw = p1Matched.figure.data.find(
+    (trace) => trace.name === 'CCW / left' && trace.yaxis === 'y'
+);
+assert(alignedCcw);
+assert(
+    Math.abs(alignedCcw.y[alignedCcw.x.indexOf(2)] + rawP1Ccw) < 1e-9,
+    'CCW/left turning should be sign-flipped into the CW/right frame'
+);
+
+const manualP1Pages = P.buildPages([p1], {
+    mode: 'single',
+    showIndividuals: true,
+    axisRanges: { turning: [-300, 300], forward: [0, 25] },
+    useCourseAxisFloor: false
+});
+assert.deepStrictEqual(
+    manualP1Pages.find((page) => page.id === 'p1-optomotor-turning').figure.layout.yaxis.range,
+    [-300, 300]
+);
+assert.deepStrictEqual(
+    manualP1Pages.find((page) => page.id === 'p1-optomotor-forward').figure.layout.yaxis.range,
+    [0, 25]
+);
+const manualMatched = manualP1Pages.find((page) => page.id === 'p1-optomotor-matched-summary');
+assert.deepStrictEqual(manualMatched.figure.layout.yaxis.range, [-300, 300]);
+assert.deepStrictEqual(manualMatched.figure.layout.yaxis3.range, [0, 25]);
 
 const p2Forward = p2Pages.find((page) => page.id === 'p2-sweep-forward');
 const p2ForwardValues = p2Forward.figure.data.flatMap((trace) =>

@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark light">
   <title>CSHL 2026 Course Data Dashboard</title>
-  <link rel="stylesheet" href="styles.css?v=20260710-1630">
+  <link rel="stylesheet" href="styles.css?v=20260710-1647">
   <script defer src="https://cdn.plot.ly/plotly-3.6.0.min.js" charset="utf-8"></script>
-  <script defer src="vendor/kinematics.js?v=20260710-1630"></script>
-  <script defer src="analysis-core.js?v=20260710-1630"></script>
-  <script defer src="plot-specs.js?v=20260710-1630"></script>
-  <script defer src="github-repo.js?v=20260710-1630"></script>
-  <script defer src="app.js?v=20260710-1630"></script>
+  <script defer src="vendor/kinematics.js?v=20260710-1647"></script>
+  <script defer src="analysis-core.js?v=20260710-1647"></script>
+  <script defer src="plot-specs.js?v=20260710-1647"></script>
+  <script defer src="github-repo.js?v=20260710-1647"></script>
+  <script defer src="app.js?v=20260710-1647"></script>
 </head>
 <body>
   <header class="app-header">
@@ -210,6 +210,26 @@
           <a id="plotSourceLink" class="command-button" href="https://github.com/reiserlab/webDisplayTools/tree/main/dashboard/data-browser" target="_blank" rel="noreferrer">Source</a>
         </div>
       </div>
+      <div class="analysis-axis-controls" role="group" aria-label="Analysis plot axis ranges">
+        <div class="axis-control-title">
+          <strong>Plot axes</strong>
+          <span id="analysisAxisMode" class="badge">Manual</span>
+        </div>
+        <label title="Symmetric turning-velocity limit used by turning plots">
+          <span>Turning &plusmn;</span>
+          <input id="analysisTurnLimit" type="number" min="1" step="25" value="300">
+          <span>deg/s</span>
+        </label>
+        <label title="Minimum and maximum forward-velocity limits used by forward plots">
+          <span>Forward</span>
+          <input id="analysisForwardMin" type="number" step="1" value="0" aria-label="Forward velocity minimum">
+          <span>to</span>
+          <input id="analysisForwardMax" type="number" step="1" value="25" aria-label="Forward velocity maximum">
+          <span>mm/s</span>
+        </label>
+        <button id="applyAnalysisAxesButton" type="button" title="Apply these ranges to all matching analysis panels">Apply ranges</button>
+        <button id="fitAnalysisAxesButton" type="button" title="Fit shared padded ranges to every displayed trace in the selected data">Fit selected</button>
+      </div>
       <div id="analysisContext" class="analysis-context">No runlogs selected</div>
       <div id="analysisWarnings" class="analysis-warnings" hidden></div>
       <div id="plotArea" class="plot-area">
@@ -269,7 +289,7 @@
   </dialog>
 
   <footer class="app-footer">
-    Course Data Dashboard v1 | 2026-07-10 16:30 ET &middot;
+    Course Data Dashboard v1 | 2026-07-10 16:47 ET &middot;
     <a href="https://github.com/reiserlab/webDisplayTools/tree/main/dashboard/data-browser" target="_blank" rel="noreferrer">GitHub</a>
   </footer>
 </body>

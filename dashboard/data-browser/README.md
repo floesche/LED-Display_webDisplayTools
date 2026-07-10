@@ -22,13 +22,15 @@ CSHL 2026 course.
 - Averages trials within each fly/run before averaging across flies.
 - Exports each interactive plot as SVG, PNG, or CSV.
 - Exports the focused run's derived frame table as CSV.
+- Lets users set shared turning and forward plot ranges in the dashboard or fit
+  padded shared ranges to the selected data; manual values persist locally.
 
 The dark oscilloscope uses the Arena Studio channel order and colors. Analysis
 plots use a white background and Plotly hover, zoom, pan, and reset controls.
-Time-series matrices use one padded, rounded range spanning every displayed
-trace in the selected dataset. A common course envelope (turning +/-400 deg/s,
-forward +/-20 mm/s) keeps ordinary runs comparable; ranges expand when needed
-so extreme or failed-tracking runs remain visible rather than clipping.
+Time-series matrices default to dashboard-controlled manual ranges (turning
++/-300 deg/s and forward 0-25 mm/s). Users can edit and persist those values or
+choose Fit selected to compute one padded, rounded range spanning every
+displayed trace in the selected dataset.
 
 ## Analysis pages
 
@@ -49,6 +51,8 @@ so extreme or failed-tracking runs remain visible rather than clipping.
 - Rows are stimulus class; columns are loom speed
 - Loom positions remain separate
 - Signed optomotor tuning summary
+- Matched optomotor summary with turning above forward velocity, spatial period
+  columns, and CCW/left turning sign-flipped into the CW/right frame
 
 ### p2 object choice
 

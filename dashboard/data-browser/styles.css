@@ -653,6 +653,49 @@ main {
   color: #111820;
 }
 
+.analysis-axis-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  padding: 9px 16px;
+  border-bottom: 1px solid #cfd7dd;
+  background: #f8fafb;
+  color: #46515a;
+  font-size: 11px;
+}
+
+.axis-control-title,
+.analysis-axis-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.axis-control-title {
+  margin-right: 2px;
+  color: #17202a;
+}
+
+.analysis-axis-controls .badge {
+  border-color: #b9c4cb;
+  color: #53606a;
+}
+
+.analysis-axis-controls input {
+  width: 72px;
+  min-height: 32px;
+  height: 32px;
+  border-color: #bac4cb;
+  background: #ffffff;
+  color: #182129;
+  font-size: 12px;
+}
+
+.analysis-axis-controls button {
+  min-height: 32px;
+}
+
 .plot-description {
   max-width: 820px;
   margin: 5px 0 0;
@@ -1219,6 +1262,28 @@ td:nth-child(2) {
 
   .plot-downloads {
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .analysis-axis-controls,
+  .analysis-axis-controls label {
+    align-items: flex-start;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .analysis-axis-controls label {
+    display: grid;
+    grid-template-columns: auto minmax(64px, 1fr) auto minmax(64px, 1fr) auto;
+    align-items: center;
+  }
+
+  .analysis-axis-controls label:first-of-type {
+    grid-template-columns: auto minmax(64px, 1fr) auto;
+  }
+
+  .analysis-axis-controls input,
+  .analysis-axis-controls button {
+    width: 100%;
   }
 
   .metadata-summary dt {
