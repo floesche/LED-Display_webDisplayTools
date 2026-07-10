@@ -19,12 +19,16 @@ practical.
   Lehenbauer.
 - **Fly work and genotypes:** Ed Rogers.
 
+> <span class="flies-are-cheap">"Flies are cheap."</span><br>
+> — Michael Dickinson<br><br>
+> **Don't hold back.**
+
 ## Plan and schedule
 
 | Time | Focus |
 | --- | --- |
-| **10:30-noon** | Meet at the rigs for a brief setup orientation, tethering demonstration, and hands-on tethering. Before lunch, each group mounts one fly and runs P0. P0 is a calibration protocol: it asks which stimulation levels are most effective for that genotype on that rig. |
-| **After lunch-5:30** | Bootstrap P1 and P2 across genotypes. Different groups begin with different flies, run short protocols first, and collect high-quality data. At roughly hourly check-ins, we will compare results, troubleshoot, and decide together which genotypes or effects deserve more runs. The immediate goal is `n=2` good flies; `n=4-5` is a realistic target for analyzable data. |
+| **10:30-noon** | Meet at the rigs for a brief setup orientation and tethering demonstration, then work hands-on: tether, mount one fly, and run P0. P0 is a calibration protocol: it asks which stimulation levels are most effective for that genotype on that rig. |
+| **After lunch-5:30** | Bootstrap P1 and P2 across genotypes: different groups begin with different flies, run short protocols first, and collect high-quality data. At roughly hourly check-ins, we will compare results, troubleshoot, and decide together which genotypes or effects deserve more runs. |
 | **Late afternoon** | Review promising results in the dashboard. Once core P1/P2 data are in hand, teams may try an instructor-approved variation or a new pattern. |
 | **After evening lecture** | P3 closed-loop conditioning: an exploratory, instructor-led experiment. |
 
@@ -52,10 +56,6 @@ before lunch:
 Keep tethering and running flies. The immediate goal is `n=2` good flies in a
 selected protocol; `n=4-5` is a realistic target for analyzable data. Work with
 one or both of **P1** and **P2**, collecting multiple flies in each condition.
-
-> <span class="flies-are-cheap">"Flies are cheap."</span><br>
-> — Michael Dickinson<br><br>
-> **Don't hold back.**
 
 ### Evening — explore conditioning
 
@@ -87,4 +87,4 @@ collect enough data to ask whether it replicates.
 - **[References and links](references.md)** — panel-system, FicTrac, Arena Studio, and reading links.
 
 ---
-*Updated 2026-07-10 02:30 ET.*
+*Updated 2026-07-10 08:48 ET.*
