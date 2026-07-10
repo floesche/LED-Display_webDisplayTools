@@ -27,6 +27,11 @@ dataset, but it is useful to run once per genotype/line when possible so each
 team sees how Arena Studio, visual stimuli, LED timing, and run logging fit
 together.
 
+**Course sequence:** first practice tethering with `CS x w1118` flies. Then run
+P0 on the optogenetic line assigned for that group's next experiment. This
+calibration comes before P1 or P2, so the group has a sensible LED range before
+collecting its main data.
+
 ## Pattern previews
 
 | Drifting grating | Sweeping dark bar |
@@ -100,9 +105,6 @@ Planned first-look plots:
 - Strother JA et al. (2017). The emergence of directional selectivity in the
   visual motion pathway of Drosophila. *Neuron* 94:168-182.
   <https://doi.org/10.1016/j.neuron.2017.03.010>
-
-> **TBD:** add which CsChrimson genotypes to run p0 on, and the final LED-percent
-> calibration per rig.
 
 ---
 *Updated 2026-07-10 01:47 ET. Source: `protocols/shared/p0_opto_intensity_*.yaml`.*
