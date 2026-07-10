@@ -4,13 +4,14 @@ The **Pattern Editor** is the web tool for making `.pat` files for the LED
 arena. You can generate gratings, looming-like expansions, bars, edges, image
 patterns, and multi-frame animations, then save them for Arena Studio protocols.
 
+<div class="pattern-editor-overview">
+  <img src="assets/pattern_editor_animation.png" alt="Pattern Editor Animate tab showing a frame-shifting animation and the 2D arena preview">
+</div>
+
 Open the editor: <https://reiserlab.github.io/webDisplayTools/pattern_editor.html>
 
 Full quick start:
 <https://github.com/reiserlab/webDisplayTools/blob/main/PATTERN_EDITOR_QUICKSTART.md>
-
-> **TBD: add images.** Add screenshots of the Generate tab, viewer, playback
-> controls, Save dialog, and an example student pattern.
 
 ## Basic workflow
 
