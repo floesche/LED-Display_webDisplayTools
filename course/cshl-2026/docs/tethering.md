@@ -38,7 +38,8 @@ vice, a fine paintbrush, a vacuum pen, Kimwipes, and a dissecting scope.
 
 1. Get a vial; **note the genotype and estimated age** in your notebook.
 2. Transfer a few flies into a tube; plug it with cotton/foam. *Every fly is
-   precious* — ask for small batches.
+   precious* — ask for small batches. A [transfer funnel](https://reiserlab.github.io/Fly-Lab-Gear/tether/funnels)
+   may help.
 3. **Chill on ice** until fully immobilized (~5 min). Do not leave them on ice
    longer than necessary: a longer chill means a longer recovery before the fly
    is ready to walk.
