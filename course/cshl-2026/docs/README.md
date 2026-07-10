@@ -30,17 +30,22 @@ practical.
 
 ## Goals for the day
 
-### Morning — learn the rig and make a first fly
+### Morning — learn the rig, tether, and run P0
 
 Everyone should tether at least one fly and become comfortable with the rig
 before lunch:
 
 1. Open **Arena Studio** and connect to the rig.
-2. Browse the pattern library, then use the Console to display a pattern.
-3. Open a protocol file in the Editor and follow its steps to understand what it
-   will do.
-4. Use the setup to ask concrete questions: for example, what does `gain` do,
-   and how would changing it affect a closed-loop experiment?
+2. In the Editor, open **[P0](protocols/p0-opto-intensity.md)** first and trace
+   its sequence so you understand what the protocol will do.
+3. Explore the **Console**: browse patterns, display several patterns at
+   different speeds and directions (including a negative speed), try modes 2
+   and 3, and drive the optogenetic LED.
+4. On a fly-on-ball rig, start **FicTrac** and connect Arena Studio to it through
+   the bridge.
+5. Switch to the **Run** tab and inspect the live oscilloscope: identify the
+   forward and turning signals and watch how they change with commands.
+6. Run **P0** before lunch.
 
 ### Afternoon — collect useful behavioral data
 
