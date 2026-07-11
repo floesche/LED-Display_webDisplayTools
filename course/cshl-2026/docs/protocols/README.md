@@ -16,8 +16,8 @@ analysis can pool them.
 
 P0 is the intro/calibration protocol and is worth running once per line when
 possible. P1 and P2 are the core student protocols. P3 is the Heisenberg
-flight-simulator tribute: V2 uses five phase-paired visual families, fixed
-−1.8 closed-loop coupling, and short/full YAMLs for instructor-led runs.
+flight-simulator tribute: five named short/full protocol pairs use phase-paired
+visual stimuli and fixed −1.8 closed-loop coupling.
 
 ## Design principle: internal comparisons
 
