@@ -1084,6 +1084,19 @@
         };
     }
 
+    function circularBoxcar(values, windowBins) {
+        const width = Math.max(1, Math.round(finite(windowBins)) || 1);
+        if (!values.length || width === 1) return values.slice();
+        const left = Math.floor((width - 1) / 2);
+        const right = width - left - 1;
+        return values.map((_, index) => {
+            const samples = [];
+            for (let offset = -left; offset <= right; offset += 1)
+                samples.push(values[mod(index + offset, values.length)]);
+            return mean(samples);
+        });
+    }
+
     function preferenceMetrics(angles) {
         if (!angles.length) return { harmonic: NaN, quadrant: NaN };
         const harmonic = mean(angles.map((angle) => Math.cos((2 * angle * Math.PI) / 180)));
@@ -1138,6 +1151,7 @@
         p3TrialQualityMetrics,
         choiceAngles,
         occupancyHistogram,
+        circularBoxcar,
         preferenceMetrics,
         metricLabel
     };

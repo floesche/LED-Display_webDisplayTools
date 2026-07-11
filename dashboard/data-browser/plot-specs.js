@@ -41,16 +41,16 @@
         { key: 'probe', name: 'Probe', color: '#168a55' }
     ];
     const P3_PATTERN_IMAGES = {
-        36: 'assets/p3_heisenberg_ts.gif',
-        41: 'assets/p3_heisenberg_ts.gif',
-        37: 'assets/p3_heisenberg_high_low.gif',
-        42: 'assets/p3_heisenberg_high_low.gif',
-        38: 'assets/p3_heisenberg_slashes.gif',
-        43: 'assets/p3_heisenberg_slashes.gif',
-        39: 'assets/p3_heisenberg_relational.gif',
-        44: 'assets/p3_heisenberg_relational.gif',
-        40: 'assets/p3_dill_random_checkers.gif',
-        45: 'assets/p3_dill_random_checkers.gif'
+        36: 'assets/p3_heisenberg_ts.png',
+        41: 'assets/p3_heisenberg_ts.png',
+        37: 'assets/p3_heisenberg_high_low.png',
+        42: 'assets/p3_heisenberg_high_low.png',
+        38: 'assets/p3_heisenberg_slashes.png',
+        43: 'assets/p3_heisenberg_slashes.png',
+        39: 'assets/p3_heisenberg_relational.png',
+        44: 'assets/p3_heisenberg_relational.png',
+        40: 'assets/p3_dill_random_checkers.png',
+        45: 'assets/p3_dill_random_checkers.png'
     };
 
     function rgba(hex, alpha) {
@@ -1742,9 +1742,11 @@
                     .filter((step) => A.p3Phase(step.condition) === phase.key)
                     .flatMap((step) => A.p3TrialAngles(run, step, 0));
                 const histogram = A.occupancyHistogram(angles, 100);
+                const displayPercent = A.circularBoxcar(histogram.percent, 5);
                 return {
                     run,
-                    curve: { x: histogram.angle, y: histogram.percent },
+                    curve: { x: histogram.angle, y: displayPercent },
+                    rawPercent: histogram.percent,
                     samples: histogram.samples
                 };
             })
@@ -1790,6 +1792,8 @@
                     run_id: item.run.id,
                     angle_deg: angle,
                     occupancy_percent: item.curve.y[index],
+                    raw_occupancy_percent: item.rawPercent[index],
+                    display_boxcar_indices: 10,
                     samples: item.samples
                 })
             );
@@ -1838,7 +1842,7 @@
         return pageFromCells(
             'p3-orientation',
             'p3 Orientation occupancy',
-            `Full 360 degree cue-A-aligned occupancy by phase with the logged stimulus unrolled above each histogram. Cue A is at 0/180 deg, cue B at +/-90 deg, magenta sectors were reinforced during training, and chance is 1% per bin. Logged LED level(s): ${levelText}; raw on-ranges: ${rangeText}.${legacyNote}`,
+            `Full 360 degree cue-A-aligned occupancy by phase with a static, orientation-locked stimulus panorama above each histogram. Display traces use a circular 10-index boxcar (five 2-index bins); raw occupancy remains in CSV and all preference scores remain unsmoothed. Cue A is at 0/180 deg, cue B at +/-90 deg, magenta sectors were reinforced during training, and chance is 1% per bin. Logged LED level(s): ${levelText}; raw on-ranges: ${rangeText}.${legacyNote}`,
             cells,
             1,
             3,

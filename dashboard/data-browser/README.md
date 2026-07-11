@@ -81,8 +81,9 @@ displayed trace in the selected dataset.
   remains unchanged. Preference, occupancy, dwell, and sector-entry metrics all
   use this cue-aligned coordinate.
 - Cue-A-aligned orientation occupancy for baseline, training, and probe, with
-  an aligned unrolled stimulus cartoon, logged reinforced sectors, and the 1%
-  chance line
+  a static orientation-locked panorama, logged reinforced sectors, and the 1%
+  chance line. Display traces use a circular 10-index boxcar; raw occupancy is
+  retained in CSV and scalar preference metrics remain unsmoothed.
 - Classic trial preference index `(time safe - time reinforced) / total`, using
   unsmoothed frame samples and separate phase markers
 - Phase-matched baseline-corrected probe PI
@@ -92,7 +93,8 @@ displayed trace in the selected dataset.
 - Safe-versus-reinforced dwell-time survival curves
 - Raw LED ranges, level, and hysteresis are read from each logged training
   `ledActivation` configuration and retained in CSV exports
-- Stimulus images are selected from the logged p3 pattern ID
+- Static PNG stimulus panoramas are selected from the logged p3 pattern ID and
+  shifted into the same cue-aligned `-180..180` coordinate as the histogram
 
 Unknown protocols receive generic condition-aligned turning, forward, and
 relative-heading pages instead of failing import.

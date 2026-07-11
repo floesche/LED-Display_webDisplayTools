@@ -179,6 +179,12 @@ assert(angles.length > 0);
 const histogram = A.occupancyHistogram(angles, 100);
 assert.strictEqual(histogram.percent.length, 100);
 assert(Math.abs(histogram.percent.reduce((sum, value) => sum + value, 0) - 100) < 1e-9);
+const smoothedHistogram = A.circularBoxcar(histogram.percent, 5);
+assert.strictEqual(smoothedHistogram.length, 100);
+assert(
+    Math.abs(smoothedHistogram.reduce((sum, value) => sum + value, 0) - 100) < 1e-9,
+    'circular display smoothing should preserve total occupancy'
+);
 
 const p0Pages = P.buildPages([p0], { mode: 'single', showIndividuals: true });
 const p1Pages = P.buildPages([p1], { mode: 'single', showIndividuals: true });
@@ -219,13 +225,29 @@ assert.strictEqual(
 );
 assert(
     p3Pages[1].figure.layout.images.every(
-        (image) => image.source === 'assets/p3_heisenberg_ts.gif'
+        (image) => image.source === 'assets/p3_heisenberg_ts.png'
     ) && p3Pages[1].figure.layout.images.length === 3,
-    'orientation histograms should include the aligned unrolled stimulus image'
+    'orientation histograms should include the static cue-aligned stimulus image'
+);
+const p3OrientationRows = p3Pages[1].csvRows.filter(
+    (row) => row.phase === 'baseline' && row.run_id === p3.id
+);
+assert.strictEqual(p3OrientationRows.length, 100);
+assert(p3OrientationRows.every((row) => row.display_boxcar_indices === 10));
+assert(
+    p3OrientationRows.some(
+        (row) => Math.abs(row.occupancy_percent - row.raw_occupancy_percent) > 1e-9
+    ),
+    'single-fly occupancy display should use the 10-index circular boxcar'
+);
+assert(
+    Math.abs(
+        p3OrientationRows.reduce((sum, row) => sum + row.occupancy_percent, 0) - 100
+    ) < 1e-9
 );
 assert.strictEqual(
     p3Pages[2].figure.layout.images[0].source,
-    'assets/p3_heisenberg_ts.gif',
+    'assets/p3_heisenberg_ts.png',
     'trial PI should show the logged stimulus image along the left side'
 );
 assert.strictEqual(
