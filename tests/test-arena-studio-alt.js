@@ -17,6 +17,7 @@ const entry = fs.readFileSync(path.join(root, 'arena_studio_alt.html'), 'utf8');
 const alt = fs.readFileSync(path.join(root, 'js', 'arena-studio-alt.js'), 'utf8');
 const css = fs.readFileSync(path.join(root, 'css', 'arena-studio-alt.css'), 'utf8');
 const index = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+const pixi = fs.readFileSync(path.join(root, 'pixi.toml'), 'utf8');
 
 let total = 0;
 let failures = 0;
@@ -46,6 +47,13 @@ check(
 check(
     'Alt does not embed or iframe a second Studio',
     !/<iframe\b/i.test(entry) && !/<iframe\b/i.test(alt)
+);
+check(
+    'file launch explains the supported localhost path',
+    entry.includes("location.protocol === 'file:'") &&
+        entry.includes('pixi run serve') &&
+        studio.includes('studioFileLaunchGuard') &&
+        pixi.includes('serve = "python -m http.server 8000 --bind 127.0.0.1"')
 );
 
 console.log('=== original control surface retained ===');
@@ -211,6 +219,72 @@ check('3D viewer is opened as a movable popup', alt.includes("'arena-studio-alt-
 check(
     'optional PAT files support arbitrary local protocols',
     alt.includes('suppliedPatternSource')
+);
+check(
+    'replay YAML and JSONL can be selected directly from the course repo',
+    alt.includes('data-repo-pick="yaml"') &&
+        alt.includes('data-repo-pick="log"') &&
+        alt.includes("listReplayRepoPath(context, 'runlogs')")
+);
+check(
+    'repo replay sources support anonymous public reads and retain provenance',
+    alt.includes('token: Studio.ghToken ? Studio.ghToken() : null') &&
+        alt.includes('protocolOptions.repoRef') &&
+        alt.includes('repo: replay.yamlRepo.full')
+);
+check(
+    'repo replay patterns are selection-owned and ready before the YAML is accepted',
+    alt.includes('await loadReplayRepoPatternSources(context, path)') &&
+        alt.includes('replay.repoPatternSources') &&
+        alt.indexOf('repoPatternSource(trial.patternName)') <
+            alt.indexOf('Studio.webBytesForName(trial.patternName)')
+);
+check(
+    'declared YAML pattern library beats stale generic catalog sources',
+    alt.indexOf('() => fetchDeclaredPattern(trial.patternName)') <
+        alt.indexOf('Studio.webBytesForName && Studio.webBytesForName(trial.patternName)') &&
+        alt.includes('for (const source of sources)')
+);
+check(
+    'last replay source choice wins over delayed repo fetches',
+    alt.includes('sourceTokens: { yaml: 0, log: 0 }') &&
+        alt.includes('generation !== replay.sourceTokens[kind]')
+);
+check(
+    'replay cannot start while a repo replacement is pending',
+    alt.includes('sourcePending: { yaml: false, log: false }') &&
+        alt.includes('replay.sourcePending.yaml || replay.sourcePending.log') &&
+        alt.includes('function updateReplayStartAvailability()')
+);
+const repoSelectionBody = alt.slice(
+    alt.indexOf('async function loadReplayRepoSelection'),
+    alt.indexOf('async function pickReplayYamlFromRepo')
+);
+check(
+    'failed replacement keeps the last valid replay pair and restores Start',
+    !repoSelectionBody.includes('replay.yamlFile = null') &&
+        repoSelectionBody.includes('updateReplayStartAvailability()')
+);
+check(
+    'replay source changes cannot land after replay starts',
+    alt
+        .slice(
+            alt.indexOf('function setReplaySource'),
+            alt.indexOf('async function loadReplayRepoSelection')
+        )
+        .includes('if (Studio.replayActive) return false') &&
+        alt
+            .slice(
+                alt.indexOf('async function startReplay()'),
+                alt.indexOf('function stopReplay()')
+            )
+            .includes('replay.sourceTokens.yaml++') &&
+        alt
+            .slice(
+                alt.indexOf('async function startReplay()'),
+                alt.indexOf('function stopReplay()')
+            )
+            .includes('replay.sourceTokens.log++')
 );
 check(
     'operator-supplied PAT files override bundled patterns with the same name',

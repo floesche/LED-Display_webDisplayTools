@@ -67,7 +67,14 @@
         loadToken: 0,
         seeking: false,
         displayMode: 'off',
-        frozen: new Map()
+        frozen: new Map(),
+        yamlRepoPath: null,
+        logRepoPath: null,
+        yamlRepo: null,
+        logRepo: null,
+        repoPatternSources: new Map(),
+        sourceTokens: { yaml: 0, log: 0 },
+        sourcePending: { yaml: false, log: false }
     };
 
     function el(tag, className, text) {
@@ -104,6 +111,293 @@
         const bytes = new TextEncoder().encode(text);
         const digest = await crypto.subtle.digest('SHA-256', bytes);
         return Array.from(new Uint8Array(digest), (n) => n.toString(16).padStart(2, '0')).join('');
+    }
+
+    function replayRepoContext() {
+        const GitHub = window.StudioGitHub;
+        const settings = Studio.courseSettings && Studio.courseSettings();
+        if (!GitHub || !settings || !settings.repo) {
+            throw new Error('The course repo is not configured in File ▾.');
+        }
+        return {
+            GitHub,
+            settings,
+            repo: settings.repo,
+            token: Studio.ghToken ? Studio.ghToken() : null
+        };
+    }
+
+    function repoReadMessage(path, status, token) {
+        if ((status === 401 || status === 403 || status === 404) && !token) {
+            return path + ' is unavailable (HTTP ' + status + '). Sign in if the repo is private.';
+        }
+        return path + ' returned HTTP ' + status + '.';
+    }
+
+    async function listReplayRepoPath(context, path) {
+        const response = await context.GitHub.run(
+            fetch,
+            context.GitHub.reqGetContents(
+                context.repo.owner,
+                context.repo.name,
+                path,
+                null,
+                context.token
+            )
+        );
+        if (!response.ok || !Array.isArray(response.data)) {
+            throw new Error(repoReadMessage(path, response.status, context.token));
+        }
+        return response.data;
+    }
+
+    async function fetchReplayRepoFile(context, path, kind) {
+        const response = await context.GitHub.runBytes(
+            fetch,
+            context.GitHub.reqGetContentsRaw(
+                context.repo.owner,
+                context.repo.name,
+                path,
+                null,
+                context.token
+            )
+        );
+        if (!response.ok) {
+            throw new Error(repoReadMessage(path, response.status, context.token));
+        }
+        const name = path.split('/').pop();
+        const type = kind === 'yaml' ? 'text/yaml' : 'application/x-ndjson';
+        const file = new File([response.bytes], name, { type });
+        const patterns =
+            kind === 'yaml' ? await loadReplayRepoPatternSources(context, path) : new Map();
+        return {
+            file,
+            path,
+            repo: {
+                owner: context.repo.owner,
+                name: context.repo.name,
+                full: context.repo.full
+            },
+            patterns
+        };
+    }
+
+    async function loadReplayRepoPatternSources(context, yamlPath) {
+        const dir = yamlPath.replace(/\.ya?ml$/i, '') + '_patterns';
+        const response = await context.GitHub.run(
+            fetch,
+            context.GitHub.reqGetContents(
+                context.repo.owner,
+                context.repo.name,
+                dir,
+                null,
+                context.token
+            )
+        );
+        if (response.status === 404) return new Map();
+        if (!response.ok || !Array.isArray(response.data)) {
+            throw new Error(repoReadMessage(dir, response.status, context.token));
+        }
+        const sources = new Map();
+        response.data
+            .filter((entry) => entry && entry.type === 'file' && /\.pat$/i.test(entry.name))
+            .forEach((entry) => {
+                const source = async () => {
+                    const currentToken = Studio.ghToken ? Studio.ghToken() : null;
+                    const raw = await context.GitHub.runBytes(
+                        fetch,
+                        context.GitHub.reqGetContentsRaw(
+                            context.repo.owner,
+                            context.repo.name,
+                            entry.path,
+                            null,
+                            currentToken
+                        )
+                    );
+                    if (!raw.ok) {
+                        throw new Error(repoReadMessage(entry.path, raw.status, currentToken));
+                    }
+                    return raw.bytes.buffer.slice(
+                        raw.bytes.byteOffset,
+                        raw.bytes.byteOffset + raw.bytes.byteLength
+                    );
+                };
+                sources.set(entry.name.toLowerCase(), source);
+                sources.set(patternLogicalName(entry.name), source);
+            });
+        return sources;
+    }
+
+    function updateReplayStartAvailability() {
+        if (!replay.ui.start) return;
+        replay.ui.start.disabled = Boolean(
+            Studio.replayActive ||
+            !replay.yamlFile ||
+            !replay.logFile ||
+            replay.sourcePending.yaml ||
+            replay.sourcePending.log
+        );
+    }
+
+    function setReplaySource(kind, file, repoSource, generation) {
+        if (Studio.replayActive) return false;
+        if (generation != null && generation !== replay.sourceTokens[kind]) return false;
+        replay.sourcePending[kind] = false;
+        if (kind === 'yaml') {
+            replay.yamlFile = file;
+            replay.yamlRepoPath = (repoSource && repoSource.path) || null;
+            replay.yamlRepo = (repoSource && repoSource.repo) || null;
+            replay.repoPatternSources = (repoSource && repoSource.patterns) || new Map();
+            replay.patternCache.clear();
+            replay.patternToken++;
+        } else {
+            replay.logFile = file;
+            replay.logRepoPath = (repoSource && repoSource.path) || null;
+            replay.logRepo = (repoSource && repoSource.repo) || null;
+        }
+        const label = replay.ui[kind + 'Name'];
+        if (label) label.textContent = file.name + (repoSource ? ' · repo' : '');
+        updateReplayStartAvailability();
+        setReplayStatus(
+            'Ready to replay ' + (replay.logFile ? replay.logFile.name : 'run log') + '.'
+        );
+        return true;
+    }
+
+    async function loadReplayRepoSelection(kind, path, context) {
+        if (Studio.replayActive) return;
+        const generation = ++replay.sourceTokens[kind];
+        replay.sourcePending[kind] = true;
+        // Keep the last committed pair intact while a replacement downloads.
+        // Start is temporarily disabled, then restored on failure; a late result
+        // can never overwrite a newer local/repo choice because of the token.
+        updateReplayStartAvailability();
+        try {
+            setReplayStatus('Fetching ' + path + ' from ' + context.repo.full + '…');
+            const source = await fetchReplayRepoFile(context, path, kind);
+            setReplaySource(kind, source.file, source, generation);
+        } catch (error) {
+            if (generation !== replay.sourceTokens[kind]) return;
+            replay.sourcePending[kind] = false;
+            updateReplayStartAvailability();
+            setReplayStatus(error && error.message ? error.message : String(error), true);
+        }
+    }
+
+    async function pickReplayYamlFromRepo() {
+        try {
+            const context = replayRepoContext();
+            if (!Studio.showPicker)
+                throw new Error('The repo picker is unavailable; reload Studio.');
+            setReplayStatus('Listing course protocols…');
+            const sources = [];
+            if (context.settings.benchId) {
+                sources.push({
+                    label: 'This bench — ' + context.settings.benchId,
+                    path: 'protocols/' + context.settings.benchId
+                });
+            }
+            sources.push({ label: 'Shared protocols', path: 'protocols/shared' });
+            const results = await Promise.all(
+                sources.map(async (source) => {
+                    try {
+                        return {
+                            source,
+                            entries: await listReplayRepoPath(context, source.path),
+                            error: null
+                        };
+                    } catch (error) {
+                        return { source, entries: [], error };
+                    }
+                })
+            );
+            const items = [];
+            results.forEach((result) => {
+                items.push({ header: result.source.label });
+                const files = result.entries
+                    .filter(
+                        (entry) => entry && entry.type === 'file' && /\.ya?ml$/i.test(entry.name)
+                    )
+                    .sort((a, b) => a.name.localeCompare(b.name));
+                if (files.length) {
+                    files.forEach((entry) =>
+                        items.push({ label: entry.name, sub: entry.path, value: entry.path })
+                    );
+                } else {
+                    items.push({
+                        note: result.error
+                            ? result.error.message
+                            : 'No protocol YAML files in this source.'
+                    });
+                }
+            });
+            Studio.showPicker('Replay protocol — ' + context.repo.full, items, (path) =>
+                loadReplayRepoSelection('yaml', path, context)
+            );
+        } catch (error) {
+            setReplayStatus(error && error.message ? error.message : String(error), true);
+        }
+    }
+
+    async function pickReplayLogFromRepo() {
+        try {
+            const context = replayRepoContext();
+            if (!Studio.showPicker)
+                throw new Error('The repo picker is unavailable; reload Studio.');
+            setReplayStatus('Listing runlog sources…');
+            const root = await listReplayRepoPath(context, 'runlogs');
+            const dirs = root
+                .filter((entry) => entry && entry.type === 'dir')
+                .sort((a, b) => {
+                    const current = context.settings.benchId;
+                    if (current && a.name === current) return -1;
+                    if (current && b.name === current) return 1;
+                    return a.name.localeCompare(b.name, undefined, { numeric: true });
+                });
+            if (!dirs.length)
+                throw new Error('No runlog folders were found in ' + context.repo.full + '.');
+            Studio.showPicker(
+                'Replay data — choose a rig or bench',
+                dirs.map((entry) => ({
+                    label: entry.name,
+                    sub:
+                        context.settings.benchId && entry.name === context.settings.benchId
+                            ? 'configured bench'
+                            : entry.path,
+                    value: entry.path
+                })),
+                async (dir) => {
+                    try {
+                        setReplayStatus('Listing ' + dir + '…');
+                        const entries = await listReplayRepoPath(context, dir);
+                        const logs = entries
+                            .filter(
+                                (entry) =>
+                                    entry &&
+                                    entry.type === 'file' &&
+                                    /\.(jsonl|ndjson)$/i.test(entry.name)
+                            )
+                            .sort((a, b) => b.name.localeCompare(a.name));
+                        Studio.showPicker(
+                            'Replay data — ' + dir,
+                            logs.map((entry) => ({
+                                label: entry.name,
+                                sub: entry.path,
+                                value: entry.path
+                            })),
+                            (path) => loadReplayRepoSelection('log', path, context)
+                        );
+                    } catch (error) {
+                        setReplayStatus(
+                            error && error.message ? error.message : String(error),
+                            true
+                        );
+                    }
+                }
+            );
+        } catch (error) {
+            setReplayStatus(error && error.message ? error.message : String(error), true);
+        }
     }
 
     function installIdentityAndTheme() {
@@ -227,8 +521,8 @@
         replayPane.hidden = true;
         replayPane.innerHTML =
             '<div class="alt-replay-grid">' +
-            '<div class="alt-replay-file"><button type="button" data-pick="yaml">YAML</button><span data-name="yaml">choose protocol…</span><input type="file" accept=".yaml,.yml" hidden></div>' +
-            '<div class="alt-replay-file"><button type="button" data-pick="log">JSONL</button><span data-name="log">choose run log…</span><input type="file" accept=".jsonl,.ndjson,.json,.txt" hidden></div>' +
+            '<div class="alt-replay-file"><button type="button" data-pick="yaml">YAML</button><button type="button" class="alt-replay-repo" data-repo-pick="yaml" title="Choose a protocol directly from the configured course repo">Repo</button><span data-name="yaml">choose protocol…</span><input type="file" accept=".yaml,.yml" hidden></div>' +
+            '<div class="alt-replay-file"><button type="button" data-pick="log">JSONL</button><button type="button" class="alt-replay-repo" data-repo-pick="log" title="Choose a runlog directly from the configured course repo">Repo</button><span data-name="log">choose run log…</span><input type="file" accept=".jsonl,.ndjson,.json,.txt" hidden></div>' +
             '<div class="alt-replay-file"><button type="button" data-pick="patterns">PATs</button><span data-name="patterns">optional pattern files…</span><input type="file" accept=".pat" multiple hidden></div>' +
             '</div>' +
             '<div class="alt-replay-options">' +
@@ -247,6 +541,8 @@
         replay.ui.status = replayPane.querySelector('[data-replay-status]');
         replay.ui.speedLoader = replayPane.querySelector('[data-replay-speed]');
         replay.ui.viewerCheck = replayPane.querySelector('[data-replay-viewer]');
+        replay.ui.yamlName = replayPane.querySelector('[data-name="yaml"]');
+        replay.ui.logName = replayPane.querySelector('[data-name="log"]');
 
         function chooseMode(mode) {
             if (Studio.replayActive && mode !== 'replay') return;
@@ -264,11 +560,14 @@
             const kind = box.querySelector('button').dataset.pick;
             box.querySelector('button').addEventListener('click', () => input.click());
             input.addEventListener('change', () => {
+                if (Studio.replayActive) return;
                 const file = input.files && input.files[0];
                 if (!file) return;
-                if (kind === 'yaml') replay.yamlFile = file;
-                else if (kind === 'log') replay.logFile = file;
-                else {
+                if (kind === 'yaml' || kind === 'log') {
+                    const generation = ++replay.sourceTokens[kind];
+                    replay.sourcePending[kind] = false;
+                    setReplaySource(kind, file, null, generation);
+                } else {
                     replay.patternFiles.clear();
                     const files = Array.from(input.files || []);
                     files.forEach((pat) => {
@@ -279,11 +578,12 @@
                         ? files.length + ' pattern file' + (files.length === 1 ? '' : 's')
                         : 'optional pattern files…';
                 }
-                if (kind !== 'patterns') box.querySelector('span').textContent = file.name;
-                replay.ui.start.disabled = !(replay.yamlFile && replay.logFile);
-                setReplayStatus(
-                    'Ready to replay ' + (replay.logFile ? replay.logFile.name : 'run log') + '.'
-                );
+            });
+        });
+        replayPane.querySelectorAll('[data-repo-pick]').forEach((button) => {
+            button.addEventListener('click', () => {
+                if (button.dataset.repoPick === 'yaml') pickReplayYamlFromRepo();
+                else pickReplayLogFromRepo();
             });
         });
         replay.ui.speedLoader.addEventListener('change', () => {
@@ -925,6 +1225,18 @@
         return file ? () => file.arrayBuffer() : null;
     }
 
+    function repoPatternSource(name) {
+        const raw = String(name || '')
+            .split(/[\\/]/)
+            .pop()
+            .toLowerCase();
+        return (
+            replay.repoPatternSources.get(raw) ||
+            replay.repoPatternSources.get(patternLogicalName(raw)) ||
+            null
+        );
+    }
+
     async function fetchDeclaredPattern(name) {
         const exp = Studio.currentDoc && Studio.currentDoc.experiment;
         const library = exp && exp.experiment_info && exp.experiment_info.pattern_library;
@@ -963,23 +1275,29 @@
         }
         let cached = replay.patternCache.get(trial.patternName);
         if (!cached) {
-            const source =
-                suppliedPatternSource(trial.patternName) ||
-                (Studio.webBytesForName && Studio.webBytesForName(trial.patternName));
-            if (source || (Studio.currentDoc && Studio.currentDoc.experiment)) {
+            // Replay source precedence is provenance-first. A stale catalog entry
+            // from an earlier Studio document must not beat the selected YAML's
+            // own pattern_library. If one source is missing or malformed, try the
+            // next source instead of rendering a permanently blank arena.
+            const sources = [
+                suppliedPatternSource(trial.patternName),
+                repoPatternSource(trial.patternName),
+                Studio.currentDoc && Studio.currentDoc.experiment
+                    ? () => fetchDeclaredPattern(trial.patternName)
+                    : null,
+                Studio.webBytesForName && Studio.webBytesForName(trial.patternName)
+            ].filter(Boolean);
+            for (const source of sources) {
                 try {
-                    const bytes = asArrayBuffer(
-                        source ? await source() : await fetchDeclaredPattern(trial.patternName)
-                    );
+                    const bytes = asArrayBuffer(await source());
                     const parsed =
                         bytes && window.PatParser && window.PatParser.parsePatFile(bytes);
                     if (bytes && parsed) {
                         cached = { bytes, parsed, frames: parsed.numFrames };
                         replay.patternCache.set(trial.patternName, cached);
+                        break;
                     }
-                } catch (_) {
-                    cached = null;
-                }
+                } catch (_) {}
             }
         }
         if (token !== replay.patternToken || replay.trial !== trial) return;
@@ -1266,6 +1584,10 @@
 
     async function startReplay() {
         if (Studio.replayActive || !replay.yamlFile || !replay.logFile) return;
+        if (replay.sourcePending.yaml || replay.sourcePending.log) {
+            setReplayStatus('Wait for the selected repo files to finish loading.', true);
+            return;
+        }
         if (Studio.session && Studio.session.running) {
             setReplayStatus('Stop the live experiment before entering replay.', true);
             return;
@@ -1287,10 +1609,15 @@
         }
 
         try {
+            // Invalidate any picker callback that was opened before Start. The
+            // source setters also refuse mutations while replay is active.
+            replay.sourceTokens.yaml++;
+            replay.sourceTokens.log++;
             // Latch + inert are synchronous and precede every file read. No live
             // control can slip into the parse window after the initial check.
             Studio.session.setOutputInhibited('Arena Studio replay');
             Studio.replayActive = true;
+            updateReplayStartAvailability();
             // Replay audio is always opt-in from the pinned transport. Besides
             // avoiding surprise audio, the explicit click satisfies Web Audio's
             // user-gesture requirement in every supported browser.
@@ -1321,9 +1648,19 @@
             const timeline = ReplayLib.buildTimeline(parsed);
             if (!timeline.length)
                 throw new Error('The run log contains no replayable events or samples.');
-            const loaded = await Studio.loadProtocol(yamlText, replay.yamlFile.name, 'replay', {
-                landIn: 'run'
-            });
+            const protocolOptions = { landIn: 'run' };
+            if (replay.yamlRepoPath && replay.yamlRepo) {
+                protocolOptions.repoRef = {
+                    repo: replay.yamlRepo.full,
+                    path: replay.yamlRepoPath
+                };
+            }
+            const loaded = await Studio.loadProtocol(
+                yamlText,
+                replay.yamlFile.name,
+                'replay',
+                protocolOptions
+            );
             if (token !== replay.loadToken || !Studio.replayActive) return;
             if (!loaded) throw new Error('The YAML could not be loaded.');
 
@@ -1379,6 +1716,7 @@
         sendViewerState();
         closeViewer();
         Studio.replayActive = false;
+        updateReplayStartAvailability();
         document.body.classList.remove('alt-replay-active');
         setReplayFrozen(false);
         if (replay.ui.transport) replay.ui.transport.hidden = true;

@@ -9,7 +9,41 @@
   // implementation. Add the scope class before first paint to avoid a flash of
   // the original layout; the stylesheet is otherwise inert.
   if (location.hash === '#alt') document.documentElement.classList.add('arena-alt');
+  // Browsers do not reliably execute this page's ES-module imports or relative
+  // fetches from file://. The shell can therefore look healthy while GitHub,
+  // protocol, config, and pattern actions have no listeners. Fail visibly and
+  // point at the supported localhost launch instead of presenting a dead UI.
+  if (location.protocol === 'file:') {
+    document.documentElement.classList.add('studio-file-launch');
+    addEventListener('DOMContentLoaded', function () {
+      if (document.getElementById('studioFileLaunchGuard')) return;
+      var isAlt = document.documentElement.classList.contains('arena-alt');
+      var page = isAlt ? 'arena_studio_alt.html' : 'arena_studio.html';
+      var guard = document.createElement('div');
+      guard.id = 'studioFileLaunchGuard';
+      guard.innerHTML =
+        '<div class="studio-file-card"><span class="studio-file-kicker">LOCAL LAUNCH CHECK</span>' +
+        '<h1>Arena Studio needs localhost</h1>' +
+        '<p>The page was opened as <code>file://</code>. It can draw the shell, but browser security blocks the module and data requests used by GitHub sign-in, repo protocols, replay files, and patterns.</p>' +
+        '<p>In a Terminal opened in this folder, run:</p>' +
+        '<code class="studio-file-command">pixi run serve</code>' +
+        '<a class="studio-file-open" href="http://127.0.0.1:8000/' + page + '">Open the localhost Studio</a>' +
+        '<small>Keep that Terminal running while you use Arena Studio.</small></div>';
+      document.body.appendChild(guard);
+    });
+  }
 </script>
+<style>
+  #studioFileLaunchGuard{position:fixed;inset:0;z-index:100000;display:grid;place-items:center;padding:24px;background:#0b1013;color:#dce7e5;font:13px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  #studioFileLaunchGuard .studio-file-card{width:min(620px,calc(100vw - 48px));border:1px solid #59666a;background:#11191d;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.55)}
+  #studioFileLaunchGuard .studio-file-kicker{color:#8bff9a;font-size:10px;letter-spacing:.16em}
+  #studioFileLaunchGuard h1{margin:8px 0 12px;font-size:24px;font-weight:600}
+  #studioFileLaunchGuard p{color:#aebbbd;line-height:1.55}
+  #studioFileLaunchGuard code{color:#ffd166}
+  #studioFileLaunchGuard .studio-file-command{display:block;margin:10px 0 16px;padding:12px;border:1px solid #354247;background:#080d10;user-select:all}
+  #studioFileLaunchGuard .studio-file-open{display:inline-block;margin-right:14px;padding:9px 12px;border:1px solid #8bff9a;color:#8bff9a;text-decoration:none;text-transform:uppercase;letter-spacing:.08em}
+  #studioFileLaunchGuard small{color:#7e8d90}
+</style>
 <!-- The v3 designer modules import the vendored `yaml` via this bare specifier. -->
 <script type="importmap">
     { "imports": { "yaml": "./js/vendor/yaml/browser/dist/index.js" } }
@@ -122,6 +156,7 @@
   .filemenu .menu button.gh-lock:hover{background:rgba(255,255,255,.08)}
   .gh-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
   .gh-signin{background:transparent;border:1px solid var(--border);color:var(--beta);border-radius:5px;padding:3px 9px;font-size:11px}
+  .gh-block.gh-locked .gh-signin-while-locked{opacity:1;cursor:pointer;border-style:dashed}
   .gh-who{color:var(--accent);font-weight:600;display:none}
   .gh-signout{background:transparent;border:1px solid var(--border);color:var(--dim);border-radius:5px;padding:3px 9px;font-size:11px;display:none}
   body.ghauth .gh-signin{display:none}
@@ -7840,6 +7875,7 @@ document.addEventListener('keydown', (e) => {
 const GH_OWNER = 'reiserlab';
 const GH_REPO = 'webDisplayTools';
 const GH = window.StudioGitHub;
+let ghAuthGeneration = 0;
 
 function ghToken() {
     return Studio.ghToken(); // single source (classic shell) — see courseSettings
@@ -8050,6 +8086,10 @@ async function saveViaDirectCommit() {
 // Edit toolbar's "Export YAML", which downloads a REGENERATED roundtrip copy
 // and marks nothing saved.
 Studio.saveCurrent = function () {
+    if (!Studio.advanced) {
+        Studio.showBanner('Save is locked in Safe mode — unlock Advanced mode first.');
+        return;
+    }
     if (!Studio.currentDoc) { Studio.showBanner('Open a protocol first.'); return; }
     if (Studio.editor && Studio.editor.hasUnappliedYaml()) {
         Studio.showBanner('The YAML tab has unapplied edits — Apply or Revert them first.');
@@ -8076,6 +8116,10 @@ $('fmSave').addEventListener('click', () => {
 // never cleared here).
 $('fmSaveAs').addEventListener('click', () => {
     $('fileMenu').classList.remove('open');
+    if (!Studio.advanced) {
+        Studio.showBanner('Save As is locked in Safe mode — unlock Advanced mode first.');
+        return;
+    }
     const doc = Studio.currentDoc;
     if (!doc) { Studio.showBanner('Open a protocol first.'); return; }
     if (Studio.editor && Studio.editor.hasUnappliedYaml && Studio.editor.hasUnappliedYaml()) {
@@ -8104,22 +8148,57 @@ $('fmSaveAs').addEventListener('click', () => {
 
 $('ghSignInBtn').addEventListener('click', async (e) => {
     e.stopPropagation();
+    const signInBtn = $('ghSignInBtn');
     const pat = prompt(
         'Paste a GitHub fine-grained personal access token for ' + ghTargetRepo().full +
-        '\n(Contents: read/write + Pull requests: read/write).\n\n' +
+        '\nFor private read-only access: Contents read. For saving: Contents read/write' +
+        ' + Pull requests read/write. Public protocol/replay reads need no token.\n\n' +
         'Stored in sessionStorage (cleared when this tab closes). The follow-up ' +
         '"remember" option keeps it in localStorage — REQUIRED for course bench ' +
         'setup (a sessionStorage-only token evaporates when the tab closes); ' +
         'do NOT use it on a personal shared machine.'
     );
     if (!pat) return;
+    const token = pat.trim();
+    if (!token) return;
+    const authGeneration = ++ghAuthGeneration;
+    const originalLabel = signInBtn.textContent;
+    signInBtn.disabled = true;
+    signInBtn.setAttribute('aria-busy', 'true');
+    signInBtn.textContent = 'Checking…';
     try {
-        const res = await fetch('https://api.github.com/user', { headers: GH.headers(pat.trim()) });
+        const res = await fetch('https://api.github.com/user', { headers: GH.headers(token) });
+        if (authGeneration !== ghAuthGeneration) return;
         if (!res.ok) throw new Error('token rejected (' + res.status + ')');
         const user = await res.json();
-        sessionStorage.setItem('studio_gh_pat', pat.trim());
+        if (authGeneration !== ghAuthGeneration) return;
+        const cs = Studio.courseSettings();
+        if (cs.repo) {
+            const access = await GH.run(
+                fetch,
+                GH.reqGetRepo(cs.repo.owner, cs.repo.name, token)
+            );
+            if (authGeneration !== ghAuthGeneration) return;
+            if (!access.ok) {
+                throw new Error(
+                    'signed in as @' +
+                        (user.login || 'user') +
+                        ', but ' +
+                        cs.repo.full +
+                        ' is unavailable (HTTP ' +
+                        access.status +
+                        '). Check repository access on the token.'
+                );
+            }
+        }
+        if (authGeneration !== ghAuthGeneration) return;
+        sessionStorage.setItem('studio_gh_pat', token);
         if (confirm('Remember this token on THIS browser (localStorage)?\nYES for a course bench (survives tab close); NO on a personal shared machine.')) {
-            localStorage.setItem('studio_gh_pat', pat.trim());
+            localStorage.setItem('studio_gh_pat', token);
+        } else {
+            // A previous remembered credential must not silently survive when
+            // the operator explicitly chooses a session-only replacement.
+            localStorage.removeItem('studio_gh_pat');
         }
         document.body.classList.add('ghauth');
         $('ghWho').textContent = '✓ @' + (user.login || 'user');
@@ -8130,13 +8209,22 @@ $('ghSignInBtn').addEventListener('click', async (e) => {
         if (Studio.refreshCourseMeta) Studio.refreshCourseMeta();
         refreshRepoSharedPatternPreviews().then(() => rewireRepoPatternPreviews());
     } catch (err) {
-        Studio.showBanner('GitHub sign-in failed: ' + err.message);
+        if (authGeneration === ghAuthGeneration) {
+            Studio.showBanner('GitHub sign-in failed: ' + err.message);
+        }
+    } finally {
+        signInBtn.disabled = false;
+        signInBtn.removeAttribute('aria-busy');
+        signInBtn.textContent = originalLabel;
     }
 });
 // Sign out — clear the token (both storages), drop authed state, and restore
-// the lab-wide metadata defaults. Gated by the gh-block lock like sign-in.
+// the lab-wide metadata defaults. Sign out remains instructor-locked so a
+// student cannot disconnect a configured bench; Sign in stays available for
+// read access in Safe mode.
 $('ghSignOutBtn').addEventListener('click', (e) => {
     e.stopPropagation();
+    ghAuthGeneration++;
     sessionStorage.removeItem('studio_gh_pat');
     localStorage.removeItem('studio_gh_pat');
     document.body.classList.remove('ghauth');
@@ -8146,6 +8234,10 @@ $('ghSignOutBtn').addEventListener('click', (e) => {
     if ($('mGenoSrc')) $('mGenoSrc').href = 'https://github.com/reiserlab/webDisplayTools/blob/main/configs/metadata/genotypes.yaml';
     if (typeof populateMetaDatalists === 'function') populateMetaDatalists();
     updateSaveLabel();
+    // Rebuild lazy pattern sources after credential removal. Their byte fetches
+    // also resolve ghToken() at click/replay time, so a cleared token is never
+    // retained in a closure.
+    refreshRepoSharedPatternPreviews().then(() => rewireRepoPatternPreviews());
     Studio.rawLog('signed out of GitHub — token cleared; metadata back to lab defaults', 'info');
 });
 function updateSaveLabel() {
@@ -8253,10 +8345,21 @@ function wireCourseSettings() {
     // next load. The 🔒 button itself is never disabled.
     const ghBlock = $('ghBlock');
     const ghLock = $('ghLock');
-    const lockTargets = () => [$('ghSignInBtn'), $('ghSignOutBtn'), repoIn, bench, $('ghPR'), direct];
+    // Authentication itself remains available in safe mode: it grants read
+    // access to the fixed course repo. Destination and write configuration stay
+    // behind the instructor lock. A native-disabled Sign in button previously
+    // looked clickable but emitted no event at all.
+    const lockTargets = () => [$('ghSignOutBtn'), repoIn, bench, $('ghPR'), direct, archive];
     function applyGhLock(locked) {
         if (ghBlock) ghBlock.classList.toggle('gh-locked', locked);
         lockTargets().forEach((el) => { if (el) el.disabled = locked; });
+        const signIn = $('ghSignInBtn');
+        if (signIn) {
+            signIn.classList.toggle('gh-signin-while-locked', locked);
+            signIn.title = locked
+                ? 'Sign in for course-repo read access; repo, bench, and write settings remain instructor-locked'
+                : 'Sign in to GitHub with a fine-grained personal access token';
+        }
         if (ghLock) {
             ghLock.textContent = locked ? '🔒' : '🔓';
             ghLock.title = locked
@@ -8283,10 +8386,61 @@ function wireCourseSettings() {
 wireCourseSettings();
 // Restore an existing session token on load.
 if (ghToken()) {
-    fetch('https://api.github.com/user', { headers: GH.headers(ghToken()) })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((u) => {
-            if (u) {
+    const storedToken = ghToken();
+    const restoreGeneration = ghAuthGeneration;
+    const restoreCurrent = () =>
+        restoreGeneration === ghAuthGeneration && ghToken() === storedToken;
+    fetch('https://api.github.com/user', { headers: GH.headers(storedToken) })
+        .then((r) => {
+            if (!restoreCurrent()) return null;
+            if (r.ok) return r.json();
+            if (r.status === 401) {
+                sessionStorage.removeItem('studio_gh_pat');
+                localStorage.removeItem('studio_gh_pat');
+                document.body.classList.remove('ghauth');
+                Studio.showBanner(
+                    'The stored GitHub token is no longer valid. Sign in again from File ▾.'
+                );
+                updateSaveLabel();
+                return null;
+            }
+            throw new Error('GitHub session check returned HTTP ' + r.status);
+        })
+        .then(async (u) => {
+            if (u && restoreCurrent()) {
+                const cs = Studio.courseSettings();
+                if (cs.repo) {
+                    const access = await GH.run(
+                        fetch,
+                        GH.reqGetRepo(cs.repo.owner, cs.repo.name, storedToken)
+                    );
+                    if (!restoreCurrent()) return;
+                    if (!access.ok) {
+                        document.body.classList.remove('ghauth');
+                        if (access.status === 401 || access.status === 404) {
+                            sessionStorage.removeItem('studio_gh_pat');
+                            localStorage.removeItem('studio_gh_pat');
+                            Studio.showBanner(
+                                'The stored GitHub token cannot access ' +
+                                    cs.repo.full +
+                                    ' (HTTP ' +
+                                    access.status +
+                                    '). Sign in with a token that has repository access.'
+                            );
+                        } else {
+                            Studio.showBanner(
+                                'GitHub could not verify access to ' +
+                                    cs.repo.full +
+                                    ' (HTTP ' +
+                                    access.status +
+                                    '). The stored token was kept; retry or sign in again.'
+                            );
+                        }
+                        updateSaveLabel();
+                        return;
+                    }
+                }
+                if (!restoreCurrent()) return;
                 document.body.classList.add('ghauth');
                 $('ghWho').textContent = '✓ @' + (u.login || 'user');
                 if (!($('ghDirect') && $('ghDirect').checked)) $('ghPR').checked = true;
@@ -8296,7 +8450,20 @@ if (ghToken()) {
                 if (Studio.refreshCourseMeta) Studio.refreshCourseMeta();
             }
         })
-        .catch(() => {});
+        .catch((error) => {
+            if (!restoreCurrent()) return;
+            document.body.classList.remove('ghauth');
+            Studio.showBanner(
+                'GitHub session verification is temporarily unavailable. ' +
+                    'The stored token was kept; retry or sign in again.'
+            );
+            updateSaveLabel();
+            Studio.rawLog(
+                'GitHub session check unavailable: ' +
+                    (error && error.message ? error.message : error),
+                'info'
+            );
+        });
 }
 updateSaveLabel(); // reflect stored course settings even before sign-in
 
@@ -8346,6 +8513,10 @@ function showPicker(title, items, onPick) {
     });
     ov.style.display = 'flex';
 }
+// Arena Studio Alt reuses the production picker for repo-backed replay inputs.
+// Exposing the existing function preserves one modal implementation and its
+// current keyboard/cancel behavior.
+Studio.showPicker = showPicker;
 function hidePicker() {
     $('pickerOverlay').style.display = 'none';
     // tear down any multi-select footer extras so the single-select picker's
@@ -8459,7 +8630,30 @@ $('fmOpenCourse').addEventListener('click', async () => {
     const cs = Studio.courseSettings();
     const token = ghToken();
     if (!cs.repo) { Studio.showBanner('Set the course repo (owner/name) in File ▾ first.'); return; }
-    if (!token) { Studio.showBanner('Sign in to GitHub first.'); return; }
+    // Public course repos are readable without a token. Authentication is only
+    // required for private repos, writes, or a higher API rate limit.
+    try {
+        const access = await GH.run(
+            fetch,
+            GH.reqGetRepo(cs.repo.owner, cs.repo.name, token)
+        );
+        if (!access.ok) {
+            Studio.showBanner(
+                'Course repo is unavailable (HTTP ' +
+                    access.status +
+                    '): ' +
+                    cs.repo.full +
+                    (token ? ' · Check token repository access.' : ' · Sign in if it is private.')
+            );
+            return;
+        }
+    } catch (error) {
+        Studio.showBanner(
+            'Course repo check failed: ' +
+                (error && error.message ? error.message : error)
+        );
+        return;
+    }
     // Two sources, kept clearly separate: THIS bench's own saves (rig-specific)
     // first, then the class-wide SHARED protocols. Grouped under titled headers
     // with a divider — not one flat gray list — so which is which is obvious and
@@ -8468,15 +8662,31 @@ $('fmOpenCourse').addEventListener('click', async () => {
         try {
             const res = await GH.run(fetch, GH.reqGetContents(cs.repo.owner, cs.repo.name, dir, null, token));
             if (res.ok && Array.isArray(res.data)) {
-                return res.data
+                return { items: res.data
                     .filter((f) => f && f.type === 'file' && /\.ya?ml$/i.test(f.name))
-                    .map((f) => ({ label: f.name, value: f.path }));
+                    .map((f) => ({ label: f.name, value: f.path })), error: null };
             }
-        } catch (_) { /* 404 before the first save is normal */ }
-        return [];
+            if (res.status === 404) return { items: [], error: null };
+            return { items: [], error: dir + ' returned HTTP ' + res.status };
+        } catch (error) {
+            return { items: [], error: dir + ': ' + (error && error.message ? error.message : error) };
+        }
     };
-    const benchItems = cs.benchId ? await fetchDir('protocols/' + cs.benchId) : [];
-    const sharedItems = await fetchDir('protocols/shared');
+    const benchResult = cs.benchId
+        ? await fetchDir('protocols/' + cs.benchId)
+        : { items: [], error: null };
+    const sharedResult = await fetchDir('protocols/shared');
+    const benchItems = benchResult.items;
+    const sharedItems = sharedResult.items;
+    const readErrors = [benchResult.error, sharedResult.error].filter(Boolean);
+    if (!benchItems.length && !sharedItems.length && readErrors.length) {
+        Studio.showBanner(
+            'Course repo could not be read: ' +
+                readErrors.join(' · ') +
+                (token ? '' : ' · Sign in if this repo is private.')
+        );
+        return;
+    }
     const benchNames = new Set(benchItems.map((i) => i.label.toLowerCase()));
     const items = [];
     if (cs.benchId) {
@@ -8489,15 +8699,29 @@ $('fmOpenCourse').addEventListener('click', async () => {
         sharedItems.forEach((i) => { if (benchNames.has(i.label.toLowerCase())) i.sub = '⚠ also on your bench'; });
         items.push(...sharedItems);
     } else items.push({ note: 'No shared protocols yet.' });
-    showPicker('Open protocol — choose a source (' + cs.repo.full + ')', items, (path) =>
-        openFromCourseRepo(cs.repo, path, token)
+    if (readErrors.length) items.push({ note: 'Some sources were unavailable: ' + readErrors.join(' · ') });
+    showPicker(
+        'Open protocol — choose a source (' +
+            cs.repo.full +
+            (token ? ' · signed in' : ' · public read') +
+            ')',
+        items,
+        (path) => openFromCourseRepo(cs.repo, path, token)
     );
 });
 
 async function openFromCourseRepo(repo, path, token, landIn) {
     try {
         const res = await GH.runBytes(fetch, GH.reqGetContentsRaw(repo.owner, repo.name, path, null, token));
-        if (!res.ok) throw new Error('HTTP ' + res.status);
+        if (!res.ok) {
+            throw new Error(
+                'HTTP ' +
+                    res.status +
+                    (!token && [401, 403, 404].includes(res.status)
+                        ? ' — sign in if this repository is private'
+                        : '')
+            );
+        }
         const text = new TextDecoder().decode(res.bytes);
         const ok = await Studio.loadProtocol(text, path.split('/').pop(), 'committed', {
             repoRef: { repo: repo.full, path: path },
@@ -8534,7 +8758,7 @@ async function rewireRepoPatternPreviews() {
     if (!rp || !rp.path) return;
     const cs = Studio.courseSettings && Studio.courseSettings();
     const token = ghToken();
-    if (!token || !cs || !cs.repo || cs.repo.full !== rp.full) return;
+    if (!cs || !cs.repo || cs.repo.full !== rp.full) return;
     registerRepoPatternPreviews({ owner: rp.owner, name: rp.name, full: rp.full }, rp.path, token);
 }
 
@@ -8559,8 +8783,9 @@ async function registerRepoSharedPatternPreviews(repo, token) {
                 n++;
                 repoSharedPreviewKeys.add(f.name);
                 webPreviewBySdName.set(f.name, async () => {
+                    const currentToken = ghToken();
                     const r = await GH.runBytes(fetch,
-                        GH.reqGetContentsRaw(repo.owner, repo.name, f.path, null, token));
+                        GH.reqGetContentsRaw(repo.owner, repo.name, f.path, null, currentToken));
                     if (!r.ok) throw new Error('HTTP ' + r.status);
                     return r.bytes.buffer;
                 });
@@ -8599,7 +8824,17 @@ async function registerRepoPatternPreviews(repo, protoPath, token) {
                 n++;
                 names.add(sdLogicalName(f.name));
                 webPreviewBySdName.set(f.name, async () => {
-                    const r = await GH.runBytes(fetch, GH.reqGetContentsRaw(repo.owner, repo.name, f.path, null, token));
+                    const currentToken = ghToken();
+                    const r = await GH.runBytes(
+                        fetch,
+                        GH.reqGetContentsRaw(
+                            repo.owner,
+                            repo.name,
+                            f.path,
+                            null,
+                            currentToken
+                        )
+                    );
                     if (!r.ok) throw new Error('HTTP ' + r.status);
                     return r.bytes.buffer;
                 });
@@ -8809,6 +9044,10 @@ async function putSharedGuarded(repo, token, path, bytes, message) {
 }
 $('fmPromote').addEventListener('click', async () => {
     $('fileMenu').classList.remove('open');
+    if (!Studio.advanced) {
+        Studio.showBanner('Promote is locked in Safe mode — unlock Advanced mode first.');
+        return;
+    }
     const cs = Studio.courseSettings();
     const token = ghToken();
     const doc = Studio.currentDoc;
@@ -8896,12 +9135,7 @@ async function initFromUrl() {
             // holds — a signed-out bench gets a pointer, not the file.
             const token = ghToken();
             const rm = /^([^/]+)\/(.+)$/.exec(state.repo);
-            if (!token) {
-                // The finally-block canonicalizes (scrubs) the URL, so "reload"
-                // would NOT retry — point at the picker, which relists the repo.
-                Studio.showBanner('This link opens ' + state.p + ' from ' + state.repo +
-                    ' — sign in (File ▾ → GitHub), then File ▾ → "Open from course repo…" to open it.');
-            } else if (rm) {
+            if (rm) {
                 await openFromCourseRepo({ owner: rm[1], name: rm[2], full: state.repo }, state.p, token, 'run');
             }
         } else if (state.p) {

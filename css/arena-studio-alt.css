@@ -503,6 +503,13 @@ html.arena-alt .alt-replay-file span {
   font-size:10px;
 }
 
+html.arena-alt .alt-replay-file .alt-replay-repo {
+  color:var(--beta);
+  border-color:color-mix(in srgb,var(--beta) 70%,var(--border));
+  padding-left:7px;
+  padding-right:7px;
+}
+
 html.arena-alt .alt-replay-options {
   display:flex;
   align-items:center;

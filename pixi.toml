@@ -10,6 +10,7 @@ version = "0.1.0"
 # Forward args after `--`, e.g.  pixi run bridge -- --proto tcp --frames 60 --log run.jsonl
 bridge = "python fictrac-bridge/bridge.py"
 sim = "python fictrac-bridge/fictrac_sim.py"
+serve = "python -m http.server 8000 --bind 127.0.0.1"
 
 # ── JS dev tooling (Node + Prettier come from conda-forge — no npm) ─────────
 # The full test suite. yaml is vendored (js/vendor/yaml), so no package install.
