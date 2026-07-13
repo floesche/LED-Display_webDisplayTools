@@ -122,6 +122,20 @@
         return Number.isFinite(number) ? number : fallback;
     }
 
+    function clampHorizontalFov(value, minimum, maximum, fallback) {
+        var min = finiteNumber(minimum, 60);
+        var max = Math.max(min, finiteNumber(maximum, 150));
+        var resolved = finiteNumber(value, finiteNumber(fallback, 120));
+        return Math.min(max, Math.max(min, resolved));
+    }
+
+    function horizontalToVerticalFov(horizontalFov, aspect) {
+        var horizontal = Math.min(179, Math.max(1, finiteNumber(horizontalFov, 120)));
+        var safeAspect = Math.max(0.01, finiteNumber(aspect, 1));
+        var halfWidth = (horizontal * Math.PI) / 360;
+        return (2 * Math.atan(Math.tan(halfWidth) / safeAspect) * 180) / Math.PI;
+    }
+
     function normalizeLedState(value, fallback) {
         if (value === undefined || value === null) return Boolean(fallback);
         if (typeof value === 'number') return Number.isFinite(value) && value > 0;
@@ -232,7 +246,9 @@
         validateInbound: validateInbound,
         validateFromViewer: validateFromViewer,
         normalizeReplayState: normalizeReplayState,
-        formatElapsed: formatElapsed
+        formatElapsed: formatElapsed,
+        clampHorizontalFov: clampHorizontalFov,
+        horizontalToVerticalFov: horizontalToVerticalFov
     };
 
     if (typeof window !== 'undefined') {

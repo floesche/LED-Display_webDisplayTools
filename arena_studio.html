@@ -2062,7 +2062,7 @@
   .help-card .help-x{position:absolute;top:6px;right:8px;background:transparent;border:0;color:var(--dim);cursor:pointer;font-size:13px;line-height:1}
   .help-card .help-x:hover{color:var(--text)}
 </style>
-<link rel="stylesheet" href="css/arena-studio-alt.css" />
+<link rel="stylesheet" href="css/arena-studio-alt.css?v=20260713-ui-cleanup" />
 </head>
 <body>
 
@@ -3910,6 +3910,7 @@
         // master volume. Latest per-row current value is stashed during render for the
         // audio tick to read. Config persists (except `on` — audio needs a gesture).
         let actx = null, osc = null, audioGain = null, sndMenu = null;
+        let soundSuspended = false;
         const lastVals = {}; // {turning_deg_s, forward_mm_s, heading_deg} current values
         const SND_MAX_GAIN = 0.2, SND_VOL_FLOOR = 0.12, SND_STALE_MS = 500;
         const SND_FLO = 196, SND_FHI = 1568; // continuous pitch range (G3–G6)
@@ -4111,6 +4112,12 @@
             return snd.on;
         }
         function getSoundEnabled() { return !!snd.on; }
+        function setSoundSuspended(on) {
+            soundSuspended = !!on;
+            if (soundSuspended && audioGain && actx)
+                audioGain.gain.setTargetAtTime(0, actx.currentTime, 0.02);
+            return soundSuspended;
+        }
         // Current value of a mapped channel; 'speed' = |(turning, forward)| magnitude.
         function channelVal(key) {
             if (key === 'speed') { const t = lastVals.turning_deg_s, f = lastVals.forward_mm_s; return Math.hypot(isFinite(t) ? t : 0, isFinite(f) ? f : 0); }
@@ -4122,6 +4129,10 @@
         function updateAudio() {
             if (!snd.on || !actx || !audioGain || !osc) return;
             const now = actx.currentTime;
+            if (soundSuspended) {
+                audioGain.gain.setTargetAtTime(0, now, 0.02);
+                return;
+            }
             const fresh = raw.length && (Date.now() - lastWall) < SND_STALE_MS;
             if (!fresh) { audioGain.gain.setTargetAtTime(0, now, 0.08); return; }
             // pitch: by default the tone tracks the channel's SPEED (|value|), so low
@@ -4651,7 +4662,7 @@
         return { init, start, stop, reset, pushSample, onRunStatus, applyRigBallDiameter,
             setReplayMode, setReplayClock, setAnnotationMode, getAnnotationMode,
             setSoundEnabled: setSound, getSoundEnabled, openSoundSettings: openSoundMenu,
-            closeSoundSettings: closeSoundMenu };
+            closeSoundSettings: closeSoundMenu, setSoundSuspended };
     })();
     window.Scope = Scope;
     Scope.init();
@@ -15059,6 +15070,6 @@ initFromUrl();
   setTimeout(pickerRebuilt, 2000);
 })();
 </script>
-<script src="js/arena-studio-alt.js"></script>
+<script src="js/arena-studio-alt.js?v=20260713-ui-cleanup"></script>
 </body>
 </html>

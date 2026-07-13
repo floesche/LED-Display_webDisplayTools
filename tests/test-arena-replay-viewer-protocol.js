@@ -22,6 +22,10 @@ function equal(name, actual, expected) {
     );
 }
 
+function near(name, actual, expected, tolerance = 1e-9) {
+    check(name, Math.abs(actual - expected) <= tolerance, `got ${actual}, expected ${expected}`);
+}
+
 console.log('\n=== envelope construction ===');
 const sessionId = 'replay-session-1234';
 const init = Protocol.makeMessage(Protocol.OPENER_SOURCE, 'init', sessionId, {
@@ -233,6 +237,27 @@ equal(
 );
 equal('elapsed formatter preserves hundredths', Protocol.formatElapsed(62567), '01:02.57');
 
+console.log('\n=== replay camera projection ===');
+equal('view width clamps at replay maximum', Protocol.clampHorizontalFov(180, 60, 150, 120), 150);
+equal('view width clamps at replay minimum', Protocol.clampHorizontalFov(30, 60, 150, 120), 60);
+equal(
+    'invalid view width falls back safely',
+    Protocol.clampHorizontalFov('wide', 60, 150, 120),
+    120
+);
+near(
+    'square viewport keeps horizontal and vertical FOV equal',
+    Protocol.horizontalToVerticalFov(120, 1),
+    120
+);
+const expectedWideVerticalFov =
+    (2 * Math.atan(Math.tan((120 * Math.PI) / 360) / 2) * 180) / Math.PI;
+near(
+    'wide viewport converts horizontal width to a narrower vertical FOV',
+    Protocol.horizontalToVerticalFov(120, 2),
+    expectedWideVerticalFov
+);
+
 console.log('\n=== origin normalization ===');
 equal(
     'URL path is reduced to its origin',
@@ -263,8 +288,71 @@ check(
     html.includes('"three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js"')
 );
 check(
+    'popup cache-busts the camera projection helper with its entry module',
+    html.includes('arena-replay-viewer-protocol.js?v=0713-solid-ball') &&
+        html.includes('arena-replay-viewer.js?v=0713-solid-ball')
+);
+check(
     'apparatus declares the required 9 mm ball',
     viewerModule.includes('const BALL_DIAMETER_MM = 9;')
+);
+const foregroundStart = viewerModule.indexOf('function foregroundMaterial(material)');
+const foregroundEnd = viewerModule.indexOf('\n}', foregroundStart);
+const foregroundBody = viewerModule.slice(foregroundStart, foregroundEnd);
+check(
+    'cutaway apparatus is full-alpha so later glow cannot show through the ball',
+    foregroundBody.includes('material.transparent = true;') &&
+        foregroundBody.includes('material.opacity = 1;') &&
+        foregroundBody.includes('material.depthTest = false;') &&
+        foregroundBody.includes('material.depthWrite = false;')
+);
+const ballStart = viewerModule.indexOf('const ballMaterial = foregroundMaterial(');
+const ballEnd = viewerModule.indexOf('group.add(ball);', ballStart);
+const ballBody = viewerModule.slice(ballStart, ballEnd);
+check(
+    '9 mm ball is solid pure white and renders over the red beam',
+    ballBody.includes('color: 0xffffff') &&
+        ballBody.includes('new THREE.SphereGeometry(ballRadius, 40, 24)') &&
+        ballBody.includes('44') &&
+        viewerModule.includes('beam.renderOrder = 41;')
+);
+check(
+    'camera presets replace the unhelpful side view with Rear and Fly Eye',
+    html.includes('id="view-rear"') &&
+        html.includes('id="view-fly-eye"') &&
+        !html.includes('id="view-side"')
+);
+check(
+    'Rear looks inward through calibrated rear column 8',
+    viewerModule.includes("viewer.setViewPreset('from-east')")
+);
+check(
+    'Fly Eye faces calibrated front column 3 from above the 9 mm ball',
+    viewerModule.includes("viewer.setViewPreset('fly-west')") &&
+        viewerModule.includes('apparatus.ballRadius + FLY_EYE_CLEARANCE_MM / MM_PER_INCH')
+);
+check(
+    'horizontal view-width control offers wide fly-view options and caps at 150 degrees',
+    html.includes('id="view-fov"') &&
+        html.includes('<option value="120" selected>120°</option>') &&
+        html.includes('<option value="135">135°</option>') &&
+        html.includes('<option value="150">150°</option>') &&
+        !html.includes('<option value="180"') &&
+        viewerModule.includes('const MAX_HORIZONTAL_FOV = 150;')
+);
+check(
+    'horizontal width is converted for camera aspect before applying Three.js vertical FOV',
+    viewerModule.includes('Protocol.horizontalToVerticalFov(') &&
+        viewerModule.includes('viewer.setFOV(Protocol.horizontalToVerticalFov(')
+);
+check(
+    'viewer capability handshake advertises the corrected camera controls',
+    viewerModule.includes("views: ['reset', 'top', 'rear', 'fly-eye']") &&
+        viewerModule.includes('horizontalFovOptions: [60, 90, 120, 135, 150]')
+);
+check(
+    'very narrow popup controls wrap instead of crushing camera labels',
+    html.includes('@media (max-width: 420px)') && html.includes('flex-wrap: wrap')
 );
 
 console.log(`\n${checks - failures} / ${checks} checks passed`);

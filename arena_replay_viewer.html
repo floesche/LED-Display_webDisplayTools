@@ -170,6 +170,41 @@
                 gap: 6px;
             }
 
+            .view-angle {
+                display: inline-flex;
+                height: 32px;
+                align-items: center;
+                gap: 6px;
+                margin-left: 2px;
+                padding-left: 8px;
+                border-left: 1px solid var(--line);
+                color: var(--muted);
+                font-size: 8px;
+                font-weight: 700;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+                white-space: nowrap;
+            }
+
+            .view-angle select {
+                height: 32px;
+                padding: 0 24px 0 8px;
+                border: 1px solid #42564f;
+                border-radius: 4px;
+                outline: none;
+                background: #111b19;
+                color: var(--phosphor);
+                font: inherit;
+                font-size: 10px;
+                font-weight: 700;
+                cursor: pointer;
+            }
+
+            .view-angle select:hover,
+            .view-angle select:focus-visible {
+                border-color: var(--phosphor-dim);
+            }
+
             button {
                 min-width: 52px;
                 height: 32px;
@@ -290,12 +325,17 @@
                 }
 
                 .view-controls {
+                    grid-column: 1 / -1;
                     justify-content: stretch;
                 }
 
                 .view-controls button {
                     flex: 1;
                     min-width: 0;
+                }
+
+                .view-angle {
+                    flex: 0 0 auto;
                 }
             }
 
@@ -315,6 +355,26 @@
 
                 .orbit-hint {
                     display: none;
+                }
+            }
+
+            @media (max-width: 420px) {
+                .view-controls {
+                    flex-wrap: wrap;
+                }
+
+                .view-controls button {
+                    flex: 1 1 0;
+                }
+
+                .view-angle {
+                    height: 38px;
+                    flex: 1 0 100%;
+                    justify-content: flex-end;
+                    margin-left: 0;
+                    padding: 6px 0 0;
+                    border-top: 1px solid var(--line);
+                    border-left: 0;
                 }
             }
         </style>
@@ -349,7 +409,18 @@
             <nav class="view-controls" aria-label="Camera presets">
                 <button type="button" id="view-reset">Reset</button>
                 <button type="button" id="view-top">Top</button>
-                <button type="button" id="view-side">Side</button>
+                <button type="button" id="view-rear" title="Look into the arena from the rear camera gap">Rear</button>
+                <button type="button" id="view-fly-eye" title="View from just above the ball, facing the calibrated front column">Fly eye</button>
+                <label class="view-angle" title="Horizontal camera viewing angle">
+                    <span>Width</span>
+                    <select id="view-fov" aria-label="Horizontal viewing angle">
+                        <option value="60">60°</option>
+                        <option value="90">90°</option>
+                        <option value="120" selected>120°</option>
+                        <option value="135">135°</option>
+                        <option value="150">150°</option>
+                    </select>
+                </label>
             </nav>
         </header>
 
@@ -359,7 +430,7 @@
             <span class="orbit-hint">Drag to orbit · scroll to zoom</span>
         </footer>
 
-        <script src="js/arena-replay-viewer-protocol.js"></script>
-        <script type="module" src="js/arena-replay-viewer.js"></script>
+        <script src="js/arena-replay-viewer-protocol.js?v=0713-solid-ball"></script>
+        <script type="module" src="js/arena-replay-viewer.js?v=0713-solid-ball"></script>
     </body>
 </html>

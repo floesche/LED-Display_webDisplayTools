@@ -31,7 +31,8 @@
         return;
       }
       var q = location.search || '';
-      var target = 'arena_studio.html' + q + '#alt';
+      var joiner = q ? '&' : '?';
+      var target = 'arena_studio.html' + q + joiner + 'alt_ui=20260713-ui-cleanup#alt';
       location.replace(target);
     })();
   </script>

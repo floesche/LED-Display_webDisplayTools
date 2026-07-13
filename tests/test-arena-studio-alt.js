@@ -32,17 +32,20 @@ function check(name, condition, detail) {
 
 console.log('=== single-source parity ===');
 check(
-    'Alt entry redirects to the production Studio',
-    /arena_studio\.html['"]?\s*\+\s*q\s*\+\s*['"]#alt/.test(entry)
+    'Alt entry redirects to a cache-versioned production Studio',
+    /arena_studio\.html['"]?\s*\+\s*q\s*\+\s*joiner\s*\+\s*['"]alt_ui=[^'"]+#alt/.test(entry)
 );
 check(
     'production page recognizes the Alt route before paint',
     studio.includes("location.hash === '#alt'")
 );
-check('Alt CSS is loaded by the shared page', studio.includes('href="css/arena-studio-alt.css"'));
 check(
-    'Alt controller is loaded after the production page wiring',
-    studio.includes('src="js/arena-studio-alt.js"')
+    'Alt CSS is loaded with a cache version by the shared page',
+    /href="css\/arena-studio-alt\.css\?v=[^"]+"/.test(studio)
+);
+check(
+    'Alt controller is loaded with a cache version after the production page wiring',
+    /src="js\/arena-studio-alt\.js\?v=[^"]+"/.test(studio)
 );
 check(
     'Alt does not embed or iframe a second Studio',
@@ -138,6 +141,138 @@ directButtons.forEach((id) =>
     )
 );
 
+console.log('=== Alt Protocol and global Settings separation ===');
+const protocolActionIds = [
+    'fmNew',
+    'fmOpen',
+    'fmOpenLibrary',
+    'fmOpenCourse',
+    'fmOpenDemo',
+    'fmSave',
+    'fmSaveAs',
+    'fmSaveCopy',
+    'fmPromote',
+    'fmCopyConditions',
+    'fmReset'
+];
+protocolActionIds.forEach((id) =>
+    check('Protocol action retained: #' + id, studio.includes('id="' + id + '"'))
+);
+const globalSettingIds = [
+    'ghBlock',
+    'ghSignInBtn',
+    'ghSignOutBtn',
+    'ghLock',
+    'ghRepoInput',
+    'ghBenchId',
+    'ghPR',
+    'ghDirect',
+    'ghArchivePatterns',
+    'fmLogLevel',
+    'sessionRig',
+    'sessionRigLock'
+];
+globalSettingIds.forEach((id) =>
+    check('global setting retained: #' + id, studio.includes('id="' + id + '"'))
+);
+check('Classic keeps its File menu label', /id="fileMenuBtn"[^>]*>File ▾<\/button>/.test(studio));
+check(
+    'Alt renames the live menu to Protocol',
+    alt.includes("protocolMenuBtn.textContent = 'Protocol ▾'")
+);
+check(
+    'Alt constructs an upper-right global Settings control',
+    alt.includes("settings.id = 'altSettingsMenu'") &&
+        alt.includes("settingsBtn.id = 'altSettingsBtn'") &&
+        alt.includes("settingsPanel.id = 'altSettingsPanel'")
+);
+const altTopbarStart = alt.indexOf('function installTopbar()');
+const altTopbarEnd = alt.indexOf('\n    function installRunMode()', altTopbarStart);
+const altTopbarBody = alt.slice(altTopbarStart, altTopbarEnd);
+check(
+    'Alt reparents the live rig and GitHub settings nodes',
+    altTopbarBody.includes('rigSection.appendChild(rigSelector)') &&
+        altTopbarBody.includes('repoSection.appendChild(ghBlock)') &&
+        altTopbarBody.includes('loggingSection.appendChild(logRow)')
+);
+check('Alt does not clone menu or settings controls', !altTopbarBody.includes('cloneNode'));
+check(
+    'Alt moves the one wired Edit header into the centered context slot',
+    altTopbarBody.includes("document.querySelector('#editView > .app-header')") &&
+        altTopbarBody.includes("editTools.id = 'altEditTools'") &&
+        altTopbarBody.includes("editTools.classList.add('alt-edit-tools')") &&
+        altTopbarBody.includes('context.appendChild(editTools)')
+);
+check(
+    'Edit header retains every visible editor control',
+    ['edTabDesigner', 'edTabYaml', 'dirtyIndicator', 'undoBtn', 'redoBtn', 'settingsToggle'].every(
+        (id) => studio.includes('id="' + id + '"')
+    )
+);
+check(
+    'Protocol settings stay isolated from global Studio Settings',
+    altTopbarBody.includes("const protocolSettings = $('settingsToggle')") &&
+        !altTopbarBody.includes('settingsPanel.appendChild(editTools)') &&
+        !/(?:settingsPanel|settingsSection)\.appendChild\([^;\n]*protocolSettings/.test(
+            altTopbarBody
+        )
+);
+check(
+    'Connect hover derives the current bench rig from Studio state',
+    altTopbarBody.includes('const rig = Studio.currentRig') &&
+        altTopbarBody.includes("connectBtn.addEventListener('pointerenter'") &&
+        altTopbarBody.includes("connectBtn.addEventListener('focus'") &&
+        altTopbarBody.includes("connectBtn.setAttribute(\n                'data-help'")
+);
+check(
+    'Alt uses the status lamp alone and keeps Connect width stable',
+    css.includes('html.arena-alt #statusTxt { display:none; }') &&
+        css.includes('inline-size:100px;') &&
+        css.includes('min-inline-size:100px;')
+);
+const connectedButtonStyleStart = css.indexOf('html.arena-alt body.connected .connect {');
+const connectedButtonStyle = css.slice(
+    connectedButtonStyleStart,
+    css.indexOf('}', connectedButtonStyleStart) + 1
+);
+check(
+    'Alt Disconnect stays legible against its connected-state fill',
+    connectedButtonStyle.includes('background:var(--accent);') &&
+        connectedButtonStyle.includes('border-color:var(--accent);') &&
+        connectedButtonStyle.includes('color:var(--bg);') &&
+        connectedButtonStyle.includes('font-weight:700;')
+);
+check(
+    'Alt rewrites late Classic menu directions without changing Classic source',
+    altTopbarBody.includes('function normalizeAltMenuCopy(value)') &&
+        altTopbarBody.includes("['in File ▾ first', 'in Settings first']") &&
+        altTopbarBody.includes(
+            "['File ▾ → Archive SD patterns', 'Settings → Archive SD patterns']"
+        ) &&
+        altTopbarBody.includes("['File ▾ → Save', 'Protocol ▾ → Save']") &&
+        altTopbarBody.includes('copyObserver.observe(document.body')
+);
+check(
+    'Protocol and Settings menus are mutually exclusive',
+    altTopbarBody.includes("protocolMenu.classList.remove('open')") &&
+        altTopbarBody.includes(
+            "protocolMenuBtn.addEventListener('click', () => setSettingsOpen(false))"
+        )
+);
+const unscopedSettingsSelectors = css
+    .split('\n')
+    .filter(
+        (line) =>
+            line.includes('.alt-settings') &&
+            !/^\s*html\.arena-alt\b/.test(line) &&
+            !/^\s*\/\*/.test(line)
+    );
+check(
+    'new Settings presentation remains Alt-scoped',
+    unscopedSettingsSelectors.length === 0,
+    unscopedSettingsSelectors.join(' | ')
+);
+
 console.log('=== added safety and replay seams ===');
 check('replay parser loaded', /src="js\/runlog-replay\.js(?:\?[^\"]+)?"/.test(studio));
 check('runtime controls loaded', studio.includes('src="js/runtime-controls.js"'));
@@ -209,6 +344,84 @@ check(
     'keyboard and pointer input are frozen with inert',
     alt.includes("node.setAttribute('inert', '')")
 );
+const replayFreezeBody = alt.slice(
+    alt.indexOf('function setReplayFrozen(on)'),
+    alt.indexOf('function updateReplayTransport')
+);
+check(
+    'replay leaves Protocol and Scope presentation controls interactive',
+    replayFreezeBody.includes('.alt-top-primary') &&
+        !replayFreezeBody.includes('.topbar,') &&
+        !replayFreezeBody.includes('.run-dock') &&
+        !replayFreezeBody.includes('.alt-scope-settings') &&
+        !css.includes('body.alt-replay-active .run-dock {\n  pointer-events:none;')
+);
+check(
+    'choosing a Protocol action safely ends replay before its original handler runs',
+    alt.includes("protocolMenuPanel.addEventListener(\n                'click'") &&
+        alt.includes("if (Studio.replayActive && event.target.closest('button')) stopReplay();")
+);
+check(
+    'Protocol popup escapes its ribbon and stays above the replay transport',
+    css.includes('html.arena-alt .alt-context-left {') &&
+        css.includes('z-index:70;') &&
+        css.includes('overflow:visible;')
+);
+check(
+    'Replay restores the exact Runner row and keeps it in view',
+    alt.includes('function highlightReplayStep(step, instant)') &&
+        alt.includes("'[data-trialidx=\"' + step.trialIdxInBlock + '\"]'") &&
+        alt.includes('function scrollReplayRowIntoView(row, instant)') &&
+        alt.includes('row.scrollIntoView({') &&
+        alt.includes("block: 'nearest'") &&
+        alt.includes("behavior: instant ? 'auto' : 'smooth'") &&
+        alt.includes('updateReplayStepVisual(null, true)')
+);
+check(
+    'Scope resizing keeps the already-active replay step visible',
+    alt.includes('replay.sequenceResizeObserver = new ResizeObserver') &&
+        alt.includes("sequenceViewport.querySelector('.seqrow.active')") &&
+        alt.includes('scrollReplayRowIntoView(active, true)')
+);
+check(
+    'Replay shows step number and condition in its pinned transport',
+    alt.includes("'STEP ' + ordinal + ' / ' + total + ' · ' + replay.condition")
+);
+check(
+    'Replay hides live Test affordances and relabels the sequence card',
+    alt.includes("document.body.classList.toggle('alt-replay-mode', isReplay)") &&
+        alt.includes("? 'Sequence · replay position '") &&
+        css.includes('body.alt-replay-mode .seqrow .play { display:none; }')
+);
+check(
+    'Pause and Resume preserve replay state while Stop remains separate',
+    alt.includes('class="alt-replay-pause"') &&
+        alt.indexOf('class="alt-replay-pause"') < alt.indexOf('class="alt-replay-stop"') &&
+        alt.includes('function setReplayPaused(on)') &&
+        alt.includes('replay.paused = true') &&
+        alt.includes('replay.paused = false') &&
+        alt.includes('setOutputInhibited(null)')
+);
+check(
+    'seeking while paused does not silently resume playback',
+    alt.includes('const continuePlaying = replay.playing && !replay.paused;') &&
+        alt.includes('replay.playing = continuePlaying;') &&
+        alt.includes('if (continuePlaying) ensureReplayLoop();') &&
+        alt
+            .slice(
+                alt.indexOf('function seekReplay(targetMs)'),
+                alt.indexOf('function setReplayFrozen(on)')
+            )
+            .includes('syncReplayPauseUi();')
+);
+check(
+    'Pause silences sound without clearing the sound selection',
+    studio.includes('function setSoundSuspended(on)') &&
+        studio.includes('if (soundSuspended) {') &&
+        studio.includes('closeSoundSettings: closeSoundMenu, setSoundSuspended') &&
+        alt.includes('Scope.setSoundSuspended(true)') &&
+        alt.includes('Scope.setSoundSuspended(false)')
+);
 check('runtime Apply is logged to JSONL', alt.includes('bridge.log(requested)'));
 check(
     'a final-trial pending Apply is logged as unapplied',
@@ -225,6 +438,28 @@ check(
     alt.includes('data-repo-pick="yaml"') &&
         alt.includes('data-repo-pick="log"') &&
         alt.includes("listReplayRepoPath(context, 'runlogs')")
+);
+check(
+    'one-link replay validates and preloads its repo protocol',
+    alt.includes("params.get('replay') !== '1'") &&
+        alt.includes('UrlState.isSafeRepo(repo)') &&
+        alt.includes('UrlState.isSafeRepoPath(path)') &&
+        alt.includes("loadReplayRepoSelection('yaml', source.path, context)") &&
+        alt.includes("chooseMode('replay')")
+);
+check(
+    'canonical repo URL reuses the open protocol whenever Replay is selected',
+    alt.includes('function ensureOpenProtocolForReplay()') &&
+        alt.includes('Studio.currentDoc && Studio.currentDoc.repoRef') &&
+        alt.includes('UrlState.isSafeRepo(repoRef.repo)') &&
+        alt.includes('UrlState.isSafeRepoPath(repoRef.path)') &&
+        alt.includes('if (isReplay) ensureOpenProtocolForReplay()')
+);
+check(
+    'replay data picker follows linked protocol provenance before global Settings',
+    alt.includes('linkedReplaySource && linkedReplaySource.repo') &&
+        alt.includes('Studio.currentDoc.repoRef.repo') &&
+        alt.includes('repo,\n            token: Studio.ghToken')
 );
 check(
     'repo replay sources support anonymous public reads and retain provenance',
@@ -315,6 +550,24 @@ check(
     studio.includes("s.op === 'trialParams'") &&
         studio.includes('last.closedLoop = md === 3 || md === 4;')
 );
+check(
+    'Scope Tuning opens above the canvas with a viewport-safe fallback',
+    alt.includes('const above = r.top - pop.offsetHeight - gap;') &&
+        alt.includes('const below = r.bottom + gap;') &&
+        alt.includes('above >= edge ? above : Math.max(edge, Math.min(below, maxTop))')
+);
+check(
+    'Scope Tuning keeps its number fields and buttons inside the two-column panel',
+    css.includes('grid-template-columns:repeat(2,minmax(0,1fr));') &&
+        css.includes('html.arena-alt .alt-scope-settings input[type=number] {') &&
+        css.includes('html.arena-alt .alt-scope-settings .pill { width:100%; min-width:0; }')
+);
+check(
+    'Alt footer exposes the current Alt build stamp without changing Classic',
+    alt.includes("const ALT_BUILD_STAMP = '2026-07-13 18:06 ET';") &&
+        alt.includes("stampNode.nodeValue = version + ' | ' + ALT_BUILD_STAMP + ' · ';") &&
+        studio.includes('Arena Studio v0.66 | 2026-07-10 20:52 ET')
+);
 
 console.log('=== scoped presentation ===');
 const selectorLines = css.split('\n').filter((line) => /^\s*html\.arena-alt/.test(line));
@@ -324,6 +577,20 @@ check(
     String(selectorLines.length)
 );
 check('light theme exists', css.includes('html.arena-alt[data-theme="light"]'));
+check(
+    'Arena Studio brand uses the Pattern Designer green',
+    css.includes('--alt-brand:#00e676;') && css.includes('color:var(--alt-brand);')
+);
+check(
+    'Edit tools occupy the second ribbon only in Edit mode',
+    css.includes('html.arena-alt body.editmode .alt-edit-tools { display:flex; }') &&
+        css.includes('grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);')
+);
+check(
+    'narrow shell compacts labels without wrapping into a third ribbon',
+    css.includes('html.arena-alt .alt-top-primary {\n    flex-wrap:nowrap;') &&
+        css.includes('.topbar [data-alt-short]::after')
+);
 check('Scope dock is bounded', css.includes('height:252px'));
 check('index exposes Arena Studio Alt', index.includes('href="arena_studio_alt.html"'));
 

@@ -22,6 +22,25 @@
     const DOC_URL =
         'https://github.com/reiserlab/webDisplayTools/blob/main/docs/development/flow-control-counter-proposal.md';
     const LED_OFF_MV = (window.ArenaRunnerG6 && window.ArenaRunnerG6.LED_OFF_MV) || 5000;
+    const ALT_BUILD_STAMP = '2026-07-13 18:06 ET';
+    // `replay=1` is an Alt-only launch convenience. Capture it before the
+    // production URL canonicalizer intentionally removes unknown parameters.
+    // The repo/path still pass through the shared URL-state validators.
+    const linkedReplaySource = (() => {
+        const params = new URLSearchParams(location.search);
+        const UrlState = window.StudioUrlState;
+        const repo = params.get('repo');
+        const path = params.get('p');
+        if (
+            params.get('replay') !== '1' ||
+            !UrlState ||
+            !UrlState.isSafeRepo(repo) ||
+            !UrlState.isSafeRepoPath(path)
+        ) {
+            return null;
+        }
+        return { repo, path };
+    })();
 
     const runtimeUi = {
         card: null,
@@ -48,9 +67,15 @@
         currentMs: 0,
         speed: 1,
         playing: false,
+        paused: false,
         raf: null,
         lastWall: 0,
         condition: '—',
+        step: null,
+        stepIndex: null,
+        stepTotal: null,
+        sequenceSteps: [],
+        sequenceResizeObserver: null,
         trial: null,
         ledOn: false,
         frame: 0,
@@ -116,13 +141,23 @@
     function replayRepoContext() {
         const GitHub = window.StudioGitHub;
         const settings = Studio.courseSettings && Studio.courseSettings();
-        if (!GitHub || !settings || !settings.repo) {
-            throw new Error('The course repo is not configured in File ▾.');
+        const docRepo =
+            (Studio.currentDoc && Studio.currentDoc.repoRef && Studio.currentDoc.repoRef.repo) ||
+            (linkedReplaySource && linkedReplaySource.repo);
+        const match =
+            window.StudioUrlState && window.StudioUrlState.isSafeRepo(docRepo)
+                ? /^([^/]+)\/(.+)$/.exec(docRepo)
+                : null;
+        const repo = match
+            ? { owner: match[1], name: match[2], full: docRepo }
+            : settings && settings.repo;
+        if (!GitHub || !settings || !repo) {
+            throw new Error('The course repo is not configured in Settings.');
         }
         return {
             GitHub,
             settings,
-            repo: settings.repo,
+            repo,
             token: Studio.ghToken ? Studio.ghToken() : null
         };
     }
@@ -259,7 +294,9 @@
         if (label) label.textContent = file.name + (repoSource ? ' · repo' : '');
         updateReplayStartAvailability();
         setReplayStatus(
-            'Ready to replay ' + (replay.logFile ? replay.logFile.name : 'run log') + '.'
+            replay.yamlFile && !replay.logFile
+                ? 'Protocol ready · choose its JSONL run log.'
+                : 'Ready to replay ' + (replay.logFile ? replay.logFile.name : 'run log') + '.'
         );
         return true;
     }
@@ -282,6 +319,46 @@
             updateReplayStartAvailability();
             setReplayStatus(error && error.message ? error.message : String(error), true);
         }
+    }
+
+    function openProtocolReplaySource() {
+        const UrlState = window.StudioUrlState;
+        const repoRef = Studio.currentDoc && Studio.currentDoc.repoRef;
+        if (
+            repoRef &&
+            UrlState &&
+            UrlState.isSafeRepo(repoRef.repo) &&
+            UrlState.isSafeRepoPath(repoRef.path)
+        ) {
+            return { repo: repoRef.repo, path: repoRef.path };
+        }
+        return linkedReplaySource;
+    }
+
+    async function ensureOpenProtocolForReplay() {
+        if (Studio.replayActive || replay.yamlFile || replay.sourcePending.yaml) return;
+        const source = openProtocolReplaySource();
+        if (!source) {
+            setReplayStatus('Open a protocol or choose a replay YAML, then choose its JSONL log.');
+            return;
+        }
+        const GitHub = window.StudioGitHub;
+        const match = /^([^/]+)\/(.+)$/.exec(source.repo);
+        if (!GitHub || !match) {
+            setReplayStatus('The open course protocol could not be prepared for replay.', true);
+            return;
+        }
+        const context = {
+            GitHub,
+            settings: Studio.courseSettings ? Studio.courseSettings() : {},
+            repo: {
+                owner: match[1],
+                name: match[2],
+                full: source.repo
+            },
+            token: Studio.ghToken ? Studio.ghToken() : null
+        };
+        await loadReplayRepoSelection('yaml', source.path, context);
     }
 
     async function pickReplayYamlFromRepo() {
@@ -406,9 +483,19 @@
         if (brand) brand.textContent = 'Arena Studio';
 
         const footer = document.querySelector('footer .foot-left');
-        if (footer && !footer.querySelector('.alt-footer-mark')) {
-            footer.appendChild(document.createTextNode(' · '));
-            footer.appendChild(el('span', 'alt-footer-mark', 'ALT INTERFACE'));
+        if (footer) {
+            const version =
+                (String(Studio.TOOL_VERSION || '').match(/Arena Studio v[0-9.]+/) || [])[0] ||
+                'Arena Studio';
+            const stampNode = Array.from(footer.childNodes).find(
+                (node) =>
+                    node.nodeType === 3 && /Arena Studio v[0-9.]+\s*\|/.test(node.nodeValue || '')
+            );
+            if (stampNode) stampNode.nodeValue = version + ' | ' + ALT_BUILD_STAMP + ' · ';
+            if (!footer.querySelector('.alt-footer-mark')) {
+                footer.appendChild(document.createTextNode(' · '));
+                footer.appendChild(el('span', 'alt-footer-mark', 'ALT INTERFACE'));
+            }
         }
         Studio.TOOL_VERSION = String(Studio.TOOL_VERSION || 'Arena Studio') + ' · Alt UI';
 
@@ -436,7 +523,13 @@
         const brand = document.querySelector('.brand');
         const mark = el('span', 'alt-brand-mark', 'ALT / RUN CONSOLE');
         const pSpacer = el('span', 'alt-context-spacer');
-        const cSpacer = el('span', 'alt-context-spacer');
+        const contextLeft = el('div', 'alt-context-left');
+        const contextRight = el('div', 'alt-context-right');
+        const editTools = document.querySelector('#editView > .app-header');
+        if (editTools) {
+            editTools.id = 'altEditTools';
+            editTools.classList.add('alt-edit-tools');
+        }
 
         const theme = el('button', 'alt-theme-btn');
         theme.type = 'button';
@@ -457,6 +550,313 @@
         });
         syncThemeLabel();
 
+        // Alt keeps document operations and application configuration visibly
+        // separate. The production IDs and live nodes are moved, never cloned,
+        // so every existing handler remains the single source of behaviour.
+        const protocolMenu = $('fileMenu');
+        const protocolMenuBtn = $('fileMenuBtn');
+        if (protocolMenuBtn) {
+            protocolMenuBtn.textContent = 'Protocol ▾';
+            protocolMenuBtn.title = 'Create, open, save, share, or reset the current protocol';
+            protocolMenuBtn.setAttribute('aria-label', 'Protocol menu');
+            protocolMenuBtn.setAttribute(
+                'data-help',
+                'Protocol actions — create, open, save, share, or reset the current YAML document.'
+            );
+        }
+        const protocolMenuPanel = protocolMenu && protocolMenu.querySelector('.menu');
+        if (protocolMenuPanel) {
+            const openHead = protocolMenuPanel.querySelector('.menu-head');
+            if (openHead) openHead.textContent = 'Open protocol';
+            const addHead = (beforeId, label) => {
+                const before = $(beforeId);
+                if (
+                    !before ||
+                    protocolMenuPanel.querySelector('[data-alt-head="' + beforeId + '"]')
+                )
+                    return;
+                const head = el('div', 'menu-head edit-only', label);
+                head.dataset.altHead = beforeId;
+                protocolMenuPanel.insertBefore(head, before);
+            };
+            addHead('fmSave', 'Save & share');
+            addHead('fmCopyConditions', 'Protocol tools');
+        }
+
+        const settings = el('div', 'alt-settings-menu');
+        settings.id = 'altSettingsMenu';
+        const settingsBtn = el('button', 'alt-settings-btn', '⚙');
+        settingsBtn.id = 'altSettingsBtn';
+        settingsBtn.type = 'button';
+        settingsBtn.title = 'Studio settings — rig, GitHub, run logging, and appearance';
+        settingsBtn.setAttribute('aria-label', 'Studio settings');
+        settingsBtn.setAttribute('aria-haspopup', 'dialog');
+        settingsBtn.setAttribute('aria-expanded', 'false');
+        settingsBtn.setAttribute(
+            'data-help',
+            'Studio settings — the bench rig, GitHub destination, run logging, and appearance. These do not change the protocol YAML.'
+        );
+
+        const settingsPanel = el('div', 'alt-settings-panel');
+        settingsPanel.id = 'altSettingsPanel';
+        settingsPanel.setAttribute('role', 'dialog');
+        settingsPanel.setAttribute('aria-label', 'Studio settings');
+        settingsPanel.hidden = true;
+        const settingsHead = el('div', 'alt-settings-head');
+        settingsHead.appendChild(el('span', '', 'STUDIO SETTINGS'));
+        const settingsClose = el('button', 'alt-settings-close', '×');
+        settingsClose.type = 'button';
+        settingsClose.setAttribute('aria-label', 'Close Studio settings');
+        settingsClose.title = 'Close Studio settings';
+        settingsHead.appendChild(settingsClose);
+        settingsPanel.appendChild(settingsHead);
+
+        const settingsSection = (label, className) => {
+            const section = el('section', 'alt-settings-section ' + (className || ''));
+            section.appendChild(el('div', 'alt-settings-kicker', label));
+            settingsPanel.appendChild(section);
+            return section;
+        };
+        const rigSection = settingsSection('Bench & connection', 'alt-settings-rig');
+        const rigSelector = document.querySelector('.rigsel');
+        if (rigSelector) rigSection.appendChild(rigSelector);
+
+        const repoSection = settingsSection('GitHub & storage', 'alt-settings-repo');
+        const ghBlock = $('ghBlock');
+        const trailingProtocolSep =
+            ghBlock &&
+            ghBlock.previousElementSibling &&
+            ghBlock.previousElementSibling.classList.contains('sep')
+                ? ghBlock.previousElementSibling
+                : null;
+        const logLevel = $('fmLogLevel');
+        const logRow = logLevel && logLevel.closest('.gh-row');
+        if (ghBlock) repoSection.appendChild(ghBlock);
+        if (trailingProtocolSep) trailingProtocolSep.remove();
+
+        const loggingSection = settingsSection('Run logging', 'alt-settings-logging');
+        if (logRow) loggingSection.appendChild(logRow);
+
+        const appearanceSection = settingsSection('Appearance', 'alt-settings-appearance');
+        appearanceSection.appendChild(theme);
+        settings.append(settingsBtn, settingsPanel);
+
+        function setSettingsOpen(open) {
+            settings.classList.toggle('open', open);
+            settingsPanel.hidden = !open;
+            settingsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            if (open && protocolMenu) protocolMenu.classList.remove('open');
+        }
+        settingsBtn.addEventListener('click', (event) => {
+            event.stopPropagation();
+            setSettingsOpen(!settings.classList.contains('open'));
+        });
+        settingsClose.addEventListener('click', () => {
+            setSettingsOpen(false);
+            settingsBtn.focus();
+        });
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('#altSettingsMenu')) setSettingsOpen(false);
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape' || !settings.classList.contains('open')) return;
+            setSettingsOpen(false);
+            settingsBtn.focus();
+        });
+        if (protocolMenuBtn)
+            protocolMenuBtn.addEventListener('click', () => setSettingsOpen(false));
+        // The Protocol dropdown remains inspectable during replay. Choosing a
+        // document-changing action is an explicit handoff: end replay first,
+        // release its output interlock, then let the original wired handler run.
+        if (protocolMenuPanel) {
+            protocolMenuPanel.addEventListener(
+                'click',
+                (event) => {
+                    if (Studio.replayActive && event.target.closest('button')) stopReplay();
+                },
+                true
+            );
+        }
+        const openProtocolButton = $('openProtoBtn');
+        if (openProtocolButton) {
+            openProtocolButton.addEventListener(
+                'click',
+                () => {
+                    if (Studio.replayActive) stopReplay();
+                },
+                true
+            );
+        }
+
+        // The rig selector no longer consumes permanent top-bar space. Surface
+        // the selected bench context whenever Connect is hovered or focused.
+        const connectBtn = $('connectBtn');
+        const sessionRig = $('sessionRig');
+        function currentRigLabel() {
+            const rig = Studio.currentRig;
+            if (rig && rig.name) return String(rig.name);
+            if (sessionRig) {
+                const selected = sessionRig.options && sessionRig.options[sessionRig.selectedIndex];
+                if (selected && selected.textContent) return selected.textContent.trim();
+                if (sessionRig.value) return sessionRig.value;
+            }
+            return 'no rig selected';
+        }
+        function syncConnectContext() {
+            if (!connectBtn) return;
+            const rigLabel = currentRigLabel();
+            const connected = document.body.classList.contains('connected');
+            const action = connected ? 'Disconnect from' : 'Connect to';
+            const detail =
+                action +
+                ' ' +
+                rigLabel +
+                ' — one shared bench rig is used by Run, Edit, and Console';
+            connectBtn.title = detail;
+            connectBtn.setAttribute('aria-label', action + ' ' + rigLabel);
+            connectBtn.setAttribute(
+                'data-help',
+                action +
+                    ' the arena USB port. Current rig: ' +
+                    rigLabel +
+                    '. Chrome or Edge is required for Web Serial.'
+            );
+            settingsBtn.title =
+                'Studio settings — rig: ' + rigLabel + '; GitHub, run logging, and appearance';
+        }
+        if (connectBtn) {
+            connectBtn.addEventListener('pointerenter', syncConnectContext);
+            connectBtn.addEventListener('focus', syncConnectContext);
+        }
+        if (sessionRig) {
+            sessionRig.addEventListener('change', syncConnectContext);
+            new MutationObserver(syncConnectContext).observe(sessionRig, {
+                childList: true,
+                subtree: true,
+                attributes: true
+            });
+        }
+        new MutationObserver(syncConnectContext).observe(document.body, {
+            attributes: true,
+            attributeFilter: ['class']
+        });
+        syncConnectContext();
+
+        // Distinguish the editor's YAML-backed settings from the global Studio
+        // settings above. This is a label-only Alt change; its original handler
+        // and drawer remain untouched.
+        const protocolSettings = $('settingsToggle');
+        if (protocolSettings) {
+            protocolSettings.textContent = '⚙ Protocol settings ▾';
+            protocolSettings.dataset.altShort = '⚙ Protocol';
+            protocolSettings.setAttribute('aria-label', 'Protocol settings');
+            protocolSettings.title =
+                'Show or hide settings stored in this protocol YAML — name, experimenter, rig, and pattern set';
+            protocolSettings.setAttribute(
+                'data-help',
+                'Settings stored in this protocol YAML — name, experimenter, date, rig, pattern set, and plugins.'
+            );
+        }
+
+        const shortLabels = [
+            [$('safeModeChip'), '🛡'],
+            [$('advLockChip'), '🔓'],
+            [$('undoBtn'), '↶'],
+            [$('redoBtn'), '↷'],
+            [$('dirtyIndicator'), '●'],
+            [$('pdLink'), 'Patterns ↗'],
+            [$('otherToolsLink'), 'Tools']
+        ];
+        shortLabels.forEach(([node, label]) => {
+            if (node) node.dataset.altShort = label;
+        });
+        if ($('undoBtn')) $('undoBtn').setAttribute('aria-label', 'Undo');
+        if ($('redoBtn')) $('redoBtn').setAttribute('aria-label', 'Redo');
+
+        // Translate Classic's menu directions wherever they surface in Alt,
+        // including late banners/modals and dynamically rendered help. Text and
+        // attributes are edited in place so their original listeners stay wired.
+        const altCopyPairs = [
+            [
+                'Check the rig shown in the top bar matches your bench.',
+                'Hover Connect to confirm the rig matches your bench.'
+            ],
+            ['File ▾ → Run logging', 'Settings → Run logging'],
+            ['File ▾ → Bench id', 'Settings → Bench id'],
+            ['File ▾ → sign in', 'Settings → sign in'],
+            ['File ▾ → Archive SD patterns', 'Settings → Archive SD patterns'],
+            ['File ▾ → "Archive SD patterns…"', 'Settings → "Archive SD patterns…"'],
+            ['Sign in again from File ▾', 'Sign in again from Settings'],
+            ['course repo (File ▾)', 'course repo (Settings)'],
+            ['GitHub settings below', 'GitHub settings in Studio Settings'],
+            ['in File ▾ first', 'in Settings first'],
+            ['File ▾ → Save', 'Protocol ▾ → Save'],
+            ['File ▾', 'Protocol ▾'],
+            ['rig shown in the top bar', 'rig in Studio Settings'],
+            ['bench rig in the top bar', 'bench rig in Studio Settings'],
+            [
+                'the shared, locked selector in the top bar',
+                'the shared, locked selector in Studio Settings'
+            ],
+            ['Change the rig there', 'Change it in Studio Settings']
+        ];
+        function normalizeAltMenuCopy(value) {
+            let next = String(value == null ? '' : value);
+            altCopyPairs.forEach(([from, to]) => {
+                next = next.split(from).join(to);
+            });
+            return next;
+        }
+        function replaceText(root) {
+            if (!root) return;
+            Array.from(root.childNodes || []).forEach((node) => {
+                if (node.nodeType === 3) {
+                    const value = normalizeAltMenuCopy(node.nodeValue);
+                    if (value !== node.nodeValue) node.nodeValue = value;
+                } else if (!/^(SCRIPT|STYLE)$/i.test(node.nodeName || '')) {
+                    replaceText(node);
+                }
+            });
+        }
+        function replaceAttributes(root) {
+            if (!root || root.nodeType !== 1) return;
+            const nodes = [root].concat(Array.from(root.querySelectorAll('[title],[data-help]')));
+            nodes.forEach((node) => {
+                ['title', 'data-help'].forEach((attribute) => {
+                    if (!node.hasAttribute(attribute)) return;
+                    const before = node.getAttribute(attribute);
+                    const after = normalizeAltMenuCopy(before);
+                    if (after !== before) node.setAttribute(attribute, after);
+                });
+            });
+        }
+        function replaceCopy(root) {
+            if (!root) return;
+            if (root.nodeType === 3) {
+                const value = normalizeAltMenuCopy(root.nodeValue);
+                if (value !== root.nodeValue) root.nodeValue = value;
+                return;
+            }
+            if (root.nodeType !== 1) return;
+            replaceText(root);
+            replaceAttributes(root);
+        }
+        replaceCopy(document.body);
+        const copyObserver = new MutationObserver((records) => {
+            records.forEach((record) => {
+                if (record.type === 'characterData') replaceCopy(record.target);
+                else if (record.type === 'attributes') replaceAttributes(record.target);
+                else Array.from(record.addedNodes || []).forEach(replaceCopy);
+            });
+        });
+        copyObserver.observe(document.body, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+            attributes: true,
+            attributeFilter: ['title', 'data-help']
+        });
+
         const append = (host, node) => {
             if (node) host.appendChild(node);
         };
@@ -469,19 +869,21 @@
         append(primary, $('runInline'));
         append(primary, document.querySelector('.status'));
         append(primary, $('connectBtn'));
-        primary.appendChild(theme);
+        primary.appendChild(settings);
         append(primary, $('helpBtn'));
 
-        append(context, $('fileMenu'));
-        append(context, $('docName'));
+        append(contextLeft, $('fileMenu'));
+        append(contextLeft, $('docName'));
         document
             .querySelectorAll('.topbar > .chip, .topbar > .plug-hover, .topbar > .arena')
-            .forEach((node) => context.appendChild(node));
-        context.appendChild(cSpacer);
-        append(context, document.querySelector('.rigsel'));
-        append(context, $('pdLink'));
-        append(context, $('otherToolsLink'));
-        append(context, $('openProtoBtn'));
+            .forEach((node) => contextLeft.appendChild(node));
+        append(contextLeft, $('openProtoBtn'));
+        append(contextRight, $('pdLink'));
+        append(contextRight, $('otherToolsLink'));
+
+        context.appendChild(contextLeft);
+        if (editTools) context.appendChild(editTools);
+        context.appendChild(contextRight);
 
         // Keep any future production controls visible instead of dropping them.
         Array.from(top.children).forEach((node) => {
@@ -491,7 +893,7 @@
                 !node.classList.contains('sep-v') &&
                 !node.classList.contains('spacer')
             ) {
-                context.appendChild(node);
+                contextLeft.appendChild(node);
             }
         });
         top.querySelectorAll(':scope > .sep-v, :scope > .spacer').forEach((node) => node.remove());
@@ -544,13 +946,30 @@
         replay.ui.yamlName = replayPane.querySelector('[data-name="yaml"]');
         replay.ui.logName = replayPane.querySelector('[data-name="log"]');
 
+        // The shared sequence heading describes the live-only Test buttons. In
+        // Replay it instead identifies the same card as the playback position;
+        // only this leading text node changes, so the wired document summary is
+        // preserved and Classic remains untouched.
+        const sequenceHeading = document.querySelector('.seqlist h3');
+        const sequenceHeadingText =
+            sequenceHeading &&
+            Array.from(sequenceHeading.childNodes).find((node) => node.nodeType === 3);
+        const liveSequenceHeading = sequenceHeadingText ? sequenceHeadingText.nodeValue : null;
+
         function chooseMode(mode) {
             if (Studio.replayActive && mode !== 'replay') return;
             const isReplay = mode === 'replay';
+            document.body.classList.toggle('alt-replay-mode', isReplay);
             liveBtn.setAttribute('aria-pressed', String(!isReplay));
             replayBtn.setAttribute('aria-pressed', String(isReplay));
             livePane.hidden = isReplay;
             replayPane.hidden = !isReplay;
+            if (sequenceHeadingText) {
+                sequenceHeadingText.nodeValue = isReplay
+                    ? 'Sequence · replay position '
+                    : liveSequenceHeading;
+            }
+            if (isReplay) ensureOpenProtocolForReplay();
         }
         liveBtn.addEventListener('click', () => chooseMode('live'));
         replayBtn.addEventListener('click', () => chooseMode('replay'));
@@ -590,6 +1009,10 @@
             replay.speed = Number(replay.ui.speedLoader.value) || 1;
         });
         replay.ui.start.addEventListener('click', startReplay);
+
+        if (linkedReplaySource) {
+            chooseMode('replay');
+        }
     }
 
     function installReplayTransport() {
@@ -608,6 +1031,7 @@
             '<button type="button" class="alt-replay-sound-config" aria-label="Replay sound settings" title="Configure pitch, volume, waveform, scale, and response ranges">▾</button>' +
             '</span>' +
             '<button type="button" class="alt-replay-open-viewer">3D view</button>' +
+            '<button type="button" class="alt-replay-pause" aria-pressed="false">Ⅱ Pause</button>' +
             '<button type="button" class="alt-replay-stop">■ Stop</button>';
         runView.insertBefore(bar, runView.firstChild);
         replay.ui.transport = bar;
@@ -618,6 +1042,7 @@
         replay.ui.sound = bar.querySelector('.alt-replay-sound');
         replay.ui.soundConfig = bar.querySelector('.alt-replay-sound-config');
         replay.ui.openViewer = bar.querySelector('.alt-replay-open-viewer');
+        replay.ui.pause = bar.querySelector('.alt-replay-pause');
         replay.ui.stop = bar.querySelector('.alt-replay-stop');
         replay.ui.speed.addEventListener('change', () => {
             replay.speed = Number(replay.ui.speed.value) || 1;
@@ -628,9 +1053,12 @@
             const on = Boolean(Scope.getSoundEnabled && Scope.getSoundEnabled());
             replay.ui.sound.setAttribute('aria-pressed', String(on));
             replay.ui.sound.title = on
-                ? 'Replay sonification is on; click to mute'
+                ? replay.paused
+                    ? 'Replay sonification is selected and will resume with playback'
+                    : 'Replay sonification is on; click to mute'
                 : 'Sonify replayed FicTrac behavior: turning controls pitch and movement controls volume';
         };
+        replay.ui.syncSound = syncSound;
         replay.ui.sound.addEventListener('click', () => {
             if (!Scope.setSoundEnabled) return;
             Scope.setSoundEnabled(!(Scope.getSoundEnabled && Scope.getSoundEnabled()));
@@ -652,17 +1080,34 @@
         syncSound();
         replay.ui.slider.addEventListener('input', () => {
             const target = replay.startMs + Number(replay.ui.slider.value || 0);
+            const continuePlaying = replay.playing && !replay.paused;
             if (replay.seekRaf) cancelAnimationFrame(replay.seekRaf);
             replay.seekRaf = requestAnimationFrame(() => {
                 replay.seekRaf = null;
                 seekReplay(target);
                 replay.lastWall = performance.now();
-                replay.playing = true;
-                ensureReplayLoop();
+                replay.playing = continuePlaying;
+                if (continuePlaying) ensureReplayLoop();
             });
         });
         replay.ui.openViewer.addEventListener('click', () => openViewer(true));
+        replay.ui.pause.addEventListener('click', toggleReplayPause);
         replay.ui.stop.addEventListener('click', stopReplay);
+        syncReplayPauseUi();
+
+        // The Scope dock is user-resizable. If it grows during a long replay
+        // step, the sequence viewport shrinks without another step-start event.
+        // Re-apply Classic's nearest-row rule so the active step stays visible.
+        const sequenceViewport = $('seqBody');
+        if (sequenceViewport && window.ResizeObserver && !replay.sequenceResizeObserver) {
+            replay.sequenceResizeObserver = new ResizeObserver(() => {
+                if (!Studio.replayActive) return;
+                const active = sequenceViewport.querySelector('.seqrow.active');
+                if (!active) return;
+                requestAnimationFrame(() => scrollReplayRowIntoView(active, true));
+            });
+            replay.sequenceResizeObserver.observe(sequenceViewport);
+        }
     }
 
     function installScopeControls() {
@@ -715,7 +1160,13 @@
                         12,
                         Math.min(r.right - pop.offsetWidth, innerWidth - pop.offsetWidth - 12)
                     ) + 'px';
-                pop.style.top = Math.min(r.bottom + 7, innerHeight - pop.offsetHeight - 12) + 'px';
+                const gap = 7;
+                const edge = 12;
+                const above = r.top - pop.offsetHeight - gap;
+                const below = r.bottom + gap;
+                const maxTop = innerHeight - pop.offsetHeight - edge;
+                pop.style.top =
+                    (above >= edge ? above : Math.max(edge, Math.min(below, maxTop))) + 'px';
             }
         });
         pop.addEventListener('click', (event) => event.stopPropagation());
@@ -1327,13 +1778,117 @@
         replay.frame = positiveModulo(t.frameIndex + Math.floor(frames), replay.patternFrames);
     }
 
-    function highlightReplayCondition(name) {
+    function replaySelectorValue(value) {
+        return String(value == null ? '' : value).replace(/["\\]/g, '\\$&');
+    }
+
+    function replayStepFromStatus(status, name) {
+        const hasIndex = status && status.index != null;
+        const index = hasIndex ? Number(status.index) : NaN;
+        const nominal = Number.isInteger(index) && index >= 0 ? replay.sequenceSteps[index] : null;
+        return Object.assign({}, nominal || {}, (status && status.step) || {}, {
+            conditionName: name
+        });
+    }
+
+    function scrollReplayRowIntoView(row, instant) {
+        if (!row) return;
+        try {
+            row.scrollIntoView({
+                block: 'nearest',
+                behavior: instant ? 'auto' : 'smooth'
+            });
+        } catch (_) {}
+    }
+
+    // Mirror Classic's exact Runner row lookup. JSONL flattens `step` to a
+    // condition name, so the logged run index is joined back to the protocol's
+    // nominal flattened step. Randomized blocks still match by the logged name
+    // inside the correct block, just as Classic's fallback does.
+    function highlightReplayStep(step, instant) {
         document
             .querySelectorAll('.seqrow.active')
             .forEach((row) => row.classList.remove('active'));
-        const rows = Array.from(document.querySelectorAll('.seqrow'));
-        const row = rows.find((candidate) => candidate.dataset.cond === name);
-        if (row) row.classList.add('active');
+        let row = null;
+        if (step && typeof step === 'object') {
+            const seqIndex = step.seqIdx;
+            if (typeof seqIndex === 'number') {
+                if (step.kind === 'ref') {
+                    row = document.querySelector(
+                        '.seqrow[data-seqidx="' + seqIndex + '"][data-role="ref"]'
+                    );
+                } else if (step.kind === 'iti') {
+                    row = document.querySelector(
+                        '.seqrow[data-seqidx="' + seqIndex + '"][data-role="iti"]'
+                    );
+                } else if (step.kind === 'block-trial') {
+                    const base = '.seqrow[data-seqidx="' + seqIndex + '"][data-role="trial"]';
+                    if (!step.randomize && typeof step.trialIdxInBlock === 'number') {
+                        row = document.querySelector(
+                            base + '[data-trialidx="' + step.trialIdxInBlock + '"]'
+                        );
+                    }
+                    if (!row && step.conditionName) {
+                        row = document.querySelector(
+                            base + '[data-cond="' + replaySelectorValue(step.conditionName) + '"]'
+                        );
+                    }
+                }
+            }
+        }
+        if (!row) {
+            const name = step && typeof step === 'object' ? step.conditionName : step;
+            if (name) {
+                row = document.querySelector(
+                    '.seqrow[data-cond="' + replaySelectorValue(name) + '"]'
+                );
+            }
+        }
+        if (row) {
+            row.classList.add('active');
+            scrollReplayRowIntoView(row, instant);
+        }
+    }
+
+    function updateReplayStepVisual(status, instant) {
+        if (status) {
+            const name =
+                (status.step && status.step.conditionName) ||
+                status.condition ||
+                status.conditionName ||
+                replay.condition;
+            replay.condition = name || '—';
+            replay.step = replayStepFromStatus(status, replay.condition);
+            if (status.index != null && Number.isInteger(Number(status.index)))
+                replay.stepIndex = Number(status.index);
+            if (status.total != null && Number.isFinite(Number(status.total)))
+                replay.stepTotal = Number(status.total);
+        }
+        if (!replay.step || !replay.condition || replay.condition === '—') return;
+
+        highlightReplayStep(replay.step, instant);
+        const ordinal = replay.stepIndex == null ? null : replay.stepIndex + 1;
+        const total = replay.stepTotal;
+        const label =
+            ordinal != null && total
+                ? 'STEP ' + ordinal + ' / ' + total + ' · ' + replay.condition
+                : 'STEP · ' + replay.condition;
+        if (replay.ui.title) {
+            replay.ui.title.textContent = label;
+            replay.ui.title.title = replay.logFile ? replay.logFile.name : '';
+        }
+        const progress = ordinal != null && total ? Math.round((ordinal / total) * 100) : null;
+        if (progress != null) {
+            const bar = $('rpBar');
+            const inlineBar = $('runInlineBar');
+            if (bar) bar.style.width = progress + '%';
+            if (inlineBar) inlineBar.style.width = progress + '%';
+        }
+        const stepReadout = $('rpStep');
+        if (stepReadout && ordinal != null && total)
+            stepReadout.textContent = 'step ' + ordinal + ' / ' + total;
+        const inlineText = $('runInlineTxt');
+        if (inlineText) inlineText.textContent = '▸ ' + replay.condition;
     }
 
     function processReplayItem(item) {
@@ -1365,11 +1920,10 @@
                 status.conditionName ||
                 null;
             if (status.phase === 'step-start' && name) {
-                replay.condition = name;
+                updateReplayStepVisual(status, replay.seeking);
                 replay.trial = trialForCondition(name);
                 replay.trial.startMs = item.ms;
                 replay.frame = replay.trial.frameIndex;
-                highlightReplayCondition(name);
                 if (!replay.seeking) loadReplayPattern(replay.trial);
             }
             if (status.phase === 'command' && status.op === 'trialParams' && replay.trial) {
@@ -1411,6 +1965,9 @@
         Scope.start();
         replay.index = 0;
         replay.condition = '—';
+        replay.step = null;
+        replay.stepIndex = null;
+        replay.stepTotal = null;
         replay.trial = null;
         replay.ledOn = false;
         replay.displayMode = 'off';
@@ -1434,6 +1991,11 @@
                 null;
             if (status.phase === 'step-start' && name) {
                 replay.condition = name;
+                replay.step = replayStepFromStatus(status, name);
+                if (status.index != null && Number.isInteger(Number(status.index)))
+                    replay.stepIndex = Number(status.index);
+                if (status.total != null && Number.isFinite(Number(status.total)))
+                    replay.stepTotal = Number(status.total);
                 replay.trial = trialForCondition(name);
                 replay.trial.startMs = event.ms;
                 replay.frame = replay.trial.frameIndex;
@@ -1520,18 +2082,22 @@
             processReplayItem(replay.timeline[replay.index++]);
         }
         replay.seeking = false;
+        // If the seek window began in the middle of a long step there was no
+        // step-start item to process. Restore the primed row and keep it visible.
+        updateReplayStepVisual(null, true);
         replay.currentMs = target;
         if (Scope.setReplayClock) Scope.setReplayClock(target);
         updateOpenLoopFrame(target);
         updateReplayTransport();
+        syncReplayPauseUi();
         if (replay.trial) loadReplayPattern(replay.trial);
         sendViewerState();
     }
 
     function setReplayFrozen(on) {
         const targets = document.querySelectorAll(
-            '.topbar, .run-main, .meta-panel, .run-dock, .edit-view, .console-view, ' +
-                '.alt-scope-settings, .picker-overlay, .rlup-overlay'
+            '.alt-top-primary, .run-main, .meta-panel, .edit-view, .console-view, ' +
+                '.picker-overlay, .rlup-overlay'
         );
         if (on) {
             replay.frozen.clear();
@@ -1553,6 +2119,46 @@
         if (replay.ui.slider) replay.ui.slider.value = String(elapsed);
         if (replay.ui.clock)
             replay.ui.clock.textContent = formatClock(elapsed) + ' / ' + formatClock(duration);
+    }
+
+    function syncReplayPauseUi() {
+        if (!replay.ui.pause) return;
+        const atEnd = replay.endMs > replay.startMs && replay.currentMs >= replay.endMs;
+        replay.ui.pause.textContent = replay.paused ? (atEnd ? '↻ Replay' : '▶ Resume') : 'Ⅱ Pause';
+        replay.ui.pause.setAttribute('aria-pressed', String(replay.paused));
+        replay.ui.pause.disabled =
+            !Studio.replayActive || Boolean(replay.ui.slider && replay.ui.slider.disabled);
+        replay.ui.pause.title = replay.paused
+            ? atEnd
+                ? 'Replay again from the beginning'
+                : 'Resume from the current replay time'
+            : 'Pause without ending this replay';
+    }
+
+    function setReplayPaused(on) {
+        if (!Studio.replayActive) return;
+        const pause = !!on;
+        if (pause) {
+            replay.paused = true;
+            replay.playing = false;
+            replay.lastWall = 0;
+            if (replay.raf) cancelAnimationFrame(replay.raf);
+            replay.raf = null;
+            if (Scope.setSoundSuspended) Scope.setSoundSuspended(true);
+        } else {
+            if (replay.currentMs >= replay.endMs) seekReplay(replay.startMs);
+            replay.paused = false;
+            replay.playing = true;
+            replay.lastWall = performance.now();
+            if (Scope.setSoundSuspended) Scope.setSoundSuspended(false);
+            ensureReplayLoop();
+        }
+        syncReplayPauseUi();
+        if (replay.ui.syncSound) replay.ui.syncSound();
+    }
+
+    function toggleReplayPause() {
+        setReplayPaused(!replay.paused);
     }
 
     function ensureReplayLoop() {
@@ -1578,8 +2184,13 @@
         updateOpenLoopFrame(target);
         updateReplayTransport();
         sendViewerState();
-        if (target >= replay.endMs) replay.playing = false;
-        else ensureReplayLoop();
+        if (target >= replay.endMs) {
+            replay.playing = false;
+            replay.paused = true;
+            if (Scope.setSoundSuspended) Scope.setSoundSuspended(true);
+            syncReplayPauseUi();
+            if (replay.ui.syncSound) replay.ui.syncSound();
+        } else ensureReplayLoop();
     }
 
     async function startReplay() {
@@ -1617,11 +2228,13 @@
             // control can slip into the parse window after the initial check.
             Studio.session.setOutputInhibited('Arena Studio replay');
             Studio.replayActive = true;
+            replay.paused = false;
             updateReplayStartAvailability();
             // Replay audio is always opt-in from the pinned transport. Besides
             // avoiding surprise audio, the explicit click satisfies Web Audio's
             // user-gesture requirement in every supported browser.
             if (Scope.closeSoundSettings) Scope.closeSoundSettings();
+            if (Scope.setSoundSuspended) Scope.setSoundSuspended(false);
             if (Scope.setSoundEnabled) Scope.setSoundEnabled(false);
             const token = ++replay.loadToken;
             setReplayFrozen(true);
@@ -1633,6 +2246,7 @@
             replay.ui.slider.max = '0';
             replay.ui.slider.value = '0';
             updateReplayTransport();
+            syncReplayPauseUi();
 
             // Popup creation must stay inside the user gesture. It waits for the
             // validated ready handshake while the two local files are parsed.
@@ -1666,6 +2280,10 @@
 
             replay.parsed = parsed;
             replay.timeline = timeline;
+            replay.sequenceSteps =
+                window.ArenaRunnerG6 && Studio.currentDoc && Studio.currentDoc.experiment
+                    ? window.ArenaRunnerG6.flattenStructure(Studio.currentDoc.experiment).steps
+                    : [];
             replay.index = 0;
             replay.startMs = timeline.startMs;
             replay.endMs = timeline.endMs;
@@ -1694,8 +2312,11 @@
 
             if (Studio.setDockView) Studio.setDockView('scope');
             seekReplay(replay.startMs);
+            replay.paused = false;
             replay.playing = true;
             replay.lastWall = performance.now();
+            if (Scope.setSoundSuspended) Scope.setSoundSuspended(false);
+            syncReplayPauseUi();
             ensureReplayLoop();
             if (replay.viewerReady) sendViewerInit();
         } catch (error) {
@@ -1707,12 +2328,17 @@
     function stopReplay() {
         replay.loadToken++;
         replay.playing = false;
+        replay.paused = false;
         if (replay.raf) cancelAnimationFrame(replay.raf);
         if (replay.seekRaf) cancelAnimationFrame(replay.seekRaf);
         replay.raf = null;
         replay.seekRaf = null;
         replay.displayMode = 'off';
         replay.ledOn = false;
+        replay.step = null;
+        replay.stepIndex = null;
+        replay.stepTotal = null;
+        replay.sequenceSteps = [];
         sendViewerState();
         closeViewer();
         Studio.replayActive = false;
@@ -1722,8 +2348,10 @@
         if (replay.ui.transport) replay.ui.transport.hidden = true;
         if (replay.ui.slider) replay.ui.slider.disabled = false;
         if (Scope.closeSoundSettings) Scope.closeSoundSettings();
+        if (Scope.setSoundSuspended) Scope.setSoundSuspended(false);
         if (Scope.setSoundEnabled) Scope.setSoundEnabled(false);
         if (Scope.setReplayMode) Scope.setReplayMode(false);
+        syncReplayPauseUi();
         document
             .querySelectorAll('.seqrow.active')
             .forEach((row) => row.classList.remove('active'));
@@ -1738,10 +2366,12 @@
         window.addEventListener('pagehide', () => {
             replay.loadToken++;
             replay.playing = false;
+            replay.paused = false;
             if (replay.raf) cancelAnimationFrame(replay.raf);
             replay.displayMode = 'off';
             replay.ledOn = false;
             if (Scope.closeSoundSettings) Scope.closeSoundSettings();
+            if (Scope.setSoundSuspended) Scope.setSoundSuspended(false);
             if (Scope.setSoundEnabled) Scope.setSoundEnabled(false);
             sendViewerState();
             closeViewer();
@@ -1767,6 +2397,8 @@
         window.ArenaStudioAlt = {
             startReplay,
             stopReplay,
+            setReplayPaused,
+            toggleReplayPause,
             seekReplay,
             openViewer,
             replay,

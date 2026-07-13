@@ -1,12 +1,16 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js';
 import PatParser from './pat-parser.js';
-import ThreeViewer from './pattern-editor/viewers/three-viewer.js';
+import ThreeViewer from './pattern-editor/viewers/three-viewer.js?v=0713-solid-ball';
 import { PANEL_SPECS, STANDARD_CONFIGS, getArenaName, getConfig } from './arena-configs.js';
 
 const Protocol = window.ArenaReplayViewerProtocol;
 const DEFAULT_ARENA = 'G6_2x10';
 const MM_PER_INCH = 25.4;
 const BALL_DIAMETER_MM = 9;
+const FLY_EYE_CLEARANCE_MM = 1;
+const MIN_HORIZONTAL_FOV = 60;
+const MAX_HORIZONTAL_FOV = 150;
+const DEFAULT_HORIZONTAL_FOV = 120;
 
 const elements = {
     canvas: document.getElementById('arena-canvas'),
@@ -20,7 +24,9 @@ const elements = {
     time: document.getElementById('time-value'),
     resetView: document.getElementById('view-reset'),
     topView: document.getElementById('view-top'),
-    sideView: document.getElementById('view-side')
+    rearView: document.getElementById('view-rear'),
+    flyEyeView: document.getElementById('view-fly-eye'),
+    viewFov: document.getElementById('view-fov')
 };
 
 let viewer = null;
@@ -35,6 +41,7 @@ let hasReplayPattern = false;
 let suppressCloseNotice = false;
 let closeNoticeSent = false;
 let cleanedUp = false;
+let horizontalViewFov = DEFAULT_HORIZONTAL_FOV;
 let replayState = Protocol.normalizeReplayState({});
 
 const params = new URLSearchParams(window.location.search);
@@ -223,6 +230,11 @@ function disposeObject(root) {
 // meshes legible as a cutaway overlay; otherwise the required 9 mm ball and
 // downward flashlight disappear behind the front panels in an isometric view.
 function foregroundMaterial(material) {
+    // Full-alpha cutaway meshes stay visually opaque while sharing the
+    // transparent render queue with LED halos and the light beam. Their explicit
+    // renderOrder can therefore keep those effects behind the solid apparatus.
+    material.transparent = true;
+    material.opacity = 1;
     material.depthTest = false;
     material.depthWrite = false;
     return material;
@@ -275,7 +287,7 @@ function rebuildApparatus() {
 
     const ballMaterial = foregroundMaterial(
         new THREE.MeshStandardMaterial({
-            color: 0xf7f3e8,
+            color: 0xffffff,
             roughness: 0.72,
             metalness: 0.02,
             emissive: 0x161616,
@@ -414,7 +426,16 @@ function rebuildApparatus() {
     group.add(spot);
 
     viewer.scene.add(group);
-    apparatus = { group, ballMaterial, beam, lensMaterial, spot, arenaRadius, arenaHeight };
+    apparatus = {
+        group,
+        ballMaterial,
+        beam,
+        lensMaterial,
+        spot,
+        arenaRadius,
+        arenaHeight,
+        ballRadius
+    };
     setLedState(replayState.ledOn, true);
 }
 
@@ -529,34 +550,74 @@ function handleMessage(event) {
 function resetCamera() {
     if (!viewer || !apparatus) return;
     const span = Math.max(apparatus.arenaRadius * 2, apparatus.arenaHeight);
-    viewer.camera.fov = 52;
-    viewer.camera.updateProjectionMatrix();
     viewer.camera.position.set(span * 1.05, span * 0.82, span * 1.25);
     viewer.controls.target.set(0, 0, 0);
     viewer.controls.update();
+    applyHorizontalViewFov(horizontalViewFov);
 }
 
 function bindControls() {
     elements.resetView.addEventListener('click', resetCamera);
     elements.topView.addEventListener('click', setTopView);
-    elements.sideView.addEventListener('click', setSideView);
+    elements.rearView.addEventListener('click', setRearView);
+    elements.flyEyeView.addEventListener('click', setFlyEyeView);
+    elements.viewFov.addEventListener('change', handleViewFovChange);
+    window.addEventListener('resize', reapplyViewFov);
 }
 
 function setTopView() {
     if (viewer) viewer.setViewPreset('top-down');
 }
 
-function setSideView() {
-    if (viewer) viewer.setViewPreset('from-south');
+// The course calibration puts column 3/front at -X and column 8/rear at +X.
+// Looking from behind therefore means an external camera on the +X/east side.
+function setRearView() {
+    if (viewer) viewer.setViewPreset('from-east');
+}
+
+function setFlyEyeView() {
+    if (!viewer || !apparatus) return;
+
+    // Start from the shared front-facing internal preset, then lift both the
+    // camera and its target just above the 9 mm ball instead of leaving the
+    // camera at the ball's center.
+    viewer.setViewPreset('fly-west');
+    const eyeHeight = apparatus.ballRadius + FLY_EYE_CLEARANCE_MM / MM_PER_INCH;
+    viewer.camera.position.y = eyeHeight;
+    viewer.controls.target.y = eyeHeight;
+    viewer.controls.update();
+}
+
+function applyHorizontalViewFov(value) {
+    horizontalViewFov = Protocol.clampHorizontalFov(
+        value,
+        MIN_HORIZONTAL_FOV,
+        MAX_HORIZONTAL_FOV,
+        horizontalViewFov
+    );
+    if (elements.viewFov) elements.viewFov.value = String(horizontalViewFov);
+    if (!viewer || !viewer.camera) return;
+    viewer.setFOV(Protocol.horizontalToVerticalFov(horizontalViewFov, viewer.camera.aspect));
+}
+
+function handleViewFovChange(event) {
+    applyHorizontalViewFov(event.currentTarget.value);
+}
+
+function reapplyViewFov() {
+    applyHorizontalViewFov(horizontalViewFov);
 }
 
 function cleanupViewer() {
     if (cleanedUp) return;
     cleanedUp = true;
     window.removeEventListener('message', handleMessage);
+    window.removeEventListener('resize', reapplyViewFov);
     elements.resetView.removeEventListener('click', resetCamera);
     elements.topView.removeEventListener('click', setTopView);
-    elements.sideView.removeEventListener('click', setSideView);
+    elements.rearView.removeEventListener('click', setRearView);
+    elements.flyEyeView.removeEventListener('click', setFlyEyeView);
+    elements.viewFov.removeEventListener('change', handleViewFovChange);
     if (apparatus && viewer && viewer.scene) {
         viewer.scene.remove(apparatus.group);
         disposeObject(apparatus.group);
@@ -596,7 +657,8 @@ function initialize() {
             defaultArenaConfigName: DEFAULT_ARENA,
             accepts: ['parsed-pattern', 'pattern-bytes'],
             stateFrameBase: 0,
-            views: ['reset', 'top', 'side']
+            views: ['reset', 'top', 'rear', 'fly-eye'],
+            horizontalFovOptions: [60, 90, 120, 135, 150]
         });
     } else {
         setConnection('STANDALONE', 'idle');
