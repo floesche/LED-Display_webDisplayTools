@@ -22,7 +22,7 @@
     const DOC_URL =
         'https://github.com/reiserlab/webDisplayTools/blob/main/docs/development/flow-control-counter-proposal.md';
     const LED_OFF_MV = (window.ArenaRunnerG6 && window.ArenaRunnerG6.LED_OFF_MV) || 5000;
-    const ALT_BUILD_STAMP = '2026-07-13 18:06 ET';
+    const ALT_BUILD_STAMP = '2026-07-13 18:23 ET';
     // `replay=1` is an Alt-only launch convenience. Capture it before the
     // production URL canonicalizer intentionally removes unknown parameters.
     // The repo/path still pass through the shared URL-state validators.
@@ -521,7 +521,7 @@
         const primary = el('div', 'alt-top-primary');
         const context = el('div', 'alt-top-context');
         const brand = document.querySelector('.brand');
-        const mark = el('span', 'alt-brand-mark', 'ALT / RUN CONSOLE');
+        const mark = el('span', 'alt-brand-mark', 'ALT');
         const pSpacer = el('span', 'alt-context-spacer');
         const contextLeft = el('div', 'alt-context-left');
         const contextRight = el('div', 'alt-context-right');

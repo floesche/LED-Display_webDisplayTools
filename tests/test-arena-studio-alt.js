@@ -197,7 +197,7 @@ check(
 );
 check('Alt does not clone menu or settings controls', !altTopbarBody.includes('cloneNode'));
 check(
-    'Alt moves the one wired Edit header into the centered context slot',
+    'Alt moves the one wired Edit header into the responsive ribbon flow',
     altTopbarBody.includes("document.querySelector('#editView > .app-header')") &&
         altTopbarBody.includes("editTools.id = 'altEditTools'") &&
         altTopbarBody.includes("editTools.classList.add('alt-edit-tools')") &&
@@ -363,7 +363,7 @@ check(
 );
 check(
     'Protocol popup escapes its ribbon and stays above the replay transport',
-    css.includes('html.arena-alt .alt-context-left {') &&
+    css.includes('html.arena-alt #fileMenu {') &&
         css.includes('z-index:70;') &&
         css.includes('overflow:visible;')
 );
@@ -564,7 +564,7 @@ check(
 );
 check(
     'Alt footer exposes the current Alt build stamp without changing Classic',
-    alt.includes("const ALT_BUILD_STAMP = '2026-07-13 18:06 ET';") &&
+    alt.includes("const ALT_BUILD_STAMP = '2026-07-13 18:23 ET';") &&
         alt.includes("stampNode.nodeValue = version + ' | ' + ALT_BUILD_STAMP + ' · ';") &&
         studio.includes('Arena Studio v0.66 | 2026-07-10 20:52 ET')
 );
@@ -582,14 +582,23 @@ check(
     css.includes('--alt-brand:#00e676;') && css.includes('color:var(--alt-brand);')
 );
 check(
-    'Edit tools occupy the second ribbon only in Edit mode',
-    css.includes('html.arena-alt body.editmode .alt-edit-tools { display:flex; }') &&
-        css.includes('grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);')
+    'Alt topbar uses one content-driven wrapping ribbon',
+    /html\.arena-alt \.topbar\s*\{[^}]*display:flex;[^}]*flex-wrap:wrap;/s.test(css) &&
+        css.includes(
+            'html.arena-alt .alt-top-primary,\nhtml.arena-alt .alt-top-context {\n  display:contents;'
+        ) &&
+        css.includes(
+            'html.arena-alt .alt-context-left,\nhtml.arena-alt .alt-context-right {\n  display:contents;'
+        ) &&
+        !css.includes('grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);')
 );
 check(
-    'narrow shell compacts labels without wrapping into a third ribbon',
-    css.includes('html.arena-alt .alt-top-primary {\n    flex-wrap:nowrap;') &&
-        css.includes('.topbar [data-alt-short]::after')
+    'Edit tools join the shared ribbon only in Edit mode',
+    css.includes('html.arena-alt body.editmode .alt-edit-tools { display:contents; }')
+);
+check(
+    'narrow shell compacts labels without disabling natural wrapping',
+    !css.includes('flex-wrap:nowrap;') && css.includes('.topbar [data-alt-short]::after')
 );
 check('Scope dock is bounded', css.includes('height:252px'));
 check('index exposes Arena Studio Alt', index.includes('href="arena_studio_alt.html"'));

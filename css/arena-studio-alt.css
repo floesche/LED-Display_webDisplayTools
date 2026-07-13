@@ -119,12 +119,18 @@ html.arena-alt [role="button"]:focus-visible {
   outline-offset:2px;
 }
 
-/* Deterministic two-row shell. The JS moves the existing wired nodes; listeners stay attached. */
+/* One content-driven ribbon, like Classic. The JS keeps the existing wired
+   groups as siblings; display:contents lets every live control use the first
+   row until its intrinsic width genuinely requires a wrap. */
 html.arena-alt .topbar {
-  display:block;
-  min-height:0;
-  padding:0;
-  background:var(--surface);
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:5px;
+  min-height:48px;
+  padding:7px 10px;
+  overflow:visible;
+  background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 92%,var(--text) 8%),var(--surface));
   border-bottom:1px solid var(--edge);
   box-shadow:0 4px 18px var(--alt-shadow);
   flex:0 0 auto;
@@ -132,27 +138,10 @@ html.arena-alt .topbar {
 
 html.arena-alt .alt-top-primary,
 html.arena-alt .alt-top-context {
-  display:flex;
-  align-items:center;
-  gap:8px;
-  min-width:0;
-  padding:7px 14px;
+  display:contents;
 }
 
-html.arena-alt .alt-top-primary {
-  min-height:48px;
-  border-bottom:1px solid var(--border);
-  background:linear-gradient(180deg,color-mix(in srgb,var(--surface) 92%,var(--text) 8%),var(--surface));
-}
-
-html.arena-alt .alt-top-context {
-  display:grid;
-  grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
-  min-height:34px;
-  padding-top:4px;
-  padding-bottom:4px;
-  background:var(--surface2);
-}
+html.arena-alt .alt-context-spacer { display:none; }
 
 html.arena-alt .brand {
   display:inline-flex;
@@ -256,14 +245,10 @@ html.arena-alt #fileMenu #ghBlock { display:none; }
 
 html.arena-alt .alt-context-left,
 html.arena-alt .alt-context-right {
-  display:flex;
-  align-items:center;
-  gap:8px;
-  min-width:0;
+  display:contents;
 }
 
-html.arena-alt .alt-context-left {
-  justify-content:flex-start;
+html.arena-alt #fileMenu {
   position:relative;
   z-index:70;
   /* The Protocol popup is absolutely positioned below this ribbon. Clipping the
@@ -272,29 +257,18 @@ html.arena-alt .alt-context-left {
   overflow:visible;
 }
 
-html.arena-alt .alt-context-right { justify-content:flex-end; }
-
 html.arena-alt .alt-context-left .doc-name {
   max-width:min(22vw,220px);
   overflow:hidden;
   text-overflow:ellipsis;
 }
 
-/* Edit uses the same two shell ribbons as Run and Console. The original,
-   fully wired editor header is moved intact into this centered context slot. */
+/* The original, fully wired editor header joins the same wrapping ribbon. */
 html.arena-alt .alt-edit-tools {
   display:none;
-  align-items:center;
-  justify-content:center;
-  gap:6px;
-  min-width:max-content;
-  margin:0;
-  padding:0;
-  border:0;
-  background:transparent;
 }
 
-html.arena-alt body.editmode .alt-edit-tools { display:flex; }
+html.arena-alt body.editmode .alt-edit-tools { display:contents; }
 html.arena-alt .alt-edit-tools .header-spacer,
 html.arena-alt .alt-edit-tools [hidden] { display:none!important; }
 
@@ -913,12 +887,12 @@ html.arena-alt .alt-replay-pause[aria-pressed="true"] {
   color:var(--accent);
 }
 
-html.arena-alt body.alt-replay-active .alt-top-primary,
+html.arena-alt body.alt-replay-active .alt-top-primary > *,
 html.arena-alt body.alt-replay-active .meta-panel {
   filter:saturate(.55);
 }
 
-html.arena-alt body.alt-replay-active .alt-top-primary,
+html.arena-alt body.alt-replay-active .alt-top-primary > *,
 html.arena-alt body.alt-replay-active .run-main,
 html.arena-alt body.alt-replay-active .meta-panel {
   pointer-events:none;
@@ -1186,14 +1160,14 @@ html.arena-alt footer {
 
 html.arena-alt .alt-footer-mark { color:var(--amber); letter-spacing:.1em; }
 
-@media (max-width:1000px) {
-  html.arena-alt .alt-top-primary {
-    flex-wrap:nowrap;
+/* Compact labels before wrapping: common laptop and desktop widths should still
+   get the useful one-row instrument ribbon, while every full label remains in
+   title / aria text and returns on wider displays. */
+@media (max-width:1600px) {
+  html.arena-alt .topbar {
     gap:5px;
-    min-width:0;
     padding-left:8px;
     padding-right:8px;
-    overflow:hidden;
   }
   html.arena-alt .alt-brand-mark { display:none; }
   html.arena-alt .alt-top-primary .seg {
@@ -1209,13 +1183,6 @@ html.arena-alt .alt-footer-mark { color:var(--amber); letter-spacing:.1em; }
   }
   html.arena-alt .alt-top-primary #statusTxt { display:none; }
   html.arena-alt .alt-top-primary .connect { padding-left:10px; padding-right:10px; }
-  html.arena-alt .alt-top-context {
-    gap:5px;
-    padding-left:8px;
-    padding-right:8px;
-  }
-  html.arena-alt .alt-context-left,
-  html.arena-alt .alt-context-right { gap:5px; }
   html.arena-alt .alt-context-left .doc-name { max-width:90px; }
   html.arena-alt .topbar [data-alt-short] { font-size:0!important; }
   html.arena-alt .topbar [data-alt-short]::after {
@@ -1225,9 +1192,11 @@ html.arena-alt .alt-footer-mark { color:var(--amber); letter-spacing:.1em; }
   }
   html.arena-alt .alt-edit-tools [data-alt-short]::after { font-size:11px; }
   html.arena-alt .topbar .safemode-ind[data-alt-short]::after { font-size:12px; }
-  html.arena-alt .alt-edit-tools { gap:3px; }
   html.arena-alt .alt-edit-tools .edit-tab,
   html.arena-alt .alt-edit-tools .header-btn { padding-left:7px; padding-right:7px; }
+}
+
+@media (max-width:1000px) {
   html.arena-alt .run-view {
     grid-template-columns:minmax(0,1fr) 280px;
     padding-left:10px;
@@ -1244,9 +1213,7 @@ html.arena-alt .alt-footer-mark { color:var(--amber); letter-spacing:.1em; }
   html.arena-alt body.editmode .alt-context-left .chip,
   html.arena-alt body.editmode .alt-context-left .plug-hover,
   html.arena-alt body.editmode .alt-context-left .arena { display:none!important; }
-  html.arena-alt .alt-top-context { gap:3px; padding-left:5px; padding-right:5px; }
-  html.arena-alt .alt-context-left,
-  html.arena-alt .alt-context-right { gap:3px; }
+  html.arena-alt .topbar { gap:3px; padding-left:5px; padding-right:5px; }
   html.arena-alt .alt-edit-tools .edit-tab,
   html.arena-alt .alt-edit-tools .header-btn { padding-left:5px; padding-right:5px; }
   html.arena-alt #fileMenuBtn,
