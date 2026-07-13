@@ -22,7 +22,8 @@
     const DOC_URL =
         'https://github.com/reiserlab/webDisplayTools/blob/main/docs/development/flow-control-counter-proposal.md';
     const LED_OFF_MV = (window.ArenaRunnerG6 && window.ArenaRunnerG6.LED_OFF_MV) || 5000;
-    const ALT_BUILD_STAMP = '2026-07-13 18:34 ET';
+    const ALT_TOOL_VERSION = 'Arena Studio Alt v0.67';
+    const ALT_BUILD_STAMP = '2026-07-13 18:55 ET';
     // `replay=1` is an Alt-only launch convenience. Capture it before the
     // production URL canonicalizer intentionally removes unknown parameters.
     // The repo/path still pass through the shared URL-state validators.
@@ -484,20 +485,17 @@
 
         const footer = document.querySelector('footer .foot-left');
         if (footer) {
-            const version =
-                (String(Studio.TOOL_VERSION || '').match(/Arena Studio v[0-9.]+/) || [])[0] ||
-                'Arena Studio';
             const stampNode = Array.from(footer.childNodes).find(
                 (node) =>
                     node.nodeType === 3 && /Arena Studio v[0-9.]+\s*\|/.test(node.nodeValue || '')
             );
-            if (stampNode) stampNode.nodeValue = version + ' | ' + ALT_BUILD_STAMP + ' · ';
+            if (stampNode) stampNode.nodeValue = ALT_TOOL_VERSION + ' | ' + ALT_BUILD_STAMP + ' · ';
             if (!footer.querySelector('.alt-footer-mark')) {
                 footer.appendChild(document.createTextNode(' · '));
                 footer.appendChild(el('span', 'alt-footer-mark', 'ALT INTERFACE'));
             }
         }
-        Studio.TOOL_VERSION = String(Studio.TOOL_VERSION || 'Arena Studio') + ' · Alt UI';
+        Studio.TOOL_VERSION = ALT_TOOL_VERSION;
 
         const saved = localStorage.getItem('arena_studio_alt_theme');
         document.documentElement.dataset.theme = saved === 'light' ? 'light' : 'dark';

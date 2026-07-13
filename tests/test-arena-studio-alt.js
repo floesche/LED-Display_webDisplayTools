@@ -580,9 +580,11 @@ check(
         css.includes('html.arena-alt .alt-scope-settings .pill { width:100%; min-width:0; }')
 );
 check(
-    'Alt footer exposes the current Alt build stamp without changing Classic',
-    alt.includes("const ALT_BUILD_STAMP = '2026-07-13 18:34 ET';") &&
-        alt.includes("stampNode.nodeValue = version + ' | ' + ALT_BUILD_STAMP + ' · ';") &&
+    'Alt footer exposes the v0.67 Alt identity and current stamp without changing Classic',
+    alt.includes("const ALT_TOOL_VERSION = 'Arena Studio Alt v0.67';") &&
+        alt.includes("const ALT_BUILD_STAMP = '2026-07-13 18:55 ET';") &&
+        alt.includes("stampNode.nodeValue = ALT_TOOL_VERSION + ' | ' + ALT_BUILD_STAMP + ' · ';") &&
+        alt.includes('Studio.TOOL_VERSION = ALT_TOOL_VERSION;') &&
         studio.includes('Arena Studio v0.66 | 2026-07-10 20:52 ET')
 );
 
