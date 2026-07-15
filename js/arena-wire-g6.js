@@ -507,7 +507,7 @@ const ArenaWireG6 = (function () {
         return frame(OPCODES.GET_PATTERN_FILE, u16le(index, 'index')); // 03 84 lo hi
     }
 
-    // purge-memory (0x8F) — format the SD card (wipes everything, not just
+    // purge-memory (0x8F): format the SD card (wipes everything, not just
     // /patterns: also /firmware/panel.bin and both manifests). Much slower
     // than the per-file delete it replaced; give it a generous timeout.
     function encodePurgeMemory() {
